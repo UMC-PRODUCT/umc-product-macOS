@@ -112,6 +112,7 @@ cd AppName && make doctor     # 환경 진단
 | 코딩 스타일 & 네이밍 | `docs/claude/coding-style.md` | 네이밍 판단이 필요할 때 |
 | Git Workflow | `docs/claude/git-workflow.md` | 브랜치/커밋/PR/이슈(템플릿·Type·Priority)/배포 |
 | PR 리뷰 규칙 & 체크리스트 | `docs/claude/pr-review.md` | PR 리뷰 작성 시 |
+| 서버 레포 참고 가이드 | `docs/claude/server-repo.md` | **API 스펙·권한 규칙·에러 코드 확인, 기능 기획 전 서버 현황 파악** |
 
 Apple 프레임워크 API — 신규 Apple API를 다룰 때:
 
@@ -138,12 +139,20 @@ Apple 프레임워크 API — 신규 Apple API를 다룰 때:
 - 조회 수단: `gh api repos/YOUR-ORG/{{기획레포}}/contents/...` 또는 로컬 클론.
 - 코드 레벨 규약(아키텍처·코딩 스타일·빌드)은 분리 대상이 아니다 — `docs/claude/` 에 그대로 있다.
 
-백엔드(서버) — API 연동·서버 상태 확인이 필요할 때:
+백엔드(서버) — **기능을 기획하거나 API를 붙이기 전에 먼저 연다**:
 
 | 대상 | 위치 | 언제 참고하나 |
 |------|------|--------------|
-| 서버 레포 | {{서버 레포 URL}} | API 엔드포인트·요청/응답 스펙 확인, 서버 구현/배포 상태 점검, iOS DTO와 실제 응답이 어긋날 때 원인 추적 |
+| 서버 레포 | https://github.com/UMC-PRODUCT/umc-product-server | 기능 기획 단계의 서버 현황 파악, API 엔드포인트·요청/응답 스펙 확인, 권한 규칙 확인, 에러 코드 조회, iOS DTO와 실제 응답이 어긋날 때 원인 추적 |
 
-- 조회 수단: `gh` CLI(`gh api repos/YOUR-ORG/{{서버레포}}/contents/...`) 또는 `WebFetch`.
+**상세 내비게이션은 `docs/claude/server-repo.md`** — 도메인 패키지 매핑, 조회 명령어,
+확인된 경로·권한 규약이 정리돼 있다. 서버 관련 작업을 시작할 때 그 파일을 먼저 읽는다.
+
+- 조회 수단: `gh` CLI(`gh api "repos/UMC-PRODUCT/umc-product-server/contents/{경로}" --jq '.content' | base64 -d`).
+  클론하지 않고 필요한 파일만 읽는다.
 - **읽기 전용으로만 사용** — 서버 레포에 커밋·PR·이슈를 만들지 않는다(메인테이너가 명시적으로 지시한 경우 제외).
-- 스펙 추측 금지: 필드명·타입·nullable 여부는 서버의 컨트롤러/DTO 실제 코드로 확인한 뒤 iOS Response DTO에 반영한다(절대 규칙 #2·#3과 함께 적용).
+- **스펙 추측 금지** — 필드명·타입·nullable 여부는 서버의 컨트롤러/DTO 실제 코드로 확인한 뒤
+  iOS Response DTO에 반영한다(절대 규칙 #2·#3과 함께 적용).
+- **권한 규칙도 추측하지 않는다** — "이 역할이면 다 되겠지"로 화면을 분기하지 말고
+  `docs/guides/프로젝트_권한_정책.md` 와 서버가 제공하는 capability API를 확인한다.
+  기획 문서에 권한 서술을 쓸 때도 같은 기준을 적용한다.
