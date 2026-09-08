@@ -121,23 +121,23 @@ Apple 프레임워크 API — 신규 Apple API를 다룰 때:
 | Apple 프레임워크 가이드(20종) | `docs/claude/apple-frameworks/INDEX.md` | `glassEffect`·`GlassEffectContainer`(Liquid Glass) · 툴바 신규 API · `AttributedString`/리치 텍스트 · FoundationModels(온디바이스 LLM) · SwiftData 상속 · `@MainActor`/actor/async 동시성 · Swift Charts 3D · WebKit·AlarmKit·MapKit·StoreKit 연동 |
 | Apple 스킬팩(9종 · reference 66종, Apple 원문) | `docs/claude/apple-frameworks/INDEX.md` §3 | **SwiftUI·App Intents 코드를 새로 쓰거나 리뷰할 때.** `@Observable`/`@State`/`@Binding` 소유권 · `@Environment`/`@Entry` 무효화 경고 · `ForEach`/`List` identity(`id: \.self` 안티패턴) · soft-deprecated API 확인(`NavigationView`, 구 `onChange`) · 조건부 `.if` 모디파이어 · 뷰 분해/init 비용 · `Animatable` · App Intents 스키마/`AppEnum` · UIKit 현대화 · Xcode 보안 빌드 설정 |
 
-기획·설계 문서 — **별도 레포로 분리한다**:
+기획·설계 문서 — **이 레포 `docs/` 안에서 관리한다**:
 
 | 대상 | 위치 | 언제 참고하나 |
 |------|------|--------------|
-| 기획 문서 레포 | {{기획 문서 레포 URL}} | 기능 설계 스펙·구현 계획·서버 전달용 명세를 읽거나 **새로 쓸 때** |
+| 서버 전달용 명세 | `docs/server/` | 서버팀에 넘길 API·푸시 명세를 읽거나 **새로 쓸 때** |
+| 기능 설계 스펙 · PRD | `docs/specs/` | 기능 설계·요구사항 정의를 읽거나 **새로 쓸 때** |
+| 구현 계획 | `docs/plans/` | 구현 순서·작업 분해를 읽거나 **새로 쓸 때** |
 
-- 폴더: `server/`(서버팀 전달용 API·푸시 명세) · `specs/`(기능 설계 스펙, PRD) · `plans/`(구현 계획)
 - 파일명: `{기능}_{제목}_{종류}.md` — 밑줄 3분할. (예: `푸시_푸시 딥링크_서버명세.md`)
   맨 앞 기능 이름으로 정렬되므로 같은 기능의 문서가 한자리에 모인다.
   종류는 `설계` · `PRD` · `구현계획` · `설계리뷰` · `서버명세` · `서버갭`.
   **작성일은 파일명에 넣지 않는다** — 문서 본문 상단 `작성일:` 줄에 적는다.
   고유명사·API 이름(`macOS`, `Command API`, `NavigationTitle`)은 원문 표기를 유지한다.
-- **새 기획·설계 문서는 이 레포에 쓴다** — 코드 레포(`docs/`)에 만들지 않는다.
-  코드 레포의 `docs/` 는 `.gitignore` 에 걸리기 쉬워 문서가 버전 관리 밖에 방치되는 사고가
-  잦다. 그래서 문서 축을 아예 분리한다.
-- 조회 수단: `gh api repos/YOUR-ORG/{{기획레포}}/contents/...` 또는 로컬 클론.
-- 코드 레벨 규약(아키텍처·코딩 스타일·빌드)은 분리 대상이 아니다 — `docs/claude/` 에 그대로 있다.
+- **`docs/` 를 `.gitignore` 에 넣지 않는다** — 기획 문서가 버전 관리 밖으로 빠지는 사고를 막는
+  유일한 안전장치다. `.gitignore` 에 `docs` 패턴을 추가하려 할 때는 반드시 예외 규칙을 함께 둔다.
+- 기획 문서도 코드와 같은 흐름을 탄다 — 이슈(`docs/{번호}`) → 브랜치 → PR. 직접 main 에 푸시하지 않는다.
+- 코드 레벨 규약(아키텍처·코딩 스타일·빌드)은 `docs/claude/` 에 있다 — 기획 문서와 섞지 않는다.
 
 백엔드(서버) — **기능을 기획하거나 API를 붙이기 전에 먼저 연다**:
 
