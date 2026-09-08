@@ -32,17 +32,25 @@
 <img src="{{기술 스택 이미지 URL}}" width="100%" alt="기술 스택">
 </div>
 
-## 🏢 iOS 팀 조직도
+## 🏝️ 섬 사람들
+
+이 레포는 작은 섬입니다. 땅을 넓히는 사람이 있고 그 땅이 물에 잠기지 않게 지키는 사람이 있습니다.
+
 <div align="center">
 
-| 🥇 1기 · {{YYYY.MM.DD}} – {{YYYY.MM.DD}} | 🥈 2기 · 진행 중 |
+| <img src="https://github.com/user-attachments/assets/2cfb0092-9998-4dbf-b094-267f81863c69" width="240" alt="땅주"> | <img src="https://github.com/user-attachments/assets/144c1a20-d0ce-4a49-bb3d-d0bc83af01ec" width="240" alt="섬 지킴이"> |
 |:---:|:---:|
-| <img src="{{1기 조직도 이미지 URL}}" width="400" alt="iOS 1기 조직도"> | <img src="{{2기 조직도 이미지 URL}}" width="400" alt="iOS 2기 조직도"> |
+| **🪧 땅주** | **🛡️ 섬 지킴이** |
+| 제옹한테 권한을 준 사람 | 주인님 없는 땅에서 섬을 단단하게 만들고 있는 중 |
+| 땅만 주고 도망감 | 땅 위에 강한 도시를 만드는 중 |
+|  | [@euijjang97](https://github.com/euijjang97) |
 
 </div>
 
-> 기수별 팀원 구성(사진·역할·GitHub)은 [Wiki › Team](https://github.com/YOUR-ORG/YOUR-REPO/wiki/Team)에서,
-> 신규 기능·운영 기록은 [Wiki › Release History](https://github.com/YOUR-ORG/YOUR-REPO/wiki/Release-History)에서 확인하세요.
+> 땅주가 삽을 뜨면 지킴이가 방파제를 쌓습니다. 순서가 바뀌면 둘 다 젖습니다.
+
+> 기수별 팀원 구성(사진·역할·GitHub)은 [Wiki › Team](https://github.com/UMC-PRODUCT/umc-product-macOS/wiki/Team)에서,
+> 신규 기능·운영 기록은 [Wiki › Release History](https://github.com/UMC-PRODUCT/umc-product-macOS/wiki/Release-History)에서 확인하세요.
 
 ## 📚 개발 문서
 
