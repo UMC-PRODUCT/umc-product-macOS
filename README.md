@@ -41,9 +41,9 @@
 | <img src="https://github.com/user-attachments/assets/2cfb0092-9998-4dbf-b094-267f81863c69" width="240" alt="땅주"> | <img src="https://github.com/user-attachments/assets/144c1a20-d0ce-4a49-bb3d-d0bc83af01ec" width="240" alt="섬 지킴이"> |
 |:---:|:---:|
 | **🪧 땅주** | **🛡️ 섬 지킴이** |
-| 등기부에 이름이 올라간 사람 | 등대 켜고 파도 막는 사람 |
-| 어디에 뭘 지을지 정하고 삽을 뜹니다 | 지어 놓은 게 무너지지 않게 봅니다 |
-| [@euijjang97](https://github.com/euijjang97) | [@{{섬 지킴이 GitHub}}](https://github.com/{{섬 지킴이 GitHub}}) |
+| 제옹한테 권한을 준 사람 | 주인님 없는 땅에서 섬을 단단하게 만들고 있는 중 |
+| 땅만 주고 도망감 | 땅 위에 강한 도시를 만드는 중 |
+|  | [@euijjang97](https://github.com/euijjang97) |
 
 </div>
 
