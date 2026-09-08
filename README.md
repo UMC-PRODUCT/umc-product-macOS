@@ -47,7 +47,7 @@
 
 </div>
 
-> 땅주가 삽을 뜨면 지킴이가 방파제를 쌓습니다. 순서가 바뀌면 둘 다 젖습니다.
+> 땅주는 돌아오지 않을거에요..! ^^
 
 > 기수별 팀원 구성(사진·역할·GitHub)은 [Wiki › Team](https://github.com/UMC-PRODUCT/umc-product-macOS/wiki/Team)에서,
 > 신규 기능·운영 기록은 [Wiki › Release History](https://github.com/UMC-PRODUCT/umc-product-macOS/wiki/Release-History)에서 확인하세요.
