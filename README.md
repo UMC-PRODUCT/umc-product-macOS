@@ -38,7 +38,7 @@
 
 <div align="center">
 
-| <img src="https://github.com/user-attachments/assets/2cfb0092-9998-4dbf-b094-267f81863c69" width="240" alt="땅주"> | <img src="https://github.com/user-attachments/assets/144c1a20-d0ce-4a49-bb3d-d0bc83af01ec" width="240" alt="섬 지킴이"> |
+| <img src="https://github.com/user-attachments/assets/2cfb0092-9998-4dbf-b094-267f81863c69" width="240" alt="땅주"> | <img src="https://github.com/user-attachments/assets/c3551cc5-8618-4fe6-be9d-d6036802758d" width="240" alt="섬 지킴이"> |
 |:---:|:---:|
 | **🪧 땅주** | **🛡️ 섬 지킴이** |
 | 제옹한테 권한을 준 사람 | 주인님 없는 땅에서 섬을 단단하게 만들고 있는 중 |
