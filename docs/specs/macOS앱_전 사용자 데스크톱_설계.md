@@ -175,6 +175,7 @@ REST 1차 범위:
 
 | Method | Path | 쓰임 |
 |---|---|---|
+| GET | `/api/v1/inquiry-categories` | 등록 폼의 활성 카테고리 목록. `sort_order` 순으로 조회 |
 | POST | `/api/v1/inquiries` | 문의 등록. `categoryId`·`content`·`fileIds[]` |
 | GET | `/api/v1/inquiries` | 목록. `status`·`target`·`categoryId`·`unreadOnly` 필터 |
 | GET | `/api/v1/inquiries/{id}` | 상세. 운영진에게는 작성자 정보가 같이 옴 |
