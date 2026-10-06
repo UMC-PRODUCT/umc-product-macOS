@@ -1,6 +1,6 @@
-# CLAUDE.md
+# Agent.MD
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides project guidance for coding agents working in this repository.
 
 > **구조 안내**: 이 파일은 **핵심 요약 + 절대 규칙 + 레퍼런스 인덱스**만 담는 허브입니다.
 > 주제별 상세 내용은 `docs/claude/` 로 분리되어 있으며, **필요할 때 해당 파일을 `Read` 로 열어** 참고합니다.

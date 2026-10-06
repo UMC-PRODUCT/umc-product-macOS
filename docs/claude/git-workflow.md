@@ -1,7 +1,7 @@
 # Git Workflow
 
 > 브랜치 전략, 커밋/PR 규칙 상세 레퍼런스.
-> 핵심 요약은 `CLAUDE.md` 참고.
+> 핵심 요약은 `Agent.MD` 참고.
 
 Git Flow + **연속 브랜치 파생** 지원
 

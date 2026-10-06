@@ -1,7 +1,7 @@
 # Network Router (Moya)
 
 > API Router 설계 규칙(DTO 캡슐화)에 대한 상세 레퍼런스.
-> 핵심 요약은 `CLAUDE.md` 참고.
+> 핵심 요약은 `Agent.MD` 참고.
 
 API Router는 **엔드포인트 메타데이터(Path / Method / Encoding)만** 책임집니다.
 **파라미터 키 이름과 직렬화 규칙은 Request/Query DTO가 캡슐화**합니다.

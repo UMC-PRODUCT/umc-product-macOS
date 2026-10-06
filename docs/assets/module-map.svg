@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="770" viewBox="0 0 1200 770" role="img" aria-labelledby="title desc">
-  <title id="title">UMC MacOS App module architecture</title>
+  <title id="title">UMC Desk module architecture</title>
   <desc id="desc">AppDependencies composes seven Features and Core modules. Each Feature's Presentation and Data depend on Domain. Data depends on CoreNetwork, which depends on UMCNetworkKit. Six other Core modules provide shared foundations, dependency injection, routing and future UI boundaries. The diagram omits secondary dependencies.</desc>
   <!-- Created by euijjang97 on 10/6/26. -->
   <defs>
@@ -11,7 +11,7 @@
   <g font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" fill="#1A3440">
     <text x="44" y="52" font-size="17" font-weight="600" letter-spacing="2" fill="#567680">ARCHITECTURE OVERVIEW</text>
     <rect x="44" y="78" width="1112" height="86" rx="14" fill="#18323F"/>
-    <text x="70" y="115" font-size="28" font-weight="700" fill="#FFFFFF">UMC MacOS App</text>
+    <text x="70" y="115" font-size="28" font-weight="700" fill="#FFFFFF">UMC Desk</text>
     <text x="70" y="143" font-size="18" fill="#B8D2D6">Application composition root</text>
     <text x="920" y="131" font-size="23" fill="#A1E2D1">AppDependencies</text>
     <text x="44" y="214" font-size="24" font-weight="700">7 Features</text>

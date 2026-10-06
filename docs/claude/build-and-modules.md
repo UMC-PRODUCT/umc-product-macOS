@@ -1,7 +1,7 @@
 # Build & Run + Tuist 모듈 구조
 
 > 빌드 명령, Tuist 모듈화 구조, 의존성 방향에 대한 상세 레퍼런스.
-> 핵심 요약은 `CLAUDE.md` 참고.
+> 핵심 요약은 `Agent.MD` 참고.
 
 - 작성자: 제옹(euijjang97)
 

@@ -1,7 +1,7 @@
 # Response DTO Decoding
 
 > 서버가 모든 정수를 String으로 직렬화하는 문제에 대한 디코딩 규칙 상세 레퍼런스.
-> 핵심 요약은 `CLAUDE.md` 참고.
+> 핵심 요약은 `Agent.MD` 참고.
 
 서버는 **응답으로 내려주는 모든 정수 값을 String 으로 직렬화**합니다.
 JSON Number 가 아닌 String 으로 오므로, Response DTO 가 `Int` 로

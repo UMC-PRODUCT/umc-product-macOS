@@ -1,7 +1,7 @@
 # 디자인 시스템 + 성능 최적화
 
 > 디자인 토큰, Typography, Glass Effect, 공용 컴포넌트, 렌더링 최적화 상세 레퍼런스.
-> 핵심 요약은 `CLAUDE.md` 참고. Apple 프레임워크 API 상세는 `docs/claude/apple-frameworks/` 참고.
+> 핵심 요약은 `Agent.MD` 참고. Apple 프레임워크 API 상세는 `docs/claude/apple-frameworks/` 참고.
 
 토큰 정의: `DefaultConstant.swift`, `DefaultSpacing.swift`
 
