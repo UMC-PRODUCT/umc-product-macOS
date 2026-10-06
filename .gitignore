@@ -130,3 +130,17 @@ iOSInjectionProject/
 .claude/
 .mcp.json
 TEMPLATE_SETUP.md
+
+# Tuist-generated projects and local build artifacts
+*.xcodeproj/
+Derived/
+.local-derived-data*/
+Tuist/.build/
+.swiftpm/
+_workspace/
+.superpowers/sdd/
+graph.json
+graph.png
+
+# The checked-in app configuration contains defaults only.
+!UMCDesk/Secrets/Shared.xcconfig
