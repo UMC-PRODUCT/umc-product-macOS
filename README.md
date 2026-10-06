@@ -65,7 +65,7 @@
 | 🌐 네트워크 & DTO 디코딩 | [network-router.md](docs/claude/network-router.md) · [response-dto-decoding.md](docs/claude/response-dto-decoding.md) |
 | 🎨 디자인 시스템 | [design-system.md](docs/claude/design-system.md) |
 | 🧱 모듈 구조 (Tuist) | [build-and-modules.md](docs/claude/build-and-modules.md) |
-| ⚙️ 빌드 & 실행 | [AppName/MAKEFILE_GUIDE.md](AppName/MAKEFILE_GUIDE.md) |
+| ⚙️ 빌드 & 실행 | [UMCDesk/MAKEFILE_GUIDE.md](UMCDesk/MAKEFILE_GUIDE.md) |
 | 🔀 Git 워크플로우 | [git-workflow.md](docs/claude/git-workflow.md) |
 | 🔍 PR 리뷰 | [pr-review.md](docs/claude/pr-review.md) |
 | 🍎 Apple 프레임워크 · 스킬팩 | [apple-frameworks/INDEX.md](docs/claude/apple-frameworks/INDEX.md) |
@@ -77,10 +77,10 @@
 
 - `Secrets.xcconfig`(`BASE_URL`, `KAKAO_KEY` 등)와 `GoogleService-Info.plist`는 **팀 내부 채널**에서 수령합니다.
 - 실제 키·설정 파일은 원격 저장소에 커밋하지 않습니다.
-- 상세 절차: [AppName/Secrets/README.md](AppName/Secrets/README.md)
+- 상세 절차: [UMCDesk/Secrets/README.md](UMCDesk/Secrets/README.md)
 
 ```bash
-cd AppName
+cd UMCDesk
 make bootstrap                                       # mise + tuist 설치 (최초 1회)
 cp Secrets/Secrets.xcconfig.template Secrets/Secrets.xcconfig
 make open                                            # generate + Xcode 열기
