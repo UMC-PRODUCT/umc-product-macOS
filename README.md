@@ -2,7 +2,7 @@
 
 <img src="docs/assets/umc-logo.png" width="128" alt="UMC 로고">
 
-# UMC MacOS App
+# UMC Desk
 
 **공지와 대화, 프로젝트 작업을 Mac에서 이어가는 UMC 워크스페이스**
 
@@ -17,7 +17,7 @@
 
 ## 프로젝트
 
-UMC MacOS App은 UMC 구성원이 공지와 대화를 확인하고 프로젝트 자료와 결정사항을 연결해 작업을 이어갈 수 있도록 만드는 macOS 앱입니다.
+UMC Desk는 UMC 구성원이 공지와 대화를 확인하고 프로젝트 자료와 결정사항을 연결해 작업을 이어갈 수 있도록 만드는 macOS 앱입니다.
 
 현재는 Tuist 모듈과 의존성 주입, 네트워크·토큰 처리 기반을 구성한 단계입니다. 앱 진입점은 `EmptyView`이며 화면과 디자인 시스템 구현은 디자인 확정 후 진행합니다.
 
@@ -35,7 +35,7 @@ make open        # 프로젝트 생성 후 Xcode 열기
 
 ## 모듈 구조
 
-<img src="docs/assets/module-map.svg" width="100%" alt="UMC MacOS App의 모듈 구조. Presentation과 Data는 Domain에 의존하고 Data는 CoreNetwork를 통해 UMCNetworkKit을 사용합니다.">
+<img src="docs/assets/module-map.svg" width="100%" alt="UMC Desk의 모듈 구조. Presentation과 Data는 Domain에 의존하고 Data는 CoreNetwork를 통해 UMCNetworkKit을 사용합니다.">
 
 각 Feature는 **Domain · Data · Presentation**으로 나누고 앱의 `AppDependencies`에서 구현체를 주입합니다. UMC App의 네트워크·토큰 처리 구조는 `UMCNetworkKit`과 `CoreNetwork`에서 이어 사용합니다.
 
