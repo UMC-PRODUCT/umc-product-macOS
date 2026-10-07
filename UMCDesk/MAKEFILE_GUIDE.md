@@ -13,7 +13,7 @@ make generate
 make edit
 ```
 
-`make edit` opens the Tuist manifest editor for the app, all seven Core projects, all seven Feature projects, and ProjectDescriptionHelpers. The shared package manifest is available in the generated app workspace; open `../Packages/UMCNetworkKit/Package.swift` separately to edit its SwiftPM configuration. Changes to generated Xcode projects should instead be made in these manifests.
+`make edit` opens the Tuist manifest editor for the app, all seven Core projects, all seven Feature projects, and ProjectDescriptionHelpers. Remote SwiftPM dependencies are configured in `Tuist/Package.swift`, which is also included in the generated app workspace. Changes to generated Xcode projects should instead be made in these manifests.
 
 ```sh
 make help
@@ -35,11 +35,11 @@ Feature projects create Domain, Data and Presentation static frameworks. Core pr
 
 Configure the API environment in `Secrets/Secrets.xcconfig` using the template before connecting to the server. A clean checkout can generate and build with the committed `.invalid` placeholder. The app entry contains only `EmptyView` for build validation. Feature Presentation, CoreRouting, CoreDesignSystem and CoreUIComponents contain module boundaries only; screen code, design tokens, layout and navigation await approved design inputs.
 
-`Packages/UMCNetworkKit` contains the transport and token refresh code extracted from UMC App, together with its unit tests. It has no dependency on app bundles, UserDefaults or SwiftUI. Keychain storage remains in CoreNetwork. The remote shared repository is empty; publishing the package and switching both apps to the same pinned release is follow-up work.
+[Aquila](https://github.com/JEONG-J/Aquila) provides HTTP transport, shared token refresh, Moya request mapping and Debug logging. `Tuist/Package.swift` pins the same commit used by UMC App. CoreNetwork retains UMC response decoding, localized error mapping, the macOS Keychain service and app-owned session cleanup. There is no local network package under `Packages/`.
 
 `make edit-project` creates a permanent, non-blocking Tuist edit project for automated inspection. Generated project files and build artifacts are ignored.
 
-Verified locally: package installation, workspace generation, permanent manifest editing, clean-source generation, unsigned Debug/Release builds, 37 shared-package tests and 6 app/DI tests. Use `CODE_SIGNING_ALLOWED=NO` for unsigned local checks.
+Validate changes with package installation, workspace generation, network integration tests, app/DI tests and Debug/Release builds. Use `CODE_SIGNING_ALLOWED=NO` for unsigned local checks. `make test` includes CoreNetwork tests in the app workspace scheme.
 
 The command names and grouped help follow UMC App. `pick` and `test-pick` select a scheme with fzf when installed and numbered input otherwise. Use a scheme with a test target, such as `UMCDesk` or `CoreDI`, for tests. `graph` writes `graph.png` and needs Graphviz (`brew install graphviz`).
 
@@ -53,4 +53,4 @@ make install    # Restore dependencies after clean/reset
 make generate
 ```
 
-Cleanup operates inside `UMCDesk/` and preserves module sources and secret configuration. `test-network` runs the extracted UMCNetworkKit tests.
+Cleanup operates inside `UMCDesk/` and preserves module sources and secret configuration. `test-network` runs the CoreNetwork tests against the pinned Aquila dependency.

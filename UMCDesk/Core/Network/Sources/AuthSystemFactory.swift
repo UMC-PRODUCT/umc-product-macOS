@@ -6,7 +6,6 @@
 //
 
 import Foundation
-import UMCNetworkKit
 
 public enum AuthSystemFactory {
     /// The host app supplies the shared store and its session cleanup action.

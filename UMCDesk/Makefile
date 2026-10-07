@@ -182,8 +182,8 @@ test: ## 테스트 실행
 		test
 
 .PHONY: test-network
-test-network: ## 공유 UMCNetworkKit 네트워크·토큰 테스트
-	@swift test --package-path ../Packages/UMCNetworkKit
+test-network: ## Aquila 연동 네트워크·토큰 테스트
+	@$(MAKE) test SCHEME=CoreNetwork
 
 ##@ 정리
 

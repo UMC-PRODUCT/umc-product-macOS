@@ -1,5 +1,5 @@
 {
-  "originHash" : "deb42a00a6f35555d24c0669d9086029d05b0dadb866436cf3418dd0a4fabe8a",
+  "originHash" : "280f767c212dd8cc28e299de4717d76be283b61aba650e41bb65f20dcda9498d",
   "pins" : [
     {
       "identity" : "alamofire",
@@ -8,6 +8,14 @@
       "state" : {
         "revision" : "bda9ed57d72988a3a2ada33d824583541f86eac6",
         "version" : "5.12.2"
+      }
+    },
+    {
+      "identity" : "aquila",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/JEONG-J/Aquila.git",
+      "state" : {
+        "revision" : "c167df60acf91bd5827c67e4ec083ec902b0f65b"
       }
     },
     {

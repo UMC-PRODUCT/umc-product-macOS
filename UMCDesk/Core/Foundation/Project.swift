@@ -10,8 +10,5 @@ import ProjectDescriptionHelpers
 
 let project = coreProject(
     name: "UMCFoundation",
-    bundleIdSuffix: "foundation",
-    dependencies: [
-        .external(name: "UMCNetworkKit"),
-    ]
+    bundleIdSuffix: "foundation"
 )

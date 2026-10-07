@@ -1,12 +1,14 @@
 //
 //  MockTokenStore.swift
-//  UMCNetworkKitTests
+//  CoreNetworkTests
 //
 //  Created by euijjang97 on 10/6/26.
 //
 
+import Aquila
 import Foundation
-@testable import UMCNetworkKit
+import UMCFoundation
+@testable import CoreNetwork
 
 /// 메모리 기반 Mock TokenStore — Keychain을 거치지 않고 동작 확인용
 actor MockTokenStore: TokenStore {
@@ -78,7 +80,7 @@ actor MockTokenRefreshService: TokenRefreshService {
         case .transportFailure(let urlError):
             throw urlError
         case .rejectedByServer(let statusCode):
-            throw TokenRefreshError.serverError(statusCode: statusCode)
+            throw Aquila.NetworkError.requestFailed(statusCode: statusCode, data: Data())
         }
     }
 }

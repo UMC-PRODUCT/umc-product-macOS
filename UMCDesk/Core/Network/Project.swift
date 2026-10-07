@@ -12,9 +12,12 @@ let project = coreProject(
     name: "CoreNetwork",
     bundleIdSuffix: "network",
     dependencies: [
-        .external(name: "UMCNetworkKit"),
+        .external(name: "Aquila"),
+        .external(name: "AquilaMoya"),
+        .external(name: "Moya"),
         .project(target: "UMCFoundation", path: .relativeToRoot("Core/Foundation")),
         .project(target: "CoreDomain", path: .relativeToRoot("Core/Domain")),
         .sdk(name: "Security", type: .framework),
-    ]
+    ],
+    includesTests: true
 )

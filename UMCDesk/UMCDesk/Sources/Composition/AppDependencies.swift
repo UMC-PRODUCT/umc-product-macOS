@@ -35,7 +35,7 @@ final class AppDependencies {
                 container.resetCache()
             }
         )
-        let adapter = MoyaNetworkAdapter(networkClient: client, baseURL: environment.baseURL)
+        let adapter = MoyaNetworkAdapter(networkClient: client)
         self.container = container
         self.userSession = userSession
         container.registerInstance(TokenStore.self, instance: tokenStore)

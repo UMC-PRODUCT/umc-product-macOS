@@ -18,7 +18,7 @@ UMC Desk는 UMC 구성원이 공지와 대화를 확인하고 프로젝트 자�
 
 ## 기술 스택
 
-<img src="docs/assets/tech-stack.svg" width="100%" alt="UMC Desk 기술 스택: Swift 6, SwiftUI와 macOS 26+, Clean Architecture와 Feature 모듈, Tuist 4.208.0, Observation, Moya와 URLSession 기반 UMCNetworkKit, Swift Package Manager, Swift Testing.">
+<img src="docs/assets/tech-stack.svg" width="100%" alt="UMC Desk 기술 스택: Swift 6, SwiftUI와 macOS 26+, Clean Architecture와 Feature 모듈, Tuist 4.208.0, Observation, Moya와 URLSession 기반 Aquila, Swift Package Manager, Swift Testing.">
 
 [Figma 디자인](https://www.figma.com/design/ZOUySD6sh0ToGsgPQTr0Fw/UMC-Mobile-App?node-id=14129-2) · [빌드·테스트 상태](https://github.com/UMC-PRODUCT/umc-product-macOS/actions/workflows/tuist-ci.yml)
 

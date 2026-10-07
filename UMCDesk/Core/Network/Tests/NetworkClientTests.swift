@@ -1,6 +1,6 @@
 //
 //  NetworkClientTests.swift
-//  UMCNetworkKitTests
+//  CoreNetworkTests
 //
 //  Created by euijjang97 on 10/6/26.
 //
@@ -8,7 +8,8 @@
 import Foundation
 import Testing
 import Moya
-@testable import UMCNetworkKit
+import UMCFoundation
+@testable import CoreNetwork
 
 @Suite("NetworkClient", .serialized)
 @MainActor
@@ -140,7 +141,7 @@ struct NetworkClientTests {
         }
     }
 
-    @Test("refresh가 실패하면 NetworkError.tokenRefreshFailed를 throw한다")
+    @Test("갱신 중 알 수 없는 오류를 세션 만료로 변환하지 않는다")
     func refreshFailureWraps() async {
         let store = MockTokenStore(accessToken: "OLD", refreshToken: "REFRESH")
         let refresh = MockTokenRefreshService(behavior: .failure(.invalidRefreshToken))
@@ -148,7 +149,7 @@ struct NetworkClientTests {
 
         StubURLProtocol.handler = { _ in (Data(), 401, nil) }
 
-        await #expect(throws: NetworkError.self) {
+        await #expect(throws: MockRefreshError.invalidRefreshToken) {
             _ = try await client.request(URLRequest(url: self.testURL))
         }
     }
@@ -186,16 +187,16 @@ struct NetworkClientTests {
         }
     }
 
-    @Test("서버가 리프레시 토큰을 거부(401)하면 tokenRefreshFailed를 throw한다")
-    func serverRejectionBecomesTokenRefreshFailed() async {
+    @Test("서버가 리프레시 토큰을 거부하면 tokenRefreshFailed를 throw한다", arguments: [401, 403])
+    func serverRejectionBecomesTokenRefreshFailed(statusCode: Int) async {
         let store = MockTokenStore(accessToken: "OLD", refreshToken: "REFRESH")
-        let refresh = MockTokenRefreshService(behavior: .rejectedByServer(statusCode: 401))
+        let refresh = MockTokenRefreshService(behavior: .rejectedByServer(statusCode: statusCode))
         let client = makeClient(store: store, refresh: refresh)
 
         StubURLProtocol.handler = { _ in (Data(), 401, nil) }
 
         await #expect(
-            throws: NetworkError.tokenRefreshFailed(reason: "서버 에러 (status: 401)")
+            throws: NetworkError.tokenRefreshFailed(reason: "서버 에러 (status: \(statusCode))")
         ) {
             _ = try await client.request(URLRequest(url: self.testURL))
         }
@@ -326,11 +327,7 @@ struct NetworkClientTests {
             refresh: refresh
         )
         StubURLProtocol.handler = { _ in (Data("{}".utf8), 200, nil) }
-        let adapter = MoyaNetworkAdapter(
-            networkClient: client,
-            baseURL: testURL.deletingLastPathComponent(),
-            session: makeStubSession()
-        )
+        let adapter = MoyaNetworkAdapter(networkClient: client)
         _ = try await adapter.requestWithoutAuth(
             AdapterTarget(query: AdapterQuery(search: "UMC app & macOS"))
         )
@@ -347,19 +344,68 @@ struct NetworkClientTests {
         let refresh = MockTokenRefreshService(behavior: .failure(.invalidRefreshToken))
         let client = makeClient(store: MockTokenStore(), refresh: refresh)
         StubURLProtocol.handler = { _ in (Data(), 401, nil) }
-        let adapter = MoyaNetworkAdapter(
-            networkClient: client,
-            baseURL: testURL,
-            session: makeStubSession()
-        )
+        let adapter = MoyaNetworkAdapter(networkClient: client)
         await #expect(throws: NetworkError.requestFailed(statusCode: 401, data: nil)) {
             _ = try await adapter.requestWithoutAuth(AdapterTarget(query: AdapterQuery(search: "")))
         }
         #expect(await refresh.callCount == 0)
     }
+
+    @Test("AuthSystemFactory connects the UMC refresh envelope to Aquila retries")
+    func factoryRefreshesUsingUMCContract() async throws {
+        StubURLProtocol.reset()
+        let store = MockTokenStore(accessToken: "old", refreshToken: "refresh-secret")
+        let client = AuthSystemFactory.makeNetworkClient(
+            environment: NetworkEnvironment(baseURL: URL(string: "https://api.umc.test")!),
+            tokenStore: store,
+            session: makeStubSession()
+        )
+        StubURLProtocol.handler = { request in
+            if request.url?.path == "/api/v1/auth/token/renew" {
+                return (
+                    Data("""
+                    {"success":true,"code":"200","result":{
+                        "accessToken":"new","refreshToken":"new-refresh"
+                    }}
+                    """.utf8), 200, nil
+                )
+            }
+            let authenticated = request.value(forHTTPHeaderField: "Authorization") == "Bearer new"
+            return (Data("{}".utf8), authenticated ? 200 : 401, nil)
+        }
+
+        let (_, response) = try await client.request(URLRequest(url: testURL))
+        #expect(response.statusCode == 200)
+        #expect(await store.getAccessToken() == "new")
+        #expect(await store.getRefreshToken() == "new-refresh")
+        let refresh = try #require(StubURLProtocol.capturedRequests.first {
+            $0.url?.path == "/api/v1/auth/token/renew"
+        })
+        #expect(refresh.httpMethod == "POST")
+        #expect(refresh.value(forHTTPHeaderField: "Content-Type") == "application/json")
+        #expect(refresh.value(forHTTPHeaderField: "Authorization") == nil)
+        let body = try requestBody(refresh)
+        let json = try #require(JSONSerialization.jsonObject(with: body) as? [String: String])
+        #expect(json["refreshToken"] == "refresh-secret")
+    }
 }
 
 // MARK: - Helpers
+
+private func requestBody(_ request: URLRequest) throws -> Data {
+    if let body = request.httpBody { return body }
+    let stream = try #require(request.httpBodyStream)
+    stream.open()
+    defer { stream.close() }
+    var result = Data()
+    var buffer = [UInt8](repeating: 0, count: 1024)
+    while true {
+        let count = stream.read(&buffer, maxLength: buffer.count)
+        if count == 0 { return result }
+        guard count > 0 else { throw stream.streamError ?? URLError(.cannotDecodeRawData) }
+        result.append(contentsOf: buffer.prefix(count))
+    }
+}
 
 private struct SampleDTO: Decodable, Equatable, Sendable {
     let id: Int

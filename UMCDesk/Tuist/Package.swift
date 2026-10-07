@@ -10,6 +10,9 @@ let packageSettings = PackageSettings(productTypes: [:])
 let package = Package(
     name: "UMCDesk",
     dependencies: [
-        .package(path: "../../Packages/UMCNetworkKit"),
+        .package(
+            url: "https://github.com/JEONG-J/Aquila.git",
+            revision: "c167df60acf91bd5827c67e4ec083ec902b0f65b"
+        ),
     ]
 )
