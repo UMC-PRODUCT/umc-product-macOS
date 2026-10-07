@@ -1,13 +1,14 @@
 //
 //  SessionLifecycleTests.swift
-//  UMCNetworkKitTests
+//  CoreNetworkTests
 //
 //  Created by euijjang97 on 10/6/26.
 //
 
 import Foundation
 import Testing
-@testable import UMCNetworkKit
+import UMCFoundation
+@testable import CoreNetwork
 
 @Suite("Session lifecycle")
 struct SessionLifecycleTests {

@@ -5,14 +5,15 @@
 //  Created by euijjang97 on 10/6/26.
 //
 
-import UMCNetworkKit
+import Aquila
+import AquilaMoya
 
-public typealias NetworkClient = UMCNetworkKit.NetworkClient
-public typealias MoyaNetworkAdapter = UMCNetworkKit.MoyaNetworkAdapter
-public typealias NetworkEnvironment = UMCNetworkKit.NetworkEnvironment
-public typealias TokenStore = UMCNetworkKit.TokenStore
-public typealias TokenPair = UMCNetworkKit.TokenPair
-public typealias TokenRefreshService = UMCNetworkKit.TokenRefreshService
-public typealias SessionResetting = UMCNetworkKit.SessionResetting
-public typealias BaseTargetType = UMCNetworkKit.BaseTargetType
-public typealias APIResponse<Value: Codable> = UMCNetworkKit.APIResponse<Value>
+public typealias NetworkEnvironment = Aquila.NetworkEnvironment
+public typealias TokenStore = Aquila.TokenStore
+public typealias TokenPair = Aquila.TokenPair
+public typealias TokenRefreshService = Aquila.TokenRefreshService
+public typealias AuthenticationPolicy = Aquila.AuthenticationPolicy
+public typealias DefaultAuthenticationPolicy = Aquila.DefaultAuthenticationPolicy
+public typealias SessionResetting = Aquila.SessionResetting
+public typealias BaseTargetType = AquilaMoya.BaseTargetType
+public typealias NetworkAdapterError = AquilaMoya.NetworkAdapterError

@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="870" height="741" viewBox="0 0 870 741" role="img" aria-labelledby="title description">
 <title id="title">UMC Desk Tech Stack</title>
-<desc id="description">Swift 6, SwiftUI for macOS 26+, Clean Architecture with feature modules, Tuist 4.208.0, Observation, UMCNetworkKit using Moya and URLSession, Swift Package Manager, and Swift Testing.</desc>
+<desc id="description">Swift 6, SwiftUI for macOS 26+, Clean Architecture with feature modules, Tuist 4.208.0, Observation, Aquila using Moya and URLSession, Swift Package Manager, and Swift Testing.</desc>
 <defs><filter id="shadow" x="-10%" y="-10%" width="120%" height="130%"><feDropShadow dx="0" dy="3" stdDeviation="5" flood-color="#0D172E" flood-opacity="0.05"/></filter></defs>
 <rect width="870" height="741" rx="24" fill="#F7F8FA"/>
 <g font-family="Inter, Arial, sans-serif" text-anchor="middle">
@@ -63,7 +63,7 @@
 <text x="94" y="121" font-size="11" font-weight="700" fill="#0EA5E9" letter-spacing="0.9">NETWORK</text>
 <path d="M16 134H172" stroke="#0EA5E9" stroke-opacity="0.28" stroke-width="1.5"/>
 <circle cx="94" cy="134" r="4" fill="#0EA5E9"/>
-<text x="94" y="163" font-size="16" font-weight="700" fill="#101828" letter-spacing="-0.2">UMCNetworkKit</text>
+<text x="94" y="163" font-size="16" font-weight="700" fill="#101828" letter-spacing="-0.2">Aquila</text>
 <text x="94" y="193" font-size="12.5" fill="#6B7787">Moya · URLSession</text>
 <text x="94" y="211" font-size="12.5" fill="#6B7787">Actor · Token Refresh</text>
 </g>

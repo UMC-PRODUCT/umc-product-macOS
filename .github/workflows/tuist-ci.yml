@@ -34,7 +34,7 @@ jobs:
         run: make install
       - name: Generate workspace
         run: make generate
-      - name: Test shared network package
+      - name: Test Aquila integration
         run: make test-network
       - name: Test macOS app and DI
         run: make test CODE_SIGNING_ALLOWED=NO

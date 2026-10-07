@@ -7,7 +7,7 @@
 
 import Foundation
 import Security
-import UMCNetworkKit
+import Aquila
 
 /// Actor-isolated macOS token storage with an app-specific Keychain service.
 /// Tokens remain on this device; an in-memory cache avoids repeated Keychain reads.

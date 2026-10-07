@@ -1,11 +1,12 @@
 //
 //  APIResponse.swift
-//  UMCNetworkKit
+//  CoreNetwork
 //
 //  Created by euijjang97 on 10/6/26.
 //
 
 import Foundation
+import UMCFoundation
 
 /// 서버 공통 응답 DTO
 ///

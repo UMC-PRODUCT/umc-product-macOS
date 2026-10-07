@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="770" viewBox="0 0 1200 770" role="img" aria-labelledby="title desc">
   <title id="title">UMC Desk module architecture</title>
-  <desc id="desc">AppDependencies composes seven Features and Core modules. Each Feature's Presentation and Data depend on Domain. Data depends on CoreNetwork, which depends on UMCNetworkKit. Six other Core modules provide shared foundations, dependency injection, routing and future UI boundaries. The diagram omits secondary dependencies.</desc>
+  <desc id="desc">AppDependencies composes seven Features and Core modules. Each Feature's Presentation and Data depend on Domain. Data depends on CoreNetwork, which depends on Aquila. Six other Core modules provide shared foundations, dependency injection, routing and future UI boundaries. The diagram omits secondary dependencies.</desc>
   <!-- Created by euijjang97 on 10/6/26. -->
   <defs>
     <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
@@ -36,7 +36,7 @@
     <text x="594" y="525" font-size="24" font-weight="600">CoreNetwork</text>
     <text x="594" y="551" font-size="18" fill="#526D7B">Keychain token storage / session reset wiring</text>
     <rect x="44" y="492" width="416" height="78" rx="12" fill="#FFFFFF" stroke="#C9DFDF"/>
-    <text x="68" y="525" font-size="24" font-weight="600">UMCNetworkKit</text>
+    <text x="68" y="525" font-size="24" font-weight="600">Aquila</text>
     <text x="68" y="551" font-size="18" fill="#526D7B">Moya / NetworkClient actor / URLSession</text>
     <text x="44" y="621" font-size="24" font-weight="700">Shared Core</text>
     <text x="44" y="650" font-size="18" fill="#526D7B">Additional modules · secondary dependencies omitted</text>
