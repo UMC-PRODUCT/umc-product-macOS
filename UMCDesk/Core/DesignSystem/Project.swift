@@ -11,6 +11,6 @@ import ProjectDescriptionHelpers
 let project = coreProject(
     name: "CoreDesignSystem",
     bundleIdSuffix: "designsystem",
-    dependencies: [
-    ]
+    resources: ["Resources/**"],
+    includesTests: true
 )
