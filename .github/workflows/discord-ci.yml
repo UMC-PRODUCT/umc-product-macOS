@@ -1,0 +1,42 @@
+# Created by euijjang97 on 10/8/26.
+name: Discord CI Notification
+
+on:
+  workflow_run:
+    workflows: ["Tuist CI"]
+    types: [completed]
+
+permissions: {}
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send CI result to Discord
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          RESULT: ${{ github.event.workflow_run.conclusion }}
+          BRANCH: ${{ github.event.workflow_run.head_branch }}
+          RUN_URL: ${{ github.event.workflow_run.html_url }}
+        run: |
+          if [ -z "$DISCORD_WEBHOOK_URL" ]; then
+            echo "DISCORD_WEBHOOK_URL Secret is not configured." >&2
+            exit 1
+          fi
+
+          jq -n \
+            --arg repo "$GITHUB_REPOSITORY" \
+            --arg result "$RESULT" \
+            --arg branch "$BRANCH" \
+            --arg url "$RUN_URL" \
+            '{
+              content: ("CI **" + $result + "**\n"
+                + $repo + " · " + $branch + "\n" + $url),
+              allowed_mentions: {parse: []}
+            }' > payload.json
+
+          curl --fail --silent --show-error \
+            --connect-timeout 10 --max-time 30 \
+            --header "Content-Type: application/json" \
+            --data-binary @payload.json \
+            "$DISCORD_WEBHOOK_URL"
