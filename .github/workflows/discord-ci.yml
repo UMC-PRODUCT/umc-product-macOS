@@ -15,9 +15,6 @@ jobs:
       - name: Send CI result to Discord
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
-          RESULT: ${{ github.event.workflow_run.conclusion }}
-          BRANCH: ${{ github.event.workflow_run.head_branch }}
-          RUN_URL: ${{ github.event.workflow_run.html_url }}
         run: |
           if [ -z "$DISCORD_WEBHOOK_URL" ]; then
             echo "DISCORD_WEBHOOK_URL Secret is not configured." >&2
@@ -25,14 +22,46 @@ jobs:
           fi
 
           jq -n \
+            --slurpfile event "$GITHUB_EVENT_PATH" \
             --arg repo "$GITHUB_REPOSITORY" \
-            --arg result "$RESULT" \
-            --arg branch "$BRANCH" \
-            --arg url "$RUN_URL" \
-            '{
-              content: ("CI **" + $result + "**\n"
-                + $repo + " · " + $branch + "\n" + $url),
-              allowed_mentions: {parse: []}
+            --arg server "$GITHUB_SERVER_URL" \
+            '$event[0].workflow_run as $run
+            | ($run.conclusion // "unknown") as $result
+            | (if $result == "success" then
+                {label: "SUCCESS ✅", color: 5763719}
+              elif $result == "failure" or $result == "timed_out" then
+                {label: (($result | ascii_upcase) + " ❌"), color: 15548997}
+              elif $result == "cancelled" then
+                {label: "CANCELLED ⚠️", color: 16705372}
+              else
+                {label: (($result | ascii_upcase) + " ⚪"), color: 9807270}
+              end) as $status
+            | {
+              allowed_mentions: {parse: []},
+              embeds: [{
+                title: "UMCDesk (Tuist) CI Build Result",
+                url: $run.html_url,
+                color: $status.color,
+                fields: ([
+                  {name: "Build Status", value: $status.label, inline: true},
+                  {name: "Branch", value: ($run.head_branch // "Unknown"), inline: true},
+                  {
+                    name: "Commit",
+                    value: ("`" + $run.head_sha[0:7] + "` by "
+                      + ($run.actor.login // $run.head_commit.author.name // "Unknown")),
+                    inline: true
+                  }
+                ] + (if ($run.pull_requests // [] | length) > 0 then
+                  [{
+                    name: "PR",
+                    value: ($run.pull_requests | map(
+                      $server + "/" + $repo + "/pull/" + (.number | tostring)
+                    ) | join("\n")),
+                    inline: false
+                  }]
+                else [] end)),
+                footer: {text: $repo}
+              }]
             }' > payload.json
 
           curl --fail --silent --show-error \
