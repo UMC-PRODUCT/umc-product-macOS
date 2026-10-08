@@ -1,9 +1,9 @@
-# Agent.MD
+# AGENTS.md
 
-This file provides project guidance for coding agents working in this repository.
+This file provides guidance to Codex (Codex.ai/code) when working with code in this repository.
 
 > **구조 안내**: 이 파일은 **핵심 요약 + 절대 규칙 + 레퍼런스 인덱스**만 담는 허브입니다.
-> 주제별 상세 내용은 `docs/claude/` 로 분리되어 있으며, **필요할 때 해당 파일을 `Read` 로 열어** 참고합니다.
+> 주제별 상세 내용은 `docs/Codex/` 로 분리되어 있으며, **필요할 때 해당 파일을 `Read` 로 열어** 참고합니다.
 > (컨텍스트 절약을 위해 `@import` 로 전체를 인라인하지 않습니다.)
 >
 > **새 프로젝트 시작 시**: 아래 `{{ }}` 자리와 `AppName`/`com.example.appname` 플레이스홀더를
@@ -29,7 +29,7 @@ View ←→ ViewModel(@Observable) → UseCase(Protocol) → Repository → Data
 
 - **Presentation → Domain → Data** 단방향. 상위는 하위의 Protocol에만 의존 (DIP)
 - **Router**: AppRouter(모듈 간/딥링크) + Feature Router(내부 화면). Tab별 독립 `NavigationStack`
-- 상세: `docs/claude/architecture.md`
+- 상세: `docs/Codex/architecture.md`
 
 ## 절대 규칙 (항상 적용)
 
@@ -48,22 +48,22 @@ View ←→ ViewModel(@Observable) → UseCase(Protocol) → Repository → Data
 6. **Network Router에 인라인 딕셔너리 금지** — 파라미터는 Query/Body DTO로 캡슐화.
 7. **식별자에 의미 없는 숫자 접미사 금지** — `text1`/`btn2Color` 등 금지, 역할이 드러나는 이름 부여.
 8. **커밋·PR·이슈에 AI 작성 흔적(attribution) 절대 금지** — 커밋 메시지의 `Co-Authored-By` 라인,
-   PR·이슈 제목/본문의 `🤖 Generated with [Claude Code](...)` 푸터 등 AI가 작성했음을 드러내는 문구 일체 추가 금지.
+   PR·이슈 제목/본문의 `🤖 Generated with [Codex](...)` 푸터 등 AI가 작성했음을 드러내는 문구 일체 추가 금지.
 9. **작업 브랜치명은 `{타입}/{이슈번호}` — 이슈를 먼저 만들고 그 번호를 쓴다.**
    타입은 이슈 템플릿과 1:1로 맞춘다: `feat` · `bug` · `design` · `refac` · `docs` · `chore`.
    (예: `docs/1203`, `feat/1195`) 설명형 브랜치명(`docs/repo-rename-links` 등) 금지.
-   - 대응 이슈가 없으면 **브랜치를 만들기 전에 이슈부터 생성**한다 (제목 접두사·라벨·Type·Priority/Effort까지 채워서 — 상세: `docs/claude/git-workflow.md`).
+   - 대응 이슈가 없으면 **브랜치를 만들기 전에 이슈부터 생성**한다 (제목 접두사·라벨·Type·Priority/Effort까지 채워서 — 상세: `docs/Codex/git-workflow.md`).
    - **PR 제목은 `{이모지} [Type] {작업 내용} (#이슈번호)`** — 분류는 반드시 `[대괄호]`, 끝에 이슈번호.
      (예: `✨ [Feat] 명함 도메인 계층 — MyCard · 명함첩 · 교환 세션 UseCase (#1194)`)
      **이슈 제목 형식(`📄 Docs: …` — 콜론)을 PR 제목에 쓰지 않는다.** `[Docs]:`처럼 대괄호 뒤 콜론도 금지.
-     (이모지·Type 매핑표: `docs/claude/git-workflow.md`)
+     (이모지·Type 매핑표: `docs/Codex/git-workflow.md`)
    - **PR 생성 시 Assignee 와 라벨을 반드시 지정한다** — `gh pr create` 에 `--assignee "@me"` 와
      `[Type]` 대응 라벨(`--label ":page_facing_up: Docs"` 등)을 같이 넘긴다. 나중에 붙이지 않는다.
      (라벨명은 `gh label list` 출력과 정확히 일치해야 하며, 누락 시 `gh pr edit <번호> --add-assignee --add-label` 로 보정)
    - **PR 본문은 `.github/pull_request_template.md` 섹션 구조를 그대로 따른다.**
      임의 목차(`## 무엇을`·`## 검증` 등) 금지. `Closes #이슈번호`는 `## 🔗 관련 이슈` 섹션에 넣는다.
      ⚠️ `gh pr create --body "..."`는 템플릿을 불러오지 않는다 — 템플릿을 복사해 채운 뒤
-     `--body-file`로 넘길 것. (섹션 표·예시: `docs/claude/git-workflow.md` "PR 본문 형식")
+     `--body-file`로 넘길 것. (섹션 표·예시: `docs/Codex/git-workflow.md` "PR 본문 형식")
    - 이미 푸시한 브랜치명을 고쳐야 하면 GitHub 브랜치 rename API는 **열려 있던 PR을 닫아버리므로**, rename 후 새 PR을 만들고 닫힌 PR에 후속 PR 번호를 코멘트로 남긴다.
    - 배포 브랜치는 예외: `testFlight/{번호}` · `release/{번호}` (순차 번호, 이슈번호 아님).
 
@@ -76,14 +76,14 @@ View ←→ ViewModel(@Observable) → UseCase(Protocol) → Repository → Data
 - 작성자 표기는 `euijjang97` 로 통일 — 소스 파일 헤더는 `//  Created by euijjang97 on {날짜}.`,
   스크립트(`.sh`/`.py`/`Makefile`/워크플로 `.yml`)는 같은 블록을 `#` 주석으로,
   문서(`.md`)·위키의 작성자 필드는 `제옹(euijjang97)`
-- 상세 + 안티패턴 예시: `docs/claude/coding-style.md`
+- 상세 + 안티패턴 예시: `docs/Codex/coding-style.md`
 
 ## 에러 처리 (요약)
 
 - **Loadable** (`.idle/.loading/.loaded/.failed`): 화면 내 인라인 상태 (리스트 로딩, 도메인 에러, 검증 실패)
 - **ErrorHandler**: 흐름 중단형 전역 Alert (세션 만료, 권한, 네트워크 오류)
 - **AlertPrompt**: 확인/취소 다이얼로그 (파괴적 작업, 분기점) — `.alertPrompt(item:)`
-- 상세: `docs/claude/architecture.md`
+- 상세: `docs/Codex/architecture.md`
 
 ## 빌드 명령 (요약)
 
@@ -96,7 +96,7 @@ cd AppName && make doctor     # 환경 진단
 ```
 
 - Tuist 버전은 `AppName/mise.toml` 로 고정
-- 상세: `docs/claude/build-and-modules.md`, `AppName/MAKEFILE_GUIDE.md`
+- 상세: `docs/Codex/build-and-modules.md`, `AppName/MAKEFILE_GUIDE.md`
 
 ## 상세 레퍼런스 (필요 시 Read)
 
@@ -104,22 +104,22 @@ cd AppName && make doctor     # 환경 진단
 
 | 주제 | 문서 | 언제 읽나 |
 |------|------|----------|
-| 빌드 & Tuist 모듈 구조 | `docs/claude/build-and-modules.md` | 모듈 추가, 빌드 설정, 의존성 |
-| 아키텍처 / Observation / 에러 | `docs/claude/architecture.md` | ViewModel·UseCase·에러 처리 작업 |
-| Network Router (Moya) | `docs/claude/network-router.md` | API 엔드포인트/DTO 추가 |
-| Response DTO 디코딩 | `docs/claude/response-dto-decoding.md` | Response DTO 작성/수정 |
-| 디자인 시스템 & 성능 | `docs/claude/design-system.md` | UI/토큰/Glass/렌더링 최적화 |
-| 코딩 스타일 & 네이밍 | `docs/claude/coding-style.md` | 네이밍 판단이 필요할 때 |
-| Git Workflow | `docs/claude/git-workflow.md` | 브랜치/커밋/PR/이슈(템플릿·Type·Priority)/배포 |
-| PR 리뷰 규칙 & 체크리스트 | `docs/claude/pr-review.md` | PR 리뷰 작성 시 |
-| 서버 레포 참고 가이드 | `docs/claude/server-repo.md` | **API 스펙·권한 규칙·에러 코드 확인, 기능 기획 전 서버 현황 파악** |
+| 빌드 & Tuist 모듈 구조 | `docs/Codex/build-and-modules.md` | 모듈 추가, 빌드 설정, 의존성 |
+| 아키텍처 / Observation / 에러 | `docs/Codex/architecture.md` | ViewModel·UseCase·에러 처리 작업 |
+| Network Router (Moya) | `docs/Codex/network-router.md` | API 엔드포인트/DTO 추가 |
+| Response DTO 디코딩 | `docs/Codex/response-dto-decoding.md` | Response DTO 작성/수정 |
+| 디자인 시스템 & 성능 | `docs/Codex/design-system.md` | UI/토큰/Glass/렌더링 최적화 |
+| 코딩 스타일 & 네이밍 | `docs/Codex/coding-style.md` | 네이밍 판단이 필요할 때 |
+| Git Workflow | `docs/Codex/git-workflow.md` | 브랜치/커밋/PR/이슈(템플릿·Type·Priority)/배포 |
+| PR 리뷰 규칙 & 체크리스트 | `docs/Codex/pr-review.md` | PR 리뷰 작성 시 |
+| 서버 레포 참고 가이드 | `docs/Codex/server-repo.md` | **API 스펙·권한 규칙·에러 코드 확인, 기능 기획 전 서버 현황 파악** |
 
 Apple 프레임워크 API — 신규 Apple API를 다룰 때:
 
 | 모음 | 인덱스 | 언제 읽나 |
 |------|--------|----------|
-| Apple 프레임워크 가이드(20종) | `docs/claude/apple-frameworks/INDEX.md` | `glassEffect`·`GlassEffectContainer`(Liquid Glass) · 툴바 신규 API · `AttributedString`/리치 텍스트 · FoundationModels(온디바이스 LLM) · SwiftData 상속 · `@MainActor`/actor/async 동시성 · Swift Charts 3D · WebKit·AlarmKit·MapKit·StoreKit 연동 |
-| Apple 스킬팩(9종 · reference 66종, Apple 원문) | `docs/claude/apple-frameworks/INDEX.md` §3 | **SwiftUI·App Intents 코드를 새로 쓰거나 리뷰할 때.** `@Observable`/`@State`/`@Binding` 소유권 · `@Environment`/`@Entry` 무효화 경고 · `ForEach`/`List` identity(`id: \.self` 안티패턴) · soft-deprecated API 확인(`NavigationView`, 구 `onChange`) · 조건부 `.if` 모디파이어 · 뷰 분해/init 비용 · `Animatable` · App Intents 스키마/`AppEnum` · UIKit 현대화 · Xcode 보안 빌드 설정 |
+| Apple 프레임워크 가이드(20종) | `docs/Codex/apple-frameworks/INDEX.md` | `glassEffect`·`GlassEffectContainer`(Liquid Glass) · 툴바 신규 API · `AttributedString`/리치 텍스트 · FoundationModels(온디바이스 LLM) · SwiftData 상속 · `@MainActor`/actor/async 동시성 · Swift Charts 3D · WebKit·AlarmKit·MapKit·StoreKit 연동 |
+| Apple 스킬팩(9종 · reference 66종, Apple 원문) | `docs/Codex/apple-frameworks/INDEX.md` §3 | **SwiftUI·App Intents 코드를 새로 쓰거나 리뷰할 때.** `@Observable`/`@State`/`@Binding` 소유권 · `@Environment`/`@Entry` 무효화 경고 · `ForEach`/`List` identity(`id: \.self` 안티패턴) · soft-deprecated API 확인(`NavigationView`, 구 `onChange`) · 조건부 `.if` 모디파이어 · 뷰 분해/init 비용 · `Animatable` · App Intents 스키마/`AppEnum` · UIKit 현대화 · Xcode 보안 빌드 설정 |
 
 기획·설계 문서 — **이 레포 `docs/` 안에서 관리한다**:
 
@@ -137,7 +137,7 @@ Apple 프레임워크 API — 신규 Apple API를 다룰 때:
 - **`docs/` 를 `.gitignore` 에 넣지 않는다** — 기획 문서가 버전 관리 밖으로 빠지는 사고를 막는
   유일한 안전장치다. `.gitignore` 에 `docs` 패턴을 추가하려 할 때는 반드시 예외 규칙을 함께 둔다.
 - 기획 문서도 코드와 같은 흐름을 탄다 — 이슈(`docs/{번호}`) → 브랜치 → PR. 직접 main 에 푸시하지 않는다.
-- 코드 레벨 규약(아키텍처·코딩 스타일·빌드)은 `docs/claude/` 에 있다 — 기획 문서와 섞지 않는다.
+- 코드 레벨 규약(아키텍처·코딩 스타일·빌드)은 `docs/Codex/` 에 있다 — 기획 문서와 섞지 않는다.
 
 백엔드(서버) — **기능을 기획하거나 API를 붙이기 전에 먼저 연다**:
 
@@ -145,7 +145,7 @@ Apple 프레임워크 API — 신규 Apple API를 다룰 때:
 |------|------|--------------|
 | 서버 레포 | https://github.com/UMC-PRODUCT/umc-product-server | 기능 기획 단계의 서버 현황 파악, API 엔드포인트·요청/응답 스펙 확인, 권한 규칙 확인, 에러 코드 조회, iOS DTO와 실제 응답이 어긋날 때 원인 추적 |
 
-**상세 내비게이션은 `docs/claude/server-repo.md`** — 도메인 패키지 매핑, 조회 명령어,
+**상세 내비게이션은 `docs/Codex/server-repo.md`** — 도메인 패키지 매핑, 조회 명령어,
 확인된 경로·권한 규약이 정리돼 있다. 서버 관련 작업을 시작할 때 그 파일을 먼저 읽는다.
 
 - 조회 수단: `gh` CLI(`gh api "repos/UMC-PRODUCT/umc-product-server/contents/{경로}" --jq '.content' | base64 -d`).
