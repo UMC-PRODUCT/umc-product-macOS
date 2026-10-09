@@ -128,8 +128,15 @@ iOSInjectionProject/
 # Claude Code / agent local config
 .agents/
 .claude/
+.codex/
+.Codex/
 .mcp.json
 TEMPLATE_SETUP.md
+
+# Local planning and specifications
+/docs/plans/
+/docs/server/
+/docs/specs/
 
 # Tuist-generated projects and local build artifacts
 *.xcodeproj/
