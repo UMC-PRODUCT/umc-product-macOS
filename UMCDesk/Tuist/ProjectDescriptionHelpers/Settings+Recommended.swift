@@ -15,7 +15,7 @@ public let recommendedProjectSettings: Settings = .settings(
         "SWIFT_STRICT_CONCURRENCY": "complete",
         "ENABLE_USER_SCRIPT_SANDBOXING": "YES",
         "ENABLE_MODULE_VERIFIER": "YES",
-        "MARKETING_VERSION": "0.1.0",
+        "MARKETING_VERSION": "0.0.1",
         "CURRENT_PROJECT_VERSION": .string(Environment.buildNumber.getString(default: "1")),
         "CODE_SIGN_STYLE": "Automatic",
         "DEVELOPMENT_TEAM": .string(Environment.developmentTeam.getString(default: "8B8B4462NV")),

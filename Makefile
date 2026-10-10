@@ -7,7 +7,7 @@
 
 .DEFAULT_GOAL := help
 TARGETS := help bootstrap check-mise doctor install generate gen generate-open edit edit-project \
-    graph cache-warm open build pick test test-pick test-network clean clean-dd reset
+    graph cache-warm open build dmg-test test-dmg pick test test-pick test-network clean clean-dd reset
 
 .PHONY: $(TARGETS)
 $(TARGETS):

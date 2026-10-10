@@ -14,7 +14,7 @@ struct UMCDeskApp: App {
     private let dependencies = AppDependencies()
 
     var body: some Scene {
-        WindowGroup("UMC") {
+        WindowGroup("UMC Desk") {
             AuthView()
                 .toggleStyle(UMCCheckboxStyle())
                 .frame(minWidth: 1040, minHeight: 720)
