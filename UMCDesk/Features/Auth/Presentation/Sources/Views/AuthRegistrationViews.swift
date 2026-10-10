@@ -6,6 +6,7 @@
 //
 
 import CoreDesignSystem
+import CoreUIComponents
 import SwiftUI
 
 struct AuthRegistration: View {
@@ -307,7 +308,7 @@ private struct AuthTermsAgreement: View {
                 title: "[필수] 개인정보 처리방침", isOn: $form.agreesToPrivacy
             ) { selectedTerm = "개인정보 처리방침" }
         }
-        .toggleStyle(AuthAgreementStyle())
+        .toggleStyle(UMCCheckboxStyle())
         .umcTypography(.title3Regular)
         .foregroundStyle(UMCColor.Semantic.textNeutralStrong800)
         .alert(selectedTerm ?? "", isPresented: Binding(
@@ -316,28 +317,6 @@ private struct AuthTermsAgreement: View {
             Button("확인", role: .cancel) { selectedTerm = nil }
         } message: {
             Text("약관 내용은 추후 연결될 예정이에요.")
-        }
-    }
-}
-
-private struct AuthAgreementStyle: ToggleStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        Button { configuration.isOn.toggle() } label: {
-            HStack(spacing: UMCSpacing.value4) {
-                Image(systemName: configuration.isOn ? "checkmark.square.fill" : "square")
-                    .font(.system(size: 16, weight: .medium))
-                    .foregroundStyle(configuration.isOn ?
-                        UMCColor.Semantic.textBrandDefault :
-                        UMCColor.Semantic.borderNeutralMedium300)
-                    .frame(width: 32, height: 32)
-                configuration.label
-            }
-            .contentShape(.rect)
-        }
-        .buttonStyle(.plain)
-        .accessibilityRepresentation {
-            Toggle(isOn: configuration.$isOn) { configuration.label }
-                .toggleStyle(.checkbox)
         }
     }
 }
