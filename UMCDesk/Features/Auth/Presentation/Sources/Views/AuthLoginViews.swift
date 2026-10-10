@@ -9,16 +9,17 @@ import CoreDesignSystem
 import SwiftUI
 
 struct AuthLoginSelection: View {
+    let screen: AuthScreen
     @Bindable var viewModel: AuthViewModel
 
     var body: some View {
         VStack(spacing: UMCSpacing.value64) {
             AuthHeading(
-                title: viewModel.screen.copy.title,
-                subtitle: viewModel.screen.copy.subtitle
+                title: screen.copy.title,
+                subtitle: screen.copy.subtitle
             )
             VStack(spacing: UMCSpacing.value32) {
-                if viewModel.screen == .socialLogin {
+                if screen == .socialLogin {
                     VStack(spacing: UMCSpacing.value20) {
                         AuthBanner(
                             title: "\(viewModel.socialProvider) 로그인 중⋯",
@@ -34,19 +35,19 @@ struct AuthLoginSelection: View {
                 VStack(spacing: UMCSpacing.value16) {
                     AuthSocialButton(provider: .kakao) {
                         viewModel.socialProvider = "카카오"
-                        viewModel.screen = .socialLogin
+                        viewModel.navigate(to: .socialLogin)
                     }
                     AuthSocialButton(provider: .apple) {
                         viewModel.socialProvider = "Apple"
-                        viewModel.screen = .socialLogin
+                        viewModel.navigate(to: .socialLogin)
                     }
                     AuthSocialButton(provider: .google) {
                         viewModel.socialProvider = "Google"
-                        viewModel.screen = .socialLogin
+                        viewModel.navigate(to: .socialLogin)
                     }
                 }
-                .disabled(viewModel.screen == .socialLogin)
-                .opacity(viewModel.screen == .socialLogin ? 0.4 : 1)
+                .disabled(screen == .socialLogin)
+                .opacity(screen == .socialLogin ? 0.4 : 1)
                 Rectangle()
                     .fill(UMCColor.Semantic.borderNeutralMedium300)
                     .frame(height: 1)
@@ -54,8 +55,8 @@ struct AuthLoginSelection: View {
                 AuthSocialButton(provider: .email) {
                     viewModel.navigate(to: .emailLogin)
                 }
-                .disabled(viewModel.screen == .socialLogin)
-                .opacity(viewModel.screen == .socialLogin ? 0.4 : 1)
+                .disabled(screen == .socialLogin)
+                .opacity(screen == .socialLogin ? 0.4 : 1)
                 VStack(spacing: 0) {
                     Text("로그인에 문제가 있으신가요?")
                     HStack(spacing: 0) {
@@ -135,11 +136,12 @@ private struct AuthSocialButton: View {
             .background(provider.background, in: .capsule)
             .contentShape(.capsule)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(AuthPressStyle())
     }
 }
 
 struct AuthEmailLogin: View {
+    let screen: AuthScreen
     @Bindable var viewModel: AuthViewModel
     @FocusState private var focusedField: AuthField?
 
@@ -147,8 +149,8 @@ struct AuthEmailLogin: View {
         @Bindable var form = viewModel.form
         VStack(spacing: UMCSpacing.value64) {
             AuthHeading(
-                title: viewModel.screen.copy.title,
-                subtitle: viewModel.screen.copy.subtitle
+                title: screen.copy.title,
+                subtitle: screen.copy.subtitle
             )
             VStack(spacing: UMCSpacing.value32) {
                 VStack(spacing: UMCSpacing.value20) {
@@ -162,7 +164,7 @@ struct AuthEmailLogin: View {
                         text: $form.password, field: .password, focus: $focusedField,
                         isSecure: true, showsValue: $form.showsPassword
                     )
-                    if viewModel.screen == .credentialsError {
+                    if screen == .credentialsError {
                         AuthBanner(
                             title: "이메일 또는 비밀번호가 올바르지 않아요.",
                             message: "입력한 내용을 확인한 뒤 다시 시도해 주세요.",
@@ -171,7 +173,7 @@ struct AuthEmailLogin: View {
                     }
                 }
                 VStack(spacing: UMCSpacing.value16) {
-                    AuthButton(title: "로그인") { viewModel.screen = .memberChecking }
+                    AuthButton(title: "로그인") { viewModel.submitLogin() }
                         .disabled(!form.canRequestCode || form.password.isEmpty)
                     HStack(spacing: UMCSpacing.value12) {
                         AuthButton(title: "회원가입", kind: .secondary) {

@@ -30,6 +30,7 @@ struct AuthButton: View {
 
 private struct AuthButtonStyle: ButtonStyle {
     @Environment(\.isEnabled) private var isEnabled
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let kind: AuthButtonKind
 
     func makeBody(configuration: Configuration) -> some View {
@@ -42,7 +43,9 @@ private struct AuthButtonStyle: ButtonStyle {
                     lineWidth: 1
                 )
             }
-            .opacity(configuration.isPressed ? 0.75 : 1)
+            .modifier(AuthPressFeedback(isPressed: configuration.isPressed))
+            .animation(AuthMotion.animation(reduceMotion: reduceMotion, duration: 0.16),
+                value: isEnabled)
     }
 
     private var foreground: Color {
@@ -256,6 +259,7 @@ struct AuthBanner: View {
 struct AuthSteps: View {
     let titles: [String]
     var completedCount = 0
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         VStack(alignment: .leading, spacing: UMCSpacing.value16) {
@@ -265,6 +269,8 @@ struct AuthSteps: View {
                         .font(.system(size: index < completedCount ? 24 :
                             index == completedCount ? 18 : 12))
                         .frame(width: 48, height: 46)
+                        .symbolEffect(.rotate, options: .repeating,
+                            isActive: !reduceMotion && index == completedCount)
                         .overlay(alignment: .top) {
                             if index < titles.count - 1 {
                                 Path { path in

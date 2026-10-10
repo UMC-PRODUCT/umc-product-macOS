@@ -11,13 +11,14 @@ import SwiftUI
 struct AuthRegistration: View {
     @Bindable var viewModel: AuthViewModel
     @FocusState private var focusedField: AuthField?
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         @Bindable var form = viewModel.form
         VStack(spacing: UMCSpacing.value40) {
             AuthHeading(
-                title: viewModel.screen.copy.title,
-                subtitle: viewModel.screen.copy.subtitle,
+                title: AuthScreen.signup.copy.title,
+                subtitle: AuthScreen.signup.copy.subtitle,
                 isLeading: true
             )
             VStack(spacing: UMCSpacing.value32) {
@@ -36,12 +37,13 @@ struct AuthRegistration: View {
                     AuthSchoolPicker(form: form)
                     if form.emailVerification == .verified && !form.school.isEmpty {
                         AuthPasswordFields(form: form, focus: $focusedField)
+                            .transition(AuthMotion.pageTransition(reduceMotion: reduceMotion))
                     }
                     AuthTermsAgreement(form: form)
                 }
                 .zIndex(form.showsSchoolPicker ? 1 : 0)
                 VStack(spacing: UMCSpacing.value16) {
-                    AuthButton(title: "가입 완료") { viewModel.screen = .signupComplete }
+                    AuthButton(title: "가입 완료") { viewModel.completeRegistration() }
                         .disabled(!form.canRegister)
                     AuthButton(title: "로그인으로 돌아가기", kind: .tertiary) {
                         viewModel.navigate(to: .emailLogin)
@@ -50,6 +52,9 @@ struct AuthRegistration: View {
             }
         }
         .onAppear { focusedField = form.initialFocus }
+        .animation(AuthMotion.animation(reduceMotion: reduceMotion),
+            value: form.emailVerification)
+        .animation(AuthMotion.animation(reduceMotion: reduceMotion), value: form.school.isEmpty)
     }
 }
 
@@ -76,7 +81,7 @@ struct AuthPasswordReset: View {
                 VStack(spacing: UMCSpacing.value16) {
                     AuthButton(title: "비밀번호 변경") {
                         if form.canResetPassword {
-                            viewModel.screen = .passwordResetComplete
+                            viewModel.navigate(to: .passwordResetComplete)
                         } else {
                             form.showsPasswordError = true
                         }
@@ -95,6 +100,7 @@ struct AuthPasswordReset: View {
 private struct AuthEmailVerificationFields: View {
     @Bindable var form: AuthFormState
     let focus: FocusState<AuthField?>.Binding
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         VStack(alignment: .leading, spacing: UMCSpacing.value20) {
@@ -123,6 +129,12 @@ private struct AuthEmailVerificationFields: View {
                             isInvalid: form.emailVerification == .invalid
                         )
                         AuthButton(title: "인증번호 확인") {
+                            #if DEBUG
+                            if form.verificationCode != "123456" {
+                                form.emailVerification = .invalid
+                                return
+                            }
+                            #endif
                             form.emailVerification = .verified
                             focus.wrappedValue = nil
                         }
@@ -138,8 +150,11 @@ private struct AuthEmailVerificationFields: View {
                             .foregroundStyle(UMCColor.Semantic.textError)
                     }
                 }
+                .transition(AuthMotion.pageTransition(reduceMotion: reduceMotion))
             }
         }
+        .animation(AuthMotion.animation(reduceMotion: reduceMotion),
+            value: form.emailVerification)
     }
 
     private var buttonTitle: String {
@@ -155,6 +170,7 @@ private struct AuthPasswordFields: View {
     @Bindable var form: AuthFormState
     let focus: FocusState<AuthField?>.Binding
     var isReset = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         VStack(alignment: .leading, spacing: UMCSpacing.value8) {
@@ -178,13 +194,17 @@ private struct AuthPasswordFields: View {
                 Text("입력 조건을 충족하지 않거나 비밀번호가 일치하지 않아요.")
                     .umcTypography(.bodyRegular)
                     .foregroundStyle(UMCColor.Semantic.textError)
+                    .transition(.opacity)
             }
         }
+        .animation(AuthMotion.animation(reduceMotion: reduceMotion),
+            value: form.showsPasswordError)
     }
 }
 
 private struct AuthSchoolPicker: View {
     @Bindable var form: AuthFormState
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         VStack(alignment: .leading, spacing: UMCSpacing.value4) {
@@ -199,15 +219,16 @@ private struct AuthSchoolPicker: View {
                                 UMCColor.Semantic.textNeutralDefault
                         )
                     Spacer()
-                    Image(systemName: form.showsSchoolPicker ? "chevron.up" : "chevron.down")
+                    Image(systemName: "chevron.down")
                         .foregroundStyle(UMCColor.Semantic.iconNeutralMedium500)
                         .frame(width: 32)
+                        .rotationEffect(.degrees(form.showsSchoolPicker ? 180 : 0))
                 }
                 .padding(.horizontal, UMCSpacing.value16)
                 .frame(minHeight: 48)
                 .contentShape(.rect)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(AuthPressStyle())
             .background(UMCColor.Semantic.surfaceDefault)
             .overlay {
                 RoundedRectangle(cornerRadius: UMCRadius.value12)
@@ -219,11 +240,14 @@ private struct AuthSchoolPicker: View {
                 if form.showsSchoolPicker {
                     AuthSchoolOptions(form: form)
                         .padding(.top, 52)
+                        .transition(AuthMotion.dropdownTransition(reduceMotion: reduceMotion))
                 }
             }
         }
         .foregroundStyle(UMCColor.Semantic.textNeutralDefault)
         .zIndex(form.showsSchoolPicker ? 1 : 0)
+        .animation(AuthMotion.animation(reduceMotion: reduceMotion, duration: 0.18),
+            value: form.showsSchoolPicker)
         .onExitCommand { form.showsSchoolPicker = false }
     }
 }

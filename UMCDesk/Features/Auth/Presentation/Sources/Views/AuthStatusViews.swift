@@ -9,18 +9,19 @@ import CoreDesignSystem
 import SwiftUI
 
 struct AuthStatusPage: View {
+    let screen: AuthScreen
     @Bindable var viewModel: AuthViewModel
 
     var body: some View {
         VStack(spacing: UMCSpacing.value64) {
             AuthHeading(
-                title: viewModel.screen.copy.title,
-                subtitle: viewModel.screen.copy.subtitle,
-                icon: viewModel.screen.copy.icon
+                title: screen.copy.title,
+                subtitle: screen.copy.subtitle,
+                icon: screen.copy.icon
             )
             VStack(spacing: UMCSpacing.value24) {
-                AuthStatusBanner(screen: viewModel.screen)
-                AuthStatusActions(viewModel: viewModel)
+                AuthStatusBanner(screen: screen)
+                AuthStatusActions(screen: screen, viewModel: viewModel)
             }
         }
     }
@@ -80,22 +81,23 @@ private struct AuthStatusBanner: View {
 }
 
 private struct AuthStatusActions: View {
+    let screen: AuthScreen
     @Bindable var viewModel: AuthViewModel
 
     var body: some View {
         VStack(spacing: UMCSpacing.value16) {
-            switch viewModel.screen {
+            switch screen {
             case .offline:
-                AuthButton(title: "다시 확인") { viewModel.screen = .sessionChecking }
+                AuthButton(title: "다시 확인") { viewModel.navigate(to: .sessionChecking) }
                 AuthButton(title: "고객센터 문의", kind: .secondary) { showsSupport = true }
             case .loginFailure:
-                AuthButton(title: "다시 확인") { viewModel.screen = .sessionChecking }
+                AuthButton(title: "다시 확인") { viewModel.navigate(to: .sessionChecking) }
                 AuthButton(title: "다른 로그인 방법 선택", kind: .secondary) {
                     viewModel.navigate(to: .loginSelection)
                 }
                 AuthButton(title: "고객센터 문의", kind: .tertiary) { showsSupport = true }
             case .memberFailure:
-                AuthButton(title: "회원 정보 다시 확인") { viewModel.screen = .memberChecking }
+                AuthButton(title: "회원 정보 다시 확인") { viewModel.navigate(to: .memberChecking) }
                 AuthButton(title: "로그인으로 돌아가기", kind: .secondary) {
                     viewModel.navigate(to: .emailLogin)
                 }
@@ -109,14 +111,16 @@ private struct AuthStatusActions: View {
             case .signupLoginFailure, .passwordResetComplete:
                 AuthButton(title: "로그인으로 이동") { viewModel.navigate(to: .emailLogin) }
             case .maintenance:
-                AuthButton(title: "점검 상태 다시 확인") { }
+                AuthButton(title: "점검 상태 다시 확인") {
+                    viewModel.navigate(to: .sessionChecking)
+                }
             case .updateAvailable:
-                AuthButton(title: "지금 업데이트") { viewModel.screen = .updateDownloading }
+                AuthButton(title: "지금 업데이트") { viewModel.navigate(to: .updateDownloading) }
                 AuthButton(title: "나중에", kind: .secondary) {
                     viewModel.navigate(to: .loginSelection)
                 }
             case .updateDownloadError, .updateVerificationError:
-                AuthButton(title: "다시 다운로드") { viewModel.screen = .updateDownloading }
+                AuthButton(title: "다시 다운로드") { viewModel.navigate(to: .updateDownloading) }
                 AuthButton(title: "나중에", kind: .secondary) {
                     viewModel.navigate(to: .loginSelection)
                 }
@@ -127,14 +131,14 @@ private struct AuthStatusActions: View {
             case .logoutConfirmation, .withdrawalConfirmation:
                 HStack(spacing: UMCSpacing.value12) {
                     AuthButton(title: "취소", kind: .secondary) {
-                        viewModel.screen = .challengerIntro
+                        viewModel.cancelAccountAction()
                     }
                     AuthButton(
-                        title: viewModel.screen == .logoutConfirmation ? "로그아웃" : "회원 탈퇴",
-                        kind: viewModel.screen == .logoutConfirmation ? .primary : .destructive
+                        title: screen == .logoutConfirmation ? "로그아웃" : "회원 탈퇴",
+                        kind: screen == .logoutConfirmation ? .primary : .destructive
                     ) {
                         // UI navigation only; no tokens or account data are changed.
-                        viewModel.navigate(to: .loginSelection)
+                        viewModel.navigate(to: .loginSelection, resetsForm: true)
                     }
                 }
             default:
@@ -152,14 +156,15 @@ private struct AuthStatusActions: View {
 }
 
 struct AuthChallengerIntro: View {
+    let screen: AuthScreen
     @Bindable var viewModel: AuthViewModel
     @State private var showsWebsiteNotice = false
 
     var body: some View {
         VStack(spacing: UMCSpacing.value64) {
             AuthHeading(
-                title: viewModel.screen.copy.title,
-                subtitle: viewModel.screen.copy.subtitle
+                title: screen.copy.title,
+                subtitle: screen.copy.subtitle
             )
             VStack(spacing: UMCSpacing.value24) {
                 AuthBanner(
@@ -175,10 +180,10 @@ struct AuthChallengerIntro: View {
                     }
                     HStack(spacing: UMCSpacing.value12) {
                         AuthButton(title: "로그아웃", kind: .secondary) {
-                            viewModel.screen = .logoutConfirmation
+                            viewModel.navigate(to: .logoutConfirmation)
                         }
                         AuthButton(title: "회원 탈퇴", kind: .destructiveQuiet) {
-                            viewModel.screen = .withdrawalConfirmation
+                            viewModel.navigate(to: .withdrawalConfirmation)
                         }
                     }
                     AuthSupportButton()
@@ -192,6 +197,7 @@ struct AuthChallengerIntro: View {
 }
 
 struct AuthChallengerCode: View {
+    let screen: AuthScreen
     @Bindable var viewModel: AuthViewModel
     @FocusState private var focusedField: AuthField?
 
@@ -199,18 +205,18 @@ struct AuthChallengerCode: View {
         @Bindable var form = viewModel.form
         VStack(spacing: UMCSpacing.value64) {
             AuthHeading(
-                title: viewModel.screen.copy.title,
-                subtitle: viewModel.screen.copy.subtitle
+                title: screen.copy.title,
+                subtitle: screen.copy.subtitle
             )
             VStack(spacing: UMCSpacing.value24) {
                 VStack(alignment: .leading, spacing: UMCSpacing.value20) {
                     AuthTextField(
                         "챌린저 코드", placeholder: "6자리 코드를 입력해 주세요.",
                         text: $form.challengerCode, field: .challengerCode, focus: $focusedField,
-                        showsClear: viewModel.screen == .challengerCodeError &&
+                        showsClear: screen == .challengerCodeError &&
                             focusedField == .challengerCode
                     )
-                    if viewModel.screen == .challengerCodeError {
+                    if screen == .challengerCodeError {
                         AuthBanner(
                             title: "이미 사용된 챌린저 코드예요.",
                             message: "운영진에게 코드를 확인해 주세요.\n다른 코드를 받았다면 다시 입력할 수 있어요.",
@@ -224,22 +230,22 @@ struct AuthChallengerCode: View {
                 }
                 VStack(spacing: UMCSpacing.value16) {
                     AuthButton(
-                        title: viewModel.screen == .challengerCodeError ? "다시 입력" : "코드 인증"
+                        title: screen == .challengerCodeError ? "다시 입력" : "코드 인증"
                     ) {
-                        if viewModel.screen == .challengerCodeError {
+                        if screen == .challengerCodeError {
                             form.challengerCode = ""
-                            viewModel.screen = .challengerCode
-                            focusedField = .challengerCode
+                            form.initialFocus = .challengerCode
+                            viewModel.navigate(to: .challengerCode)
                         } else {
-                            viewModel.screen = .challengerChecking
+                            viewModel.navigate(to: .challengerChecking)
                         }
                     }
-                    .disabled(viewModel.screen == .challengerCode && !isValidCode)
+                    .disabled(screen == .challengerCode && !isValidCode)
                     AuthButton(
-                        title: viewModel.screen == .challengerCodeError ? "뒤로" : "취소",
+                        title: screen == .challengerCodeError ? "뒤로" : "취소",
                         kind: .secondary
                     ) { viewModel.navigate(to: .challengerIntro) }
-                    if viewModel.screen == .challengerCodeError {
+                    if screen == .challengerCodeError {
                         AuthSupportButton()
                     }
                 }
@@ -257,17 +263,18 @@ struct AuthChallengerCode: View {
 }
 
 struct AuthVerificationStatus: View {
+    let screen: AuthScreen
     @Bindable var viewModel: AuthViewModel
 
     var body: some View {
         VStack(spacing: UMCSpacing.value64) {
             AuthHeading(
-                title: viewModel.screen.copy.title,
-                subtitle: viewModel.screen.copy.subtitle
+                title: screen.copy.title,
+                subtitle: screen.copy.subtitle
             )
             VStack(spacing: UMCSpacing.value20) {
                 AuthSteps(titles: titles, completedCount: completedCount)
-                if viewModel.screen == .challengerComplete {
+                if screen == .challengerComplete {
                     AuthButton(title: "시작하기") { viewModel.navigate(to: .loginSelection) }
                 } else {
                     AuthBanner(
@@ -280,7 +287,7 @@ struct AuthVerificationStatus: View {
     }
 
     private var completedCount: Int {
-        switch viewModel.screen {
+        switch screen {
         case .memberChecking: 1
         case .challengerComplete: 3
         default: 0
@@ -288,7 +295,7 @@ struct AuthVerificationStatus: View {
     }
 
     private var titles: [String] {
-        switch viewModel.screen {
+        switch screen {
         case .memberChecking: ["계정 로그인 완료", "회원 정보 확인 중", "UMC 인증 확인"]
         case .challengerChecking: ["챌린저 코드 확인", "회원 정보 재확인", "UMC 승인 상태 확인"]
         case .challengerComplete: ["챌린저 코드 등록 완료", "회원 정보 확인 완료", "UMC 승인 확인 완료"]

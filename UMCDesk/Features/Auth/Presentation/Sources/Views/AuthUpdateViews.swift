@@ -9,12 +9,13 @@ import CoreDesignSystem
 import SwiftUI
 
 struct AuthUpdateProgress: View {
+    let screen: AuthScreen
     @Bindable var viewModel: AuthViewModel
 
     var body: some View {
         VStack(spacing: UMCSpacing.value64) {
             VStack(alignment: .leading, spacing: UMCSpacing.value24) {
-                if let step = viewModel.screen.updateStep {
+                if let step = screen.updateStep {
                     HStack(spacing: UMCSpacing.value4) {
                         Text(String(format: "STEP %02d", step)).umcTypography(.headlineBold)
                         Text("/ 05").umcTypography(.headlineRegular)
@@ -28,19 +29,19 @@ struct AuthUpdateProgress: View {
                     }
                 }
                 AuthHeading(
-                    title: viewModel.screen.copy.title,
-                    subtitle: viewModel.screen.copy.subtitle,
+                    title: screen.copy.title,
+                    subtitle: screen.copy.subtitle,
                     isLeading: true
                 )
             }
             VStack(spacing: UMCSpacing.value24) {
-                switch viewModel.screen {
+                switch screen {
                 case .updateDownloading:
                     AuthUpdateCard(
                         title: "다운로드 중", progress: viewModel.downloadProgress
                     )
                     AuthButton(title: "다운로드 취소", kind: .tertiary) {
-                        viewModel.screen = .updateAvailable
+                        viewModel.navigate(to: .updateAvailable)
                     }
                 case .updateVerifying:
                     AuthUpdateCard(
@@ -53,7 +54,7 @@ struct AuthUpdateProgress: View {
                         message: "설치 후 앱이 다시 시작돼요."
                     )
                     AuthButton(title: "설치하고 다시 시작") {
-                        viewModel.screen = .updateInstalling
+                        viewModel.navigate(to: .updateInstalling)
                     }
                 case .updateInstalling:
                     AuthUpdateCard(
@@ -101,6 +102,7 @@ private struct AuthUpdateCard: View {
                     Text(progress, format: .percent.precision(.fractionLength(0)))
                         .umcTypography(.largeTitle3Bold)
                         .foregroundStyle(UMCColor.Semantic.textBrandDefault)
+                        .monospacedDigit()
                 }
             }
             if let progress {
@@ -125,6 +127,8 @@ private struct AuthUpdateCard: View {
 }
 
 private struct AuthDownloadProgressStyle: ProgressViewStyle {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     func makeBody(configuration: Configuration) -> some View {
         GeometryReader { geometry in
             Capsule()
@@ -136,5 +140,7 @@ private struct AuthDownloadProgressStyle: ProgressViewStyle {
                 }
         }
         .frame(height: 5)
+        .animation(reduceMotion ? nil : .linear(duration: 0.08),
+            value: configuration.fractionCompleted)
     }
 }

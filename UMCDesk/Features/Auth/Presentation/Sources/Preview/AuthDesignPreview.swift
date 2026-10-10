@@ -278,6 +278,7 @@ struct AuthDesignPreview: Identifiable {
     @MainActor
     func makeViewModel() -> AuthViewModel {
         let viewModel = AuthViewModel()
+        viewModel.playsPreviewFlow = false
         viewModel.screen = screen
         viewModel.quoteOverride = quote
         viewModel.authorOverride = author

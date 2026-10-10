@@ -12,6 +12,7 @@ public struct AuthView: View {
     // MARK: - Property
 
     @State private var viewModel: AuthViewModel
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     fileprivate enum Constants {
         static let sidebarWidth: CGFloat = 576
@@ -46,10 +47,15 @@ public struct AuthView: View {
                 ScrollView {
                     VStack(spacing: 0) {
                         Spacer(minLength: UMCSpacing.value32)
-                        AuthPageContent(viewModel: viewModel)
-                            .id(ObjectIdentifier(viewModel.form))
+                        ZStack {
+                            AuthPageContent(screen: viewModel.screen, viewModel: viewModel)
+                                .id(viewModel.navigationID)
+                                .transition(AuthMotion.pageTransition(reduceMotion: reduceMotion))
+                        }
                             .frame(maxWidth: viewModel.screen.contentWidth)
                             .padding(.horizontal, UMCSpacing.value32)
+                            .animation(AuthMotion.animation(reduceMotion: reduceMotion),
+                                value: viewModel.navigationID)
                         Spacer(minLength: UMCSpacing.value32)
                     }
                     .frame(maxWidth: .infinity, minHeight: geometry.size.height)
@@ -69,6 +75,9 @@ public struct AuthView: View {
             .sharedBackgroundVisibility(.hidden)
             #if DEBUG
             ToolbarItem(placement: .automatic) {
+                AuthPreviewFlowMenu(viewModel: viewModel)
+            }
+            ToolbarItem(placement: .automatic) {
                 AuthPreviewMenu(viewModel: $viewModel)
             }
             #endif
@@ -76,6 +85,7 @@ public struct AuthView: View {
         .toolbarBackground(UMCColor.Semantic.backgroundDefault, for: .windowToolbar)
         .toolbarBackgroundVisibility(.visible, for: .windowToolbar)
         #if DEBUG
+        .task(id: viewModel.navigationID) { await viewModel.runPreviewFlow() }
         .onAppear {
             let arguments = ProcessInfo.processInfo.arguments
             if let index = arguments.firstIndex(of: "--auth-preview"),
@@ -94,6 +104,7 @@ private struct AuthBrandPanel: View {
     let quote: String
     let author: String
     let category: String
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         VStack(alignment: .leading, spacing: UMCSpacing.value32) {
@@ -112,9 +123,11 @@ private struct AuthBrandPanel: View {
 
             VStack(alignment: .leading, spacing: UMCSpacing.value20) {
                 Text(quote)
+                    .contentTransition(.opacity)
                     .umcTypography(.largeTitle1Regular)
                     .fixedSize(horizontal: false, vertical: true)
                 Text("- \(author)")
+                    .contentTransition(.opacity)
                     .umcTypography(.title3Regular)
             }
             .accessibilityElement(children: .combine)
@@ -127,10 +140,13 @@ private struct AuthBrandPanel: View {
                     .frame(height: 1)
                     .accessibilityHidden(true)
                 Text(category)
+                    .contentTransition(.opacity)
                     .umcTypography(.bodyRegular)
             }
         }
         .foregroundStyle(UMCColor.Semantic.textInverse)
+        .animation(AuthMotion.animation(reduceMotion: reduceMotion), value: quote)
+        .animation(AuthMotion.animation(reduceMotion: reduceMotion), value: category)
         .padding(UMCSpacing.value64)
         .frame(maxHeight: .infinity)
         .background {
@@ -147,29 +163,30 @@ private struct AuthBrandPanel: View {
 }
 
 private struct AuthPageContent: View {
+    let screen: AuthScreen
     @Bindable var viewModel: AuthViewModel
 
     var body: some View {
-        switch viewModel.screen {
+        switch screen {
         case .loginSelection, .socialLogin:
-            AuthLoginSelection(viewModel: viewModel)
+            AuthLoginSelection(screen: screen, viewModel: viewModel)
         case .emailLogin, .credentialsError:
-            AuthEmailLogin(viewModel: viewModel)
+            AuthEmailLogin(screen: screen, viewModel: viewModel)
         case .signup:
             AuthRegistration(viewModel: viewModel)
         case .passwordReset:
             AuthPasswordReset(viewModel: viewModel)
         case .challengerIntro:
-            AuthChallengerIntro(viewModel: viewModel)
+            AuthChallengerIntro(screen: screen, viewModel: viewModel)
         case .challengerCode, .challengerCodeError:
-            AuthChallengerCode(viewModel: viewModel)
+            AuthChallengerCode(screen: screen, viewModel: viewModel)
         case .sessionChecking, .memberChecking, .challengerChecking, .challengerComplete:
-            AuthVerificationStatus(viewModel: viewModel)
+            AuthVerificationStatus(screen: screen, viewModel: viewModel)
         case .updateDownloading, .updateVerifying, .updateReady, .updateInstalling,
              .updateComplete:
-            AuthUpdateProgress(viewModel: viewModel)
+            AuthUpdateProgress(screen: screen, viewModel: viewModel)
         default:
-            AuthStatusPage(viewModel: viewModel)
+            AuthStatusPage(screen: screen, viewModel: viewModel)
         }
     }
 }

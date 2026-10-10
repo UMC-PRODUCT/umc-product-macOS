@@ -10,6 +10,112 @@ import Testing
 
 @MainActor
 struct AuthFormTests {
+    @Test("Moving between authentication screens preserves entered form data")
+    func navigationPreservesInput() {
+        let viewModel = AuthViewModel()
+        viewModel.form.email = "member@example.com"
+        viewModel.form.name = "김유엠"
+        viewModel.navigate(to: .passwordReset)
+        viewModel.navigate(to: .emailLogin)
+        #expect(viewModel.form.email == "member@example.com")
+        #expect(viewModel.form.name == "김유엠")
+    }
+
+    @Test("A different form keeps identity but starts a new email verification")
+    func formVerificationIsScoped() {
+        let viewModel = AuthViewModel()
+        viewModel.navigate(to: .signup)
+        viewModel.form.email = "member@example.com"
+        viewModel.form.emailVerification = .verified
+        viewModel.form.password = "oldPassword1!"
+        viewModel.navigate(to: .passwordReset)
+        #expect(viewModel.form.email == "member@example.com")
+        #expect(viewModel.form.emailVerification == .idle)
+        #expect(viewModel.form.password.isEmpty)
+    }
+
+    @Test("Cancel returns from account confirmation without clearing entered data")
+    func accountCancellationRestoresScreen() {
+        for screen in [AuthScreen.signup, .passwordReset, .challengerCode] {
+            for confirmation in [AuthScreen.logoutConfirmation, .withdrawalConfirmation] {
+                let viewModel = AuthViewModel()
+                viewModel.navigate(to: screen)
+                viewModel.form.challengerCode = "UMC123"
+                viewModel.form.emailVerification = .verified
+                viewModel.form.password = "password1!"
+                viewModel.navigate(to: confirmation)
+                viewModel.cancelAccountAction()
+                #expect(viewModel.screen == screen)
+                #expect(viewModel.form.challengerCode == "UMC123")
+                #expect(viewModel.form.emailVerification == .verified)
+                #expect(viewModel.form.password == "password1!")
+            }
+        }
+    }
+
+    #if DEBUG
+    @Test("Social login preview continues through session and member checks")
+    func loginPreviewCompletesWaitingScreens() {
+        let viewModel = AuthViewModel()
+        viewModel.navigate(to: .socialLogin)
+        for _ in 0..<3 {
+            viewModel.advancePreviewFlow(for: viewModel.navigationID)
+        }
+        #expect(viewModel.screen == .challengerIntro)
+        #expect(!viewModel.hasPendingPreviewStep)
+    }
+
+    @Test("A simulated failure is consumed so retry can recover")
+    func previewRetryRecovers() {
+        let viewModel = AuthViewModel()
+        viewModel.form.email = "member@example.com"
+        viewModel.previewScenario = .memberFailure
+        viewModel.navigate(to: .memberChecking)
+        viewModel.advancePreviewFlow(for: viewModel.navigationID)
+        #expect(viewModel.screen == .memberFailure)
+        viewModel.navigate(to: .memberChecking)
+        viewModel.advancePreviewFlow(for: viewModel.navigationID)
+        #expect(viewModel.screen == .challengerIntro)
+        #expect(viewModel.form.email == "member@example.com")
+    }
+
+    @Test("Update preview completes download, verification and installation")
+    func updatePreviewCompletes() {
+        let viewModel = AuthViewModel()
+        viewModel.navigate(to: .updateDownloading)
+        for _ in 0..<20 {
+            viewModel.advancePreviewFlow(for: viewModel.navigationID)
+        }
+        #expect(viewModel.downloadProgress == 1)
+        #expect(viewModel.screen == .updateVerifying)
+        viewModel.advancePreviewFlow(for: viewModel.navigationID)
+        #expect(viewModel.screen == .updateReady)
+        #expect(!viewModel.hasPendingPreviewStep)
+        viewModel.navigate(to: .updateInstalling)
+        viewModel.advancePreviewFlow(for: viewModel.navigationID)
+        #expect(viewModel.screen == .updateComplete)
+    }
+
+    @Test("Cancelled preview work cannot move the new screen or restart a download")
+    func cancelledPreviewCannotNavigate() {
+        let viewModel = AuthViewModel()
+        viewModel.navigate(to: .updateDownloading)
+        let cancelledNavigation = viewModel.navigationID
+        viewModel.navigate(to: .updateAvailable)
+        viewModel.advancePreviewFlow(for: cancelledNavigation)
+        #expect(viewModel.screen == .updateAvailable)
+        #expect(viewModel.downloadProgress == 0)
+    }
+
+    @Test("All design screens are reachable while gallery snapshots stay still")
+    func galleryCoversEveryScreen() {
+        #expect(Set(AuthDesignPreview.all.map(\.screen)) == Set(AuthScreen.allCases))
+        for preview in AuthDesignPreview.all {
+            #expect(!preview.makeViewModel().playsPreviewFlow)
+        }
+    }
+    #endif
+
     @Test("Email requires nonempty domain labels before requesting verification")
     func emailRequiresValidDomain() {
         let form = AuthFormState()

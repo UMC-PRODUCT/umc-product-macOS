@@ -11,7 +11,7 @@ import Observation
 @MainActor
 @Observable
 final class AuthFormState {
-    enum EmailVerification {
+    enum EmailVerification: Equatable {
         case idle, sent, invalid, verified
     }
 
@@ -77,12 +77,62 @@ final class AuthViewModel {
     var downloadProgress = 0.0
     var quoteOverride: String?
     var authorOverride: String?
+    private(set) var navigationID = UUID()
+    private var accountReturnScreen: AuthScreen = .challengerIntro
 
-    func navigate(to screen: AuthScreen) {
+    #if DEBUG
+    var playsPreviewFlow = true
+    var previewScenario: AuthPreviewScenario = .success
+    #endif
+
+    func navigate(to screen: AuthScreen, resetsForm: Bool = false) {
+        if screen == .logoutConfirmation || screen == .withdrawalConfirmation {
+            accountReturnScreen = self.screen
+        }
+        let isReturningFromAccountConfirmation = self.screen == .logoutConfirmation
+            || self.screen == .withdrawalConfirmation
+        if self.screen != screen && !isReturningFromAccountConfirmation
+            && (screen == .signup || screen == .passwordReset) {
+            form.emailVerification = .idle
+            form.verificationCode = ""
+            form.password = ""
+            form.passwordConfirmation = ""
+            form.showsPasswordError = false
+        }
         self.screen = screen
         quoteOverride = nil
         authorOverride = nil
-        form = AuthFormState()
-        downloadProgress = 0
+        navigationID = UUID()
+        if resetsForm { form = AuthFormState() }
+        if screen == .updateDownloading { downloadProgress = 0 }
+        #if DEBUG
+        playsPreviewFlow = true
+        #endif
+    }
+
+    func cancelAccountAction() {
+        navigate(to: accountReturnScreen)
+    }
+
+    func submitLogin() {
+        #if DEBUG
+        if previewScenario == .credentialsError {
+            previewScenario = .success
+            navigate(to: .credentialsError)
+            return
+        }
+        #endif
+        navigate(to: .sessionChecking)
+    }
+
+    func completeRegistration() {
+        #if DEBUG
+        if previewScenario == .signupLoginFailure {
+            previewScenario = .success
+            navigate(to: .signupLoginFailure)
+            return
+        }
+        #endif
+        navigate(to: .signupComplete)
     }
 }
