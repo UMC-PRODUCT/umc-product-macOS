@@ -8,4 +8,8 @@
 import ProjectDescription
 import ProjectDescriptionHelpers
 
-let project = featureProject(name: "Auth")
+let project = featureProject(
+    name: "Auth",
+    presentationResources: ["Presentation/Resources/**"],
+    includesPresentationTests: true
+)
