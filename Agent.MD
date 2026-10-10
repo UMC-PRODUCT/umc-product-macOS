@@ -169,6 +169,13 @@ Apple 프레임워크 API — 신규 Apple API를 다룰 때:
   다른 팀의 도움이나 설정·API·디자인·배포 변경이 필요하면 `README.md`와
   [`ownership-registry.md`](https://github.com/UMC-PRODUCT/umc-product-handbook/blob/main/ownership-registry.md)의
   최신 내용을 `gh api`로 먼저 확인한다. handbook은 필요한 파일만 읽기 전용으로 조회한다.
+- **플랫폼 팀 관련 작업은 [공통 엔진 도메인 책임 범위 가이드](https://app.notion.com/p/makeus-challenge/3f2b57f4596b806f9532f2e82f73f15c?source=copy_link)도 함께 참고한다.**
+  handbook에서 팀 DRI·조직 역할을, 엔진 가이드에서 알림·채팅·Form·인증인가의 상세 책임 경계와
+  문제별 우선 확인 담당을 확인한다. Platform은 공통 처리 엔진을, 목적팀은 제품별 사용 정책을 맡는다.
+  Notion에 접근할 수 없으면 [저장된 복사본](docs/claude/platform-domain-ownership.md)을 읽는다.
+  복사본은 2026-10-10 사용자 제공 본문 기준이며, 최신본을 확인하지 못했으면 그 사실을 명시한다.
+  책임 범위를 현재 구현·출시 상태로 해석하지 않는다. API 계약·제공 여부는 실제 서버 코드로 확인하고,
+  확인되지 않은 작업 상태·담당자·일정은 추측하지 않는다.
 - **어느 팀의 누구에게 전달할지 스스로 파악해 사용자에게 알려준다.**
   담당 팀·담당자 닉네임·역할, 요청할 작업과 이유, 관련 이슈·API·설정 및 근거 링크를 제시한다.
   사용자가 원하면 그대로 전달할 수 있는 요청 문안을 작성한다.
