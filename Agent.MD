@@ -67,6 +67,12 @@ View ←→ ViewModel(@Observable) → UseCase(Protocol) → Repository → Data
    - 이미 푸시한 브랜치명을 고쳐야 하면 GitHub 브랜치 rename API는 **열려 있던 PR을 닫아버리므로**, rename 후 새 PR을 만들고 닫힌 PR에 후속 PR 번호를 코멘트로 남긴다.
    - 배포 브랜치는 예외: `testFlight/{번호}` · `release/{번호}` (순차 번호, 이슈번호 아님).
 
+10. **macOS 체크박스는 공통 `UMCCheckboxStyle` 사용** — `CoreUIComponents`의
+    `Toggle(...).toggleStyle(UMCCheckboxStyle())`를 사용하고 Feature 전용 스타일을 중복 구현하지 않는다.
+    앱 루트에 기본 스타일을 지정하며 독립 Preview에서도 같은 스타일을 적용한다.
+    체크·해제 시 SF Symbol의 `.replace.magic(fallback: .replace)` 전환을 적용한다.
+    `accessibilityReduceMotion`이 켜지면 애니메이션을 끄고, 키보드 조작과 VoiceOver 체크 상태를 유지한다.
+
 ## 코딩 스타일 (요약)
 
 - 들여쓰기 4 spaces(탭 금지) · 줄 길이 최대 99자 · 외부 불필요 상태는 `private`
