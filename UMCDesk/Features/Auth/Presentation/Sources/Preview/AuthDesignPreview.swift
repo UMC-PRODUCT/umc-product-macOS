@@ -401,4 +401,3 @@ struct AuthPreviewSchool: Identifiable {
         .frame(width: 1440, height: 908)
 }
 #endif
-

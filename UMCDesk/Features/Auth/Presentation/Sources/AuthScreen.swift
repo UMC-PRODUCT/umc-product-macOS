@@ -356,4 +356,3 @@ struct AuthScreenCopy {
     let category: String
     var icon: String? = nil
 }
-
