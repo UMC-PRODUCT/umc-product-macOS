@@ -142,6 +142,9 @@ TEMPLATE_SETUP.md
 *.xcodeproj/
 Derived/
 .local-derived-data*/
+/UMCDesk/.local-dmg-tools/
+/UMCDesk/dist/
+tools/**/__pycache__/
 Tuist/.build/
 .swiftpm/
 _workspace/

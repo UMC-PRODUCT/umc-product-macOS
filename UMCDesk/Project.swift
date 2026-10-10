@@ -17,16 +17,19 @@ let project = Project(
             name: "UMCDesk",
             destinations: .macOS,
             product: .app,
+            productName: "UMC Desk",
             bundleId: "com.umc.product.macos",
             deploymentTargets: macOSDeploymentTargets,
             infoPlist: .extendingDefault(with: [
                 "CFBundleDisplayName": "UMC Desk",
+                "CFBundleName": "UMC Desk",
                 "CFBundleShortVersionString": "$(MARKETING_VERSION)",
                 "CFBundleVersion": "$(CURRENT_PROJECT_VERSION)",
                 "LSApplicationCategoryType": "public.app-category.productivity",
                 "BASE_URL": "$(BASE_URL)",
             ]),
             sources: ["UMCDesk/Sources/**"],
+            resources: ["UMCDesk/Resources/**"],
             entitlements: .file(path: "UMCDesk.entitlements"),
             dependencies: [
                 .project(target: "UMCFoundation", path: "Core/Foundation"),
@@ -59,7 +62,10 @@ let project = Project(
                 .project(target: "ProjectWorkspacePresentation", path: "Features/ProjectWorkspace"),
 
             ],
-            settings: .settings(configurations: [
+            settings: .settings(base: [
+                "ASSETCATALOG_COMPILER_APPICON_NAME": "AppIcon",
+                "PRODUCT_MODULE_NAME": "UMCDesk",
+            ], configurations: [
                 .debug(name: .debug, xcconfig: "Secrets/Shared.xcconfig"),
                 .release(name: .release, xcconfig: "Secrets/Shared.xcconfig"),
             ])
