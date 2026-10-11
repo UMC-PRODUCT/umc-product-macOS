@@ -81,6 +81,38 @@ System Settings → Privacy & Security. Ad-hoc signing does not verify the devel
 identity. This command creates local files and does not create Git tags or GitHub Releases.
 Check the local `BASE_URL` before sharing builds that need server access.
 
+## Notarized GitHub pre-releases
+
+Keep the app version at `0.0.1` and choose a higher integer build number for each upload.
+The first notarized distribution follows local test build 1 and uses build 2.
+Use a valid Developer ID Application identity and an existing `notarytool` Keychain profile:
+
+```sh
+make dmg-release TUIST_BUILD_NUMBER=2 NOTARY_PROFILE=your-keychain-profile
+```
+
+The command builds a universal Release app with Hardened Runtime and a secure timestamp,
+notarizes and staples the app, then signs, notarizes, and staples the DMG. It validates both
+tickets and Gatekeeper assessments before placing `UMC-Desk-0.0.1-build2.dmg` in `dist/`.
+An existing DMG with the same name is preserved; choose a new build number. No certificate
+or credential is exported. Submission IDs and results are saved under `dist/.notarization/`;
+if interrupted, inspect those IDs with `xcrun notarytool info` before submitting again.
+
+Publish the verified file from its committed source, using a new tag for every build:
+
+```sh
+gh release create v0.0.1-build.2 dist/UMC-Desk-0.0.1-build2.dmg "dist/설치 안내.txt" \
+    --target "$(git rev-parse HEAD)" --prerelease \
+    --title "UMC Desk 0.0.1 (2)" --notes-file /absolute/path/to/release-notes.txt
+```
+
+For the next distribution, change the build number and tag to `3` and `v0.0.1-build.3`.
+Keep earlier release assets and tags. Teammates download the DMG from GitHub Pre-release,
+drag the app onto Applications, and accept the normal first-open confirmation. The notarized
+distribution does not require the Open Anyway procedure used for ad-hoc test builds.
+Check `BASE_URL` before building when server access is needed; notarization does not validate
+API configuration or app functionality.
+
 ```sh
 make clean      # Remove generated projects and resolved Tuist artifacts
 make clean-dd   # Remove local Xcode build data

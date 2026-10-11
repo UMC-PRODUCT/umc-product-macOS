@@ -9,7 +9,7 @@ import tempfile
 import dmgbuild
 
 
-def build(app: Path, output_directory: Path) -> Path:
+def build(app: Path, output_directory: Path, *, release: bool = False) -> Path:
     app = app.resolve()
     with (app / "Contents/Info.plist").open("rb") as file:
         info = plistlib.load(file)
@@ -21,7 +21,8 @@ def build(app: Path, output_directory: Path) -> Path:
         if not isinstance(value, str) or not all(part.isdecimal() for part in value.split(".")):
             raise ValueError("App version and build number must contain digits and dots only")
     output_directory.mkdir(parents=True, exist_ok=True)
-    output = output_directory / f"UMC-Desk-{version}-build{build_number}-test.dmg"
+    suffix = "" if release else "-test"
+    output = output_directory / f"UMC-Desk-{version}-build{build_number}{suffix}.dmg"
 
     def verify_copy(mount_point, options):
         # dmgbuild does not check ditto's exit code; validate the copy before publishing.
@@ -37,7 +38,8 @@ def build(app: Path, output_directory: Path) -> Path:
                               Path(__file__).with_name("background.png").resolve())})
         subprocess.run(["hdiutil", "verify", str(temporary)], check=True)
         temporary.replace(output)
-    shutil.copyfile(Path(__file__).with_name("install.txt"), output_directory / "설치 안내.txt")
+    guide = "install-release.txt" if release else "install.txt"
+    shutil.copyfile(Path(__file__).with_name(guide), output_directory / "설치 안내.txt")
     return output
 
 

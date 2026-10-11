@@ -1,5 +1,6 @@
 # Created by euijjang97 on 10/10/26.
 import importlib.util
+import json
 from pathlib import Path
 import plistlib
 import shutil
@@ -11,7 +12,7 @@ from unittest.mock import patch
 
 
 ROOT = Path(__file__).resolve().parents[2]
-SCRIPT = ROOT / "tools/dmg/build_test_dmg.py"
+SCRIPT = ROOT / "tools/dmg/build_dmg.py"
 HAS_TOOLS = sys.platform == "darwin" and importlib.util.find_spec("dmgbuild") is not None
 
 
@@ -19,7 +20,7 @@ HAS_TOOLS = sys.platform == "darwin" and importlib.util.find_spec("dmgbuild") is
 class TestDMGTests(unittest.TestCase):
     def setUp(self):
         self.assertTrue(SCRIPT.is_file(), "DMG packaging script must exist")
-        specification = importlib.util.spec_from_file_location("build_test_dmg", SCRIPT)
+        specification = importlib.util.spec_from_file_location("build_dmg", SCRIPT)
         self.builder = importlib.util.module_from_spec(specification)
         specification.loader.exec_module(self.builder)
         self.directory = tempfile.TemporaryDirectory(prefix="umc dmg ")
@@ -80,6 +81,35 @@ class TestDMGTests(unittest.TestCase):
             self.builder.build(self.app, self.output)
         self.assertEqual(previous.read_bytes(), b"previous build")
         self.assertEqual(list(self.output.iterdir()), [previous])
+
+    def test_release_package_uses_distinct_name_and_install_guide(self):
+        subprocess.run(["codesign", "--force", "--sign", "-", str(self.app)], check=True,
+                       capture_output=True)
+        dmg = self.builder.build(self.app, self.output, release=True)
+        self.assertEqual(dmg.name, "UMC-Desk-0.0.1-build7.dmg")
+        self.assertEqual((self.output / "설치 안내.txt").read_bytes(),
+                         (ROOT / "tools/dmg/install-release.txt").read_bytes())
+
+    def test_notarization_requires_accepted_status_and_records_submission(self):
+        specification = importlib.util.spec_from_file_location(
+            "build_release_dmg", ROOT / "tools/dmg/build_release_dmg.py")
+        release_builder = importlib.util.module_from_spec(specification)
+        with patch.dict(sys.modules, {"build_dmg": self.builder}):
+            specification.loader.exec_module(release_builder)
+        logs = self.root / "notary logs"
+        archive = self.root / "app.zip"
+        for status in ["Accepted", "Invalid"]:
+            with self.subTest(status=status):
+                results = [subprocess.CompletedProcess([], 0, '{"id": "submission-id"}'),
+                           subprocess.CompletedProcess([], 0, json.dumps({"status": status}))]
+                with patch.object(release_builder.subprocess, "run", side_effect=results):
+                    if status == "Accepted":
+                        release_builder.notarize(archive, "test-profile", logs)
+                    else:
+                        with self.assertRaises(RuntimeError):
+                            release_builder.notarize(archive, "test-profile", logs)
+                record = logs / "app.zip.submission-id.submission.json"
+                self.assertEqual(json.loads(record.read_text()), {"id": "submission-id"})
 
     def test_failed_app_copy_leaves_previous_artifact_untouched(self):
         import dmgbuild.core

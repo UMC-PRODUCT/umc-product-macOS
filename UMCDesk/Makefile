@@ -29,6 +29,8 @@ DERIVED_DATA ?= .local-derived-data
 MISE ?= mise
 TUIST := $(MISE) exec -- tuist
 DMG_PYTHON := .local-dmg-tools/bin/python
+SIGNING_IDENTITY ?= Developer ID Application
+NOTARY_PROFILE ?= UMCDeskNotary
 
 # UMC App처럼 배포 브랜치(release/번호, testFlight/번호)에서 빌드 번호를 읽습니다.
 # CI_BRANCH 또는 TUIST_BUILD_NUMBER로 직접 지정할 수 있습니다.
@@ -160,8 +162,25 @@ dmg-test: generate .local-dmg-tools/.ready ## 팀 내부 테스트 DMG 생성 (�
 		ARCHS='arm64 x86_64' ONLY_ACTIVE_ARCH=NO \
 		CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM= \
 		build
-	@$(DMG_PYTHON) ../tools/dmg/build_test_dmg.py \
+	@$(DMG_PYTHON) ../tools/dmg/build_dmg.py \
 		"$(DERIVED_DATA)/Build/Products/Debug/UMC Desk.app" dist
+
+.PHONY: dmg-release
+dmg-release: generate .local-dmg-tools/.ready ## Developer ID 서명·공증 DMG 생성
+	@test -n "$(TUIST_BUILD_NUMBER)" || { echo "Set TUIST_BUILD_NUMBER explicitly"; exit 1; }
+	@xcrun notarytool history --keychain-profile "$(NOTARY_PROFILE)" >/dev/null
+	@xcodebuild \
+		-workspace "$(WORKSPACE)" -scheme UMCDesk -configuration Release \
+		-destination 'generic/platform=macOS' -derivedDataPath "$(DERIVED_DATA)" \
+		CONFIGURATION_BUILD_DIR="$(abspath $(DERIVED_DATA))/Build/Products/Release" \
+		ARCHS='arm64 x86_64' ONLY_ACTIVE_ARCH=NO \
+		CODE_SIGNING_ALLOWED=YES CODE_SIGN_STYLE=Manual \
+		CODE_SIGN_IDENTITY="$(SIGNING_IDENTITY)" ENABLE_HARDENED_RUNTIME=YES \
+		CODE_SIGN_INJECT_BASE_ENTITLEMENTS=NO OTHER_CODE_SIGN_FLAGS=--timestamp \
+		build
+	@$(DMG_PYTHON) ../tools/dmg/build_release_dmg.py \
+		"$(DERIVED_DATA)/Build/Products/Release/UMC Desk.app" dist \
+		--identity "$(SIGNING_IDENTITY)" --profile "$(NOTARY_PROFILE)"
 
 .PHONY: test-dmg
 test-dmg: .local-dmg-tools/.ready ## DMG 생성·설치·Finder 배치 자동 테스트
