@@ -30,6 +30,7 @@ MISE ?= mise
 TUIST := $(MISE) exec -- tuist
 DMG_PYTHON := .local-dmg-tools/bin/python
 SIGNING_IDENTITY ?= Developer ID Application
+DEVELOPMENT_TEAM ?= 8B8B4462NV
 NOTARY_PROFILE ?= UMCDeskNotary
 
 # UMC App처럼 배포 브랜치(release/번호, testFlight/번호)에서 빌드 번호를 읽습니다.
@@ -175,6 +176,7 @@ dmg-release: generate .local-dmg-tools/.ready ## Developer ID 서명·공증 DMG
 		CONFIGURATION_BUILD_DIR="$(abspath $(DERIVED_DATA))/Build/Products/Release" \
 		ARCHS='arm64 x86_64' ONLY_ACTIVE_ARCH=NO \
 		CODE_SIGNING_ALLOWED=YES CODE_SIGN_STYLE=Manual \
+		DEVELOPMENT_TEAM="$(DEVELOPMENT_TEAM)" \
 		CODE_SIGN_IDENTITY="$(SIGNING_IDENTITY)" ENABLE_HARDENED_RUNTIME=YES \
 		CODE_SIGN_INJECT_BASE_ENTITLEMENTS=NO OTHER_CODE_SIGN_FLAGS=--timestamp \
 		build
