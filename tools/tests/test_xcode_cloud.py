@@ -24,12 +24,17 @@ class XcodeCloudPostCloneTests(unittest.TestCase):
         shutil.copy2(SCRIPT, self.scripts / SCRIPT.name)
         shutil.copy2(ROOT / "UMCDesk/Makefile", self.project / "Makefile")
         shutil.copy2(ROOT / "UMCDesk/mise.toml", self.project / "mise.toml")
+        settings = self.project / "Tuist/ProjectDescriptionHelpers/Settings+Recommended.swift"
+        settings.parent.mkdir(parents=True)
+        shutil.copy2(ROOT / "UMCDesk/Tuist/ProjectDescriptionHelpers/Settings+Recommended.swift",
+                     settings)
         self.bin = self.root / "bin"
         self.bin.mkdir()
         self.environment = os.environ | {
             "PATH": f"{self.bin}:/usr/bin:/bin:/usr/sbin:/sbin",
             "CI_PRIMARY_REPOSITORY_PATH": str(self.project.parent),
             "CI_BUILD_NUMBER": "37",
+            "CI_BRANCH": "develop",
             "TUIST_BUILD_NUMBER": "999",
             "HOMEBREW_NO_AUTO_UPDATE": "1",
         }
@@ -86,6 +91,41 @@ class XcodeCloudPostCloneTests(unittest.TestCase):
         completed = self.run_script()
         self.assertEqual(completed.returncode, 0, completed.stderr)
         self.assertEqual((self.project / "generated-build-number").read_text(), "37")
+
+    def test_prerelease_branch_number_overrides_cloud_run_number(self):
+        self.environment["CI_BRANCH"] = "prerelease/0.0.1/3"
+        completed = self.run_script()
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.assertEqual((self.project / "generated-build-number").read_text(), "3")
+
+    def test_canonical_git_ref_can_supply_the_prerelease_branch(self):
+        self.environment.pop("CI_BRANCH")
+        self.environment["CI_GIT_REF"] = "refs/heads/prerelease/0.0.1/3"
+        completed = self.run_script()
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.assertEqual((self.project / "generated-build-number").read_text(), "3")
+
+    def test_malformed_branch_or_wrong_app_version_stops_before_preparation(self):
+        for branch in ["prerelease/3", "prerelease/0.0.1/0", "prerelease/0.0.1/3/extra",
+                       "prerelease/0.0.1/03", "prerelease/0.0.2/3"]:
+            with self.subTest(branch=branch):
+                self.environment["CI_BRANCH"] = branch
+                completed = self.run_script()
+                self.assertNotEqual(completed.returncode, 0)
+                self.assertIn("prerelease", completed.stderr)
+                self.assertFalse((self.project / "tools-ready").exists())
+
+    def test_make_uses_branch_build_number_for_local_generation(self):
+        self.environment.pop("TUIST_BUILD_NUMBER")
+        for branch, number in [("prerelease/0.0.1/3", "3"), ("release/8", "8"),
+                               ("testFlight/9", "9"), ("testflight/external/0.0.1/10", "10")]:
+            with self.subTest(branch=branch):
+                self.environment["CI_BRANCH"] = branch
+                completed = subprocess.run(["make", "bootstrap", "install", "generate"],
+                                           cwd=self.project, env=self.environment,
+                                           capture_output=True, text=True, timeout=10)
+                self.assertEqual(completed.returncode, 0, completed.stderr)
+                self.assertEqual((self.project / "generated-build-number").read_text(), number)
 
     def test_missing_cloud_environment_stops_before_preparation(self):
         for name in ["CI_PRIMARY_REPOSITORY_PATH", "CI_BUILD_NUMBER"]:
