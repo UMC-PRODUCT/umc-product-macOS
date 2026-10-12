@@ -15,6 +15,7 @@ public struct AuthView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     #if DEBUG
     @State private var typographyPreview = UMCTypographyPreview()
+    @State private var previewColorScheme: ColorScheme?
     #endif
 
     fileprivate enum Constants {
@@ -46,6 +47,8 @@ public struct AuthView: View {
                     Constants.sidebarWidth,
                     geometry.size.width * Constants.sidebarFraction
                 ))
+                // Figma pins the brand panel to Light in both screen appearances.
+                .environment(\.colorScheme, .light)
 
                 ScrollView {
                     VStack(spacing: 0) {
@@ -66,9 +69,8 @@ public struct AuthView: View {
                 .scrollBounceBehavior(.basedOnSize)
             }
         }
-        .background(UMCColor.Semantic.backgroundDefault)
+        .background(UMCColor.Custom.backgroundDefault)
         .tint(UMCColor.Semantic.textBrandDefault)
-        .preferredColorScheme(.light)
         .toolbar {
             ToolbarItem(placement: .navigation) {
                 Text("UMC")
@@ -77,6 +79,16 @@ public struct AuthView: View {
             }
             .sharedBackgroundVisibility(.hidden)
             #if DEBUG
+            ToolbarItem(placement: .automatic) {
+                Menu("화면 모드", systemImage: "circle.lefthalf.filled") {
+                    Picker("화면 모드", selection: $previewColorScheme) {
+                        Text("시스템 설정").tag(ColorScheme?.none)
+                        Text("라이트").tag(ColorScheme?.some(.light))
+                        Text("다크").tag(ColorScheme?.some(.dark))
+                    }
+                }
+                .help("현재 화면을 시스템·라이트·다크 모드로 비교")
+            }
             ToolbarItem(placement: .automatic) {
                 AuthPreviewFlowMenu(viewModel: viewModel)
             }
@@ -88,9 +100,10 @@ public struct AuthView: View {
             }
             #endif
         }
-        .toolbarBackground(UMCColor.Semantic.backgroundDefault, for: .windowToolbar)
+        .toolbarBackground(UMCColor.Custom.backgroundDefault, for: .windowToolbar)
         .toolbarBackgroundVisibility(.visible, for: .windowToolbar)
         #if DEBUG
+        .preferredColorScheme(previewColorScheme)
         .environment(\.umcTypographyPreview, typographyPreview)
         .task(id: viewModel.navigationID) { await viewModel.runPreviewFlow() }
         .onAppear {

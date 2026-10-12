@@ -88,7 +88,7 @@ private enum AuthSocialProvider {
         case .kakao: Color(red: 1, green: 234 / 255, blue: 47 / 255)
         case .apple: UMCColor.Primitives.black
         case .google: Color(red: 242 / 255, green: 242 / 255, blue: 242 / 255)
-        case .email: UMCColor.Primitives.teal75
+        case .email: UMCColor.Semantic.fillPrimaryWeak75
         }
     }
 
@@ -96,7 +96,7 @@ private enum AuthSocialProvider {
         switch self {
         case .apple: UMCColor.Semantic.textInverse
         case .email: UMCColor.Semantic.textBrandDefault
-        default: UMCColor.Semantic.textNeutralDefault
+        case .kakao, .google: .black
         }
     }
 }

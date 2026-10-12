@@ -49,7 +49,7 @@ private struct AuthButtonStyle: ButtonStyle {
     }
 
     private var foreground: Color {
-        guard isEnabled else { return UMCColor.Semantic.textInverse }
+        guard isEnabled else { return UMCColor.Semantic.textDisabled }
         switch kind {
         case .primary, .destructive: return UMCColor.Semantic.textInverse
         case .brand: return UMCColor.Semantic.textBrandDefault
@@ -60,7 +60,7 @@ private struct AuthButtonStyle: ButtonStyle {
     }
 
     private var background: Color {
-        guard isEnabled else { return UMCColor.Primitives.tealGrey400 }
+        guard isEnabled else { return UMCColor.Semantic.fillNeutralDisabled }
         switch kind {
         case .primary: return UMCColor.Primitives.black
         case .secondary, .tertiary: return .clear
@@ -122,7 +122,8 @@ struct AuthTextField: View {
                 }
                 .textFieldStyle(.plain)
                 .umcTypography(.headlineRegular)
-                .foregroundStyle(UMCColor.Semantic.textNeutralDefault)
+                .foregroundStyle(isDisabled ? UMCColor.Semantic.textDisabled :
+                    UMCColor.Semantic.textNeutralDefault)
                 .focused(focus, equals: field)
                 .accessibilityLabel(title)
                 .disabled(isDisabled)
@@ -158,7 +159,8 @@ struct AuthTextField: View {
             .padding(.trailing, UMCSpacing.value12)
             .frame(minHeight: 48)
             .background(
-                isDisabled ? UMCColor.Primitives.tealGrey75 : UMCColor.Semantic.surfaceDefault,
+                isDisabled ? UMCColor.Semantic.fillNeutralWeak75 :
+                    UMCColor.Custom.backgroundSurface,
                 in: .rect(cornerRadius: UMCRadius.value12)
             )
             .overlay {
@@ -169,10 +171,11 @@ struct AuthTextField: View {
     }
 
     private var prompt: Text {
-        Text(placeholder).foregroundColor(UMCColor.Primitives.tealGrey400)
+        Text(placeholder).foregroundColor(UMCColor.Semantic.textPlaceholder)
     }
 
     private var borderColor: Color {
+        if isDisabled { return UMCColor.Semantic.borderDisabled }
         if isInvalid { return UMCColor.Semantic.borderErrorStrong500 }
         if focus.wrappedValue == field { return UMCColor.Semantic.borderPrimaryStrong500 }
         return UMCColor.Semantic.borderNeutralMedium300
@@ -291,7 +294,7 @@ struct AuthSteps: View {
                 }
                 .foregroundStyle(
                     index <= completedCount ? UMCColor.Semantic.textBrandDefault :
-                        UMCColor.Primitives.teal300
+                        UMCColor.Semantic.textBrandDisabled
                 )
                 .accessibilityLabel("\(title), \(index < completedCount ? "완료" : "대기 중")")
             }

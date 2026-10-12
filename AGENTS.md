@@ -20,6 +20,13 @@ This file provides guidance to Codex (Codex.ai/code) when working with code in t
 
 ## 아키텍처 한눈에
 
+- **macOS Figma 기준 파일**: https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/UMC-Mac-OS
+  UI·디자인 시스템 작업은 이 파일의 최신 Variables를 확인한다.
+  `UMC Color`의 `Light`·`Dark`를 모두 반영하고, `Custom/Background`는 macOS 화면 배경에 사용한다.
+  Primitive도 모드별 값이 달라지므로 고정 색상이 필요한 외부 브랜드에는 직접 적용하지 않는다.
+  변수 값과 함께 노드의 `explicitVariableModes` 및 모드 상속도 확인한다.
+  로그인·회원가입의 `Login/Left Panel`은 화면이 Dark여도 Light 모드를 유지한다.
+
 **Feature-Based Modular + Clean Architecture + Observation**
 
 ```

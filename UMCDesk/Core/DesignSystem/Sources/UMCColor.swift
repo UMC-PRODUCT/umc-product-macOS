@@ -245,6 +245,7 @@ public enum UMCColor {
     }
 
     public enum Semantic {
+
         /// Semantic/Icon/Disabled
         public static let iconDisabled = UMCColor.Primitives.tealGrey300
 
@@ -278,8 +279,20 @@ public enum UMCColor {
         /// Semantic/Icon/Warning
         public static let iconWarning = UMCColor.Primitives.yellow500
 
-        /// Semantic/Fill/Disabled/Disalbed
-        public static let fillDisabled = UMCColor.Primitives.tealGrey100
+        /// Semantic/Fill/Neutral/Disalbed
+        public static let fillNeutralDisabled = Color(
+            "Semantic/Fill/Neutral/Disalbed", bundle: .module
+        )
+
+        /// Semantic/Fill/Neutral/Stronger-300
+        public static let fillNeutralStronger300 = Color(
+            "Semantic/Fill/Neutral/Stronger-300", bundle: .module
+        )
+
+        /// Semantic/Fill/Neutral/Stronger-Hover(Pressed)
+        public static let fillNeutralStrongerHoverPressed = Color(
+            "Semantic/Fill/Neutral/Stronger-Hover(Pressed)", bundle: .module
+        )
 
         /// Semantic/Fill/Neutral/Weaker-50
         public static let fillNeutralWeaker50 = UMCColor.Primitives.tealGrey50
@@ -451,9 +464,6 @@ public enum UMCColor {
 
         /// Semantic/Surface/Default
         public static let surfaceDefault = UMCColor.Primitives.white
-
-        /// Semantic/Surface/Disabled
-        public static let surfaceDisabled = UMCColor.Primitives.tealGrey200
 
         /// Semantic/Surface/Neutral-Weak
         public static let surfaceNeutralWeak = UMCColor.Primitives.tealGrey50
@@ -697,5 +707,18 @@ public enum UMCColor {
 
         /// Semantic/Dimmed/Strong
         public static let dimmedStrong = UMCColor.Primitives.tealGrey900.opacity(0.85)
+    }
+
+    public enum Custom {
+        /// Custom/Background/Default
+        public static let backgroundDefault = Color("Custom/Background/Default", bundle: .module)
+
+        /// Custom/Background/App Shell
+        public static let backgroundAppShell = Color(
+            "Custom/Background/App Shell", bundle: .module
+        )
+
+        /// Custom/Background/Surface
+        public static let backgroundSurface = Color("Custom/Background/Surface", bundle: .module)
     }
 }
