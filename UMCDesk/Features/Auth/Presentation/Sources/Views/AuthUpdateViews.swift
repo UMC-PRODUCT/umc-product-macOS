@@ -118,7 +118,7 @@ private struct AuthUpdateCard: View {
         .padding(.horizontal, UMCSpacing.value16)
         .padding(.top, UMCSpacing.value16)
         .padding(.bottom, UMCSpacing.value20)
-        .background(UMCColor.Semantic.surfaceDefault, in: .rect(cornerRadius: UMCRadius.value12))
+        .background(UMCColor.Custom.backgroundSurface, in: .rect(cornerRadius: UMCRadius.value12))
         .overlay {
             RoundedRectangle(cornerRadius: UMCRadius.value12)
                 .strokeBorder(UMCColor.Semantic.borderNeutralWeak200)

@@ -12,11 +12,33 @@ import Testing
 
 @Suite("Figma design tokens")
 struct DesignTokenTests {
+    private static let darkPalette: [(Color, [CGFloat])] = [
+        (UMCColor.Primitives.white, [CGFloat(0), 0, 0, 1]),
+        (UMCColor.Primitives.black, [CGFloat(1), 1, 1, 1]),
+        (UMCColor.Semantic.backgroundDefault, [CGFloat(0), 0, 0, 1]),
+        (UMCColor.Semantic.textInverse, [CGFloat(0), 0, 0, 1]),
+        (UMCColor.Semantic.textNeutralDefault, [CGFloat(242) / 255, 245 / 255, 245 / 255, 1]),
+        (UMCColor.Semantic.fillPrimaryWeaker50, [CGFloat(8) / 255, 38 / 255, 36 / 255, 1]),
+        (UMCColor.Semantic.iconBrandMedium500, [CGFloat(69) / 255, 189 / 255, 180 / 255, 1]),
+        (UMCColor.Semantic.borderNeutralMedium300, [CGFloat(56) / 255, 59 / 255, 59 / 255, 1]),
+        (UMCColor.Custom.backgroundDefault, [CGFloat(23) / 255, 25 / 255, 25 / 255, 1]),
+        (UMCColor.Custom.backgroundAppShell, [CGFloat(15) / 255, 16 / 255, 16 / 255, 1]),
+        (UMCColor.Custom.backgroundSurface, [CGFloat(29) / 255, 32 / 255, 32 / 255, 1]),
+    ]
+
+    @Test("Dark appearance resolves the Figma Dark palette", arguments: darkPalette)
+    func darkAppearanceResolvesPalette(color: Color, components: [CGFloat]) throws {
+        let value = try resolvedColor(color, appearance: .darkAqua)
+        let actual = [value.redComponent, value.greenComponent,
+            value.blueComponent, value.alphaComponent]
+        for (actual, expected) in zip(actual, components) {
+            #expect(abs(actual - expected) < 0.00001)
+        }
+    }
+
     @Test("Primitive colors load from the design module resource bundle")
     func primitiveColorLoadsFromModuleBundle() throws {
-        let color = try #require(
-            NSColor(UMCColor.Primitives.teal500).usingColorSpace(.sRGB)
-        )
+        let color = try resolvedColor(UMCColor.Primitives.teal500)
 
         #expect(abs(color.redComponent) < 0.00001)
         #expect(abs(color.greenComponent - 0.5411764979362488) < 0.00001)
@@ -26,7 +48,7 @@ struct DesignTokenTests {
 
     @Test("Base white preserves normalized color components")
     func whitePreservesNormalizedComponents() throws {
-        let color = try #require(NSColor(UMCColor.Primitives.white).usingColorSpace(.sRGB))
+        let color = try resolvedColor(UMCColor.Primitives.white)
 
         #expect(color.redComponent == 1)
         #expect(color.greenComponent == 1)
@@ -36,9 +58,7 @@ struct DesignTokenTests {
 
     @Test("Semantic text retains its Figma primitive alias")
     func semanticTextRetainsPrimitiveAlias() throws {
-        let color = try #require(
-            NSColor(UMCColor.Semantic.textNeutralDefault).usingColorSpace(.sRGB)
-        )
+        let color = try resolvedColor(UMCColor.Semantic.textNeutralDefault)
 
         #expect(abs(color.redComponent - 0.05882352963089943) < 0.00001)
         #expect(abs(color.greenComponent - 0.062745101749897) < 0.00001)
@@ -52,11 +72,40 @@ struct DesignTokenTests {
         (UMCColor.Semantic.dimmedStrong, CGFloat(0.85)),
     ])
     func dimmedOverlaysPreserveOpacity(color: Color, opacity: CGFloat) throws {
-        let resolved = try #require(NSColor(color).usingColorSpace(.sRGB))
+        for appearance in [NSAppearance.Name.aqua, .darkAqua] {
+            let resolved = try resolvedColor(color, appearance: appearance)
+            let expected: [CGFloat] = appearance == .aqua ?
+                [0.05882352963089943, 0.062745101749897, 0.062483664602041245] :
+                [242 / 255, 245 / 255, 245 / 255]
+            #expect(abs(resolved.redComponent - expected[0]) < 0.00001)
+            #expect(abs(resolved.greenComponent - expected[1]) < 0.00001)
+            #expect(abs(resolved.blueComponent - expected[2]) < 0.00001)
+            #expect(abs(resolved.alphaComponent - opacity) < 0.00001)
+        }
+    }
 
-        #expect(abs(resolved.redComponent - 0.05882352963089943) < 0.00001)
-        #expect(abs(resolved.greenComponent - 0.062745101749897) < 0.00001)
-        #expect(abs(resolved.blueComponent - 0.062483664602041245) < 0.00001)
-        #expect(abs(resolved.alphaComponent - opacity) < 0.00001)
+    @Test("Library aliases retain their identical Light and Dark values", arguments: [
+        UMCColor.Semantic.fillNeutralDisabled,
+        UMCColor.Semantic.fillNeutralStronger300,
+        UMCColor.Semantic.fillNeutralStrongerHoverPressed,
+    ])
+    func libraryAliasesRetainValues(color: Color) throws {
+        let light = try resolvedColor(color)
+        let dark = try resolvedColor(color, appearance: .darkAqua)
+        #expect(abs(light.redComponent - dark.redComponent) < 0.00001)
+        #expect(abs(light.greenComponent - dark.greenComponent) < 0.00001)
+        #expect(abs(light.blueComponent - dark.blueComponent) < 0.00001)
+        #expect(light.alphaComponent == dark.alphaComponent)
+    }
+
+    private func resolvedColor(
+        _ color: Color, appearance name: NSAppearance.Name = .aqua
+    ) throws -> NSColor {
+        let appearance = try #require(NSAppearance(named: name))
+        var resolved: NSColor?
+        appearance.performAsCurrentDrawingAppearance {
+            resolved = NSColor(color).usingColorSpace(.sRGB)
+        }
+        return try #require(resolved)
     }
 }

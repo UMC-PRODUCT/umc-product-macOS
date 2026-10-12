@@ -7,6 +7,7 @@
 
 #if DEBUG
 import CoreDesignSystem
+import CoreUIComponents
 import SwiftUI
 
 struct AuthDesignPreview: Identifiable {
@@ -372,32 +373,85 @@ struct AuthPreviewSchool: Identifiable {
     ]
 }
 
-#Preview("로그인 방법 선택") {
+#Preview("로그인 방법 선택 · Light") {
     AuthView().frame(width: 1440, height: 908)
+        .toggleStyle(UMCCheckboxStyle())
+        .preferredColorScheme(.light)
 }
 
-#Preview("회원가입") {
+#Preview("회원가입 · Light") {
     AuthView(viewModel: AuthDesignPreview.all.first { $0.id == "648:12201" }!.makeViewModel())
         .frame(width: 1440, height: 908)
+        .toggleStyle(UMCCheckboxStyle())
+        .preferredColorScheme(.light)
 }
 
-#Preview("챌린저 인증") {
+#Preview("챌린저 인증 · Light") {
     AuthView(viewModel: AuthDesignPreview.all.first { $0.id == "661:13228" }!.makeViewModel())
         .frame(width: 1440, height: 908)
+        .toggleStyle(UMCCheckboxStyle())
+        .preferredColorScheme(.light)
 }
 
-#Preview("비밀번호 변경") {
+#Preview("비밀번호 변경 · Light") {
     AuthView(viewModel: AuthDesignPreview.all.first { $0.id == "680:12383" }!.makeViewModel())
         .frame(width: 1440, height: 908)
+        .toggleStyle(UMCCheckboxStyle())
+        .preferredColorScheme(.light)
 }
 
-#Preview("업데이트") {
+#Preview("업데이트 · Light") {
     AuthView(viewModel: AuthDesignPreview.all.first { $0.id == "662:14566" }!.makeViewModel())
         .frame(width: 1440, height: 908)
+        .toggleStyle(UMCCheckboxStyle())
+        .preferredColorScheme(.light)
 }
 
-#Preview("계정 관리") {
+#Preview("계정 관리 · Light") {
     AuthView(viewModel: AuthDesignPreview.all.first { $0.id == "663:15095" }!.makeViewModel())
         .frame(width: 1440, height: 908)
+        .toggleStyle(UMCCheckboxStyle())
+        .preferredColorScheme(.light)
+}
+
+#Preview("로그인 방법 선택 · Dark") {
+    AuthView().frame(width: 1440, height: 908)
+        .toggleStyle(UMCCheckboxStyle())
+        .preferredColorScheme(.dark)
+}
+
+#Preview("회원가입 · Dark") {
+    AuthView(viewModel: AuthDesignPreview.all.first { $0.id == "648:12201" }!.makeViewModel())
+        .frame(width: 1440, height: 908)
+        .toggleStyle(UMCCheckboxStyle())
+        .preferredColorScheme(.dark)
+}
+
+#Preview("챌린저 인증 · Dark") {
+    AuthView(viewModel: AuthDesignPreview.all.first { $0.id == "661:13228" }!.makeViewModel())
+        .frame(width: 1440, height: 908)
+        .toggleStyle(UMCCheckboxStyle())
+        .preferredColorScheme(.dark)
+}
+
+#Preview("비밀번호 변경 · Dark") {
+    AuthView(viewModel: AuthDesignPreview.all.first { $0.id == "680:12383" }!.makeViewModel())
+        .frame(width: 1440, height: 908)
+        .toggleStyle(UMCCheckboxStyle())
+        .preferredColorScheme(.dark)
+}
+
+#Preview("업데이트 · Dark") {
+    AuthView(viewModel: AuthDesignPreview.all.first { $0.id == "662:14566" }!.makeViewModel())
+        .frame(width: 1440, height: 908)
+        .toggleStyle(UMCCheckboxStyle())
+        .preferredColorScheme(.dark)
+}
+
+#Preview("계정 관리 · Dark") {
+    AuthView(viewModel: AuthDesignPreview.all.first { $0.id == "663:15095" }!.makeViewModel())
+        .frame(width: 1440, height: 908)
+        .toggleStyle(UMCCheckboxStyle())
+        .preferredColorScheme(.dark)
 }
 #endif

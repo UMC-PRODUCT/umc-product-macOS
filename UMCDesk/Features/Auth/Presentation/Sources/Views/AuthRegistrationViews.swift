@@ -216,7 +216,7 @@ private struct AuthSchoolPicker: View {
                     Text(form.school.isEmpty ? "학교를 선택해 주세요." : form.school)
                         .umcTypography(.headlineRegular)
                         .foregroundStyle(
-                            form.school.isEmpty ? UMCColor.Primitives.tealGrey400 :
+                            form.school.isEmpty ? UMCColor.Semantic.textPlaceholder :
                                 UMCColor.Semantic.textNeutralDefault
                         )
                     Spacer()
@@ -230,7 +230,7 @@ private struct AuthSchoolPicker: View {
                 .contentShape(.rect)
             }
             .buttonStyle(AuthPressStyle())
-            .background(UMCColor.Semantic.surfaceDefault)
+            .background(UMCColor.Custom.backgroundSurface)
             .overlay {
                 RoundedRectangle(cornerRadius: UMCRadius.value12)
                     .strokeBorder(UMCColor.Semantic.borderNeutralMedium300)
@@ -277,7 +277,7 @@ private struct AuthSchoolOptions: View {
             }
         }
         .frame(height: 240)
-        .background(UMCColor.Semantic.surfaceDefault, in: .rect(cornerRadius: UMCRadius.value12))
+        .background(UMCColor.Custom.backgroundSurface, in: .rect(cornerRadius: UMCRadius.value12))
         .overlay {
             RoundedRectangle(cornerRadius: UMCRadius.value12)
                 .strokeBorder(UMCColor.Semantic.borderNeutralWeak200)
