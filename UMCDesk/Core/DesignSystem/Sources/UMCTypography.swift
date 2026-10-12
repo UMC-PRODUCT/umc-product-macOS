@@ -50,6 +50,10 @@ public enum UMCTypography: String, CaseIterable, Sendable {
 
     /// 폰트만 필요한 곳에 사용한다. 줄높이·자간은 `.umcTypography(_:)`로 함께 적용한다.
     public var font: Font {
+        font(size: size, weight: weight)
+    }
+
+    func font(size: CGFloat, weight: Font.Weight) -> Font {
         _ = PretendardFonts.registered
         let name = weight == .bold ? "Pretendard-Bold" : "Pretendard-Regular"
         return .custom(name, size: size, relativeTo: textStyle)
@@ -102,6 +106,9 @@ public extension View {
 private struct UMCTypographyModifier: ViewModifier {
     let style: UMCTypography
     @ScaledMetric private var scale: CGFloat
+    #if DEBUG
+    @Environment(\.umcTypographyPreview) private var preview
+    #endif
 
     init(style: UMCTypography) {
         self.style = style
@@ -109,10 +116,19 @@ private struct UMCTypographyModifier: ViewModifier {
     }
 
     func body(content: Content) -> some View {
+        #if DEBUG
+        content
+            .font(preview.font(for: style))
+            .tracking((style.tracking * preview.appliedSizeScale
+                + preview.appliedTrackingAdjustment) * scale)
+            .lineHeight(.exact(points: style.lineHeight * preview.appliedSizeScale
+                * preview.appliedLineHeightScale * scale))
+        #else
         content
             .font(style.font)
             .tracking(style.tracking * scale)
             .lineHeight(.exact(points: style.lineHeight * scale))
+        #endif
     }
 }
 
