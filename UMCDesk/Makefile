@@ -33,11 +33,13 @@ SIGNING_IDENTITY ?= Developer ID Application
 DEVELOPMENT_TEAM ?= 8B8B4462NV
 NOTARY_PROFILE ?= UMCDeskNotary
 
-# UMC App처럼 배포 브랜치(release/번호, testFlight/번호)에서 빌드 번호를 읽습니다.
+# 배포 브랜치(prerelease/앱버전/번호, release/번호, testFlight/번호)에서 빌드 번호를 읽습니다.
 # CI_BRANCH 또는 TUIST_BUILD_NUMBER로 직접 지정할 수 있습니다.
 # 개발 브랜치는 매니페스트 기본값 1을 사용합니다.
 BRANCH := $(if $(CI_BRANCH),$(CI_BRANCH),$(shell git rev-parse --abbrev-ref HEAD 2>/dev/null))
-TUIST_BUILD_NUMBER ?= $(shell printf '%s' '$(BRANCH)' | sed -nE 's,^(release|testFlight|testflight/external)/([0-9.]+/)?([0-9]+)$$,\3,p')
+TUIST_BUILD_NUMBER ?= $(shell printf '%s' '$(BRANCH)' | sed -nE \
+    -e 's,^prerelease/[0-9]+\.[0-9]+\.[0-9]+/([1-9][0-9]*)$$,\1,p' \
+    -e 's,^(release|testFlight|testflight/external)/([0-9.]+/)?([0-9]+)$$,\3,p')
 # 새 macOS 앱의 배포 빌드 번호는 1부터 시작합니다.
 MIN_BUILD_NUMBER := 1
 ifneq ($(strip $(TUIST_BUILD_NUMBER)),)

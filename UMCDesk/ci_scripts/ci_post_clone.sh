@@ -10,12 +10,30 @@ if [[ ! "$CI_BUILD_NUMBER" =~ ^[1-9][0-9]*$ ]]; then
 fi
 
 cd "$CI_PRIMARY_REPOSITORY_PATH/UMCDesk"
+source_branch="${CI_BRANCH:-${CI_GIT_REF:-}}"
+source_branch="${source_branch#refs/heads/}"
+build_number="$CI_BUILD_NUMBER"
+if [[ "$source_branch" == prerelease/* ]]; then
+    if [[ ! "$source_branch" =~ ^prerelease/([0-9]+\.[0-9]+\.[0-9]+)/([1-9][0-9]*)$ ]]; then
+        echo 'Expected prerelease/<app-version>/<positive-build-number>.' >&2
+        exit 1
+    fi
+    branch_version="${BASH_REMATCH[1]}"
+    build_number="${BASH_REMATCH[2]}"
+    app_version=$(sed -nE 's/.*"MARKETING_VERSION": "([^"]+)".*/\1/p' \
+        Tuist/ProjectDescriptionHelpers/Settings+Recommended.swift)
+    if [[ "$branch_version" != "$app_version" ]]; then
+        echo "prerelease version $branch_version does not match app version $app_version." >&2
+        exit 1
+    fi
+fi
+
 if ! command -v mise >/dev/null 2>&1; then
     HOMEBREW_NO_AUTO_UPDATE=1 brew install mise
 fi
 
-# Tuist must receive the Cloud number when it generates CURRENT_PROJECT_VERSION.
-export TUIST_BUILD_NUMBER="$CI_BUILD_NUMBER"
+# Keep the app build number aligned with its prerelease branch, not the Cloud run counter.
+export TUIST_BUILD_NUMBER="$build_number"
 make bootstrap
 make install
 make generate

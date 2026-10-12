@@ -46,7 +46,9 @@ Validate changes with package installation, workspace generation, network integr
 
 The command names and grouped help follow UMC App. `pick` and `test-pick` select a scheme with fzf when installed and numbered input otherwise. Use a scheme with a test target, such as `UMCDesk` or `CoreDI`, for tests. `graph` writes `graph.png` and needs Graphviz (`brew install graphviz`).
 
-Deployment branches such as `release/7` and `testFlight/8` export their trailing number as `TUIST_BUILD_NUMBER`. `CI_BRANCH` supports CI checkouts; an explicit `TUIST_BUILD_NUMBER` overrides automatic parsing. The new macOS app accepts build numbers starting at 1.
+Deployment branches such as `prerelease/0.0.1/3`, `release/7`, and `testFlight/8` export their trailing number as `TUIST_BUILD_NUMBER`. `CI_BRANCH` supports CI checkouts; an explicit `TUIST_BUILD_NUMBER` overrides automatic parsing. The new macOS app accepts build numbers starting at 1.
+
+Xcode Cloud runs `ci_scripts/ci_post_clone.sh` to install the pinned Tuist version and generate the workspace. For `prerelease/<app-version>/<build-number>`, the script requires the branch version to match `MARKETING_VERSION` and uses the branch build number for the app. Other workflows use `CI_BUILD_NUMBER`. The Cloud run counter and the app build number can therefore differ.
 
 ## Internal test DMG
 
