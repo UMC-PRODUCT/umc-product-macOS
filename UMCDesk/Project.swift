@@ -67,7 +67,12 @@ let project = Project(
                 "PRODUCT_MODULE_NAME": "UMCDesk",
             ], configurations: [
                 .debug(name: .debug, xcconfig: "Secrets/Shared.xcconfig"),
-                .release(name: .release, xcconfig: "Secrets/Shared.xcconfig"),
+                .release(name: .release, settings: [
+                    // Cloud가 Developer ID로 재서명할 수 있도록 임시 서명(-)을 피한다.
+                    "CODE_SIGN_IDENTITY": "Apple Development",
+                    "ENABLE_HARDENED_RUNTIME": "YES",
+                    "OTHER_CODE_SIGN_FLAGS": "$(inherited) --timestamp",
+                ], xcconfig: "Secrets/Shared.xcconfig"),
             ])
         ),
         .target(
