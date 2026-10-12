@@ -13,6 +13,9 @@ public struct AuthView: View {
 
     @State private var viewModel: AuthViewModel
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    #if DEBUG
+    @State private var typographyPreview = UMCTypographyPreview()
+    #endif
 
     fileprivate enum Constants {
         static let sidebarWidth: CGFloat = 576
@@ -80,11 +83,15 @@ public struct AuthView: View {
             ToolbarItem(placement: .automatic) {
                 AuthPreviewMenu(viewModel: $viewModel)
             }
+            ToolbarItem(placement: .automatic) {
+                AuthTypographyPreview(settings: $typographyPreview)
+            }
             #endif
         }
         .toolbarBackground(UMCColor.Semantic.backgroundDefault, for: .windowToolbar)
         .toolbarBackgroundVisibility(.visible, for: .windowToolbar)
         #if DEBUG
+        .environment(\.umcTypographyPreview, typographyPreview)
         .task(id: viewModel.navigationID) { await viewModel.runPreviewFlow() }
         .onAppear {
             let arguments = ProcessInfo.processInfo.arguments

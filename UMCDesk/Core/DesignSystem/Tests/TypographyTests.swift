@@ -6,7 +6,7 @@
 //
 
 import AppKit
-import CoreDesignSystem
+@testable import CoreDesignSystem
 import CoreText
 import SwiftUI
 import Testing
@@ -53,4 +53,62 @@ struct TypographyTests {
         #expect(difference > 6)
         #expect(difference < 9)
     }
+
+    #if DEBUG
+    @Test("Preview changes the real font size and bundled face without changing tokens")
+    func previewResolvesFont() {
+        var preview = UMCTypographyPreview()
+        preview.sizeScale = 1.25
+        preview.weight = .bold
+        let font = preview.font(for: .largeTitle1Regular)
+            .resolve(in: EnvironmentValues().fontResolutionContext).ctFont
+
+        #expect(CTFontGetSize(font) == 45)
+        #expect(CTFontCopyPostScriptName(font) as String == "Pretendard-Bold")
+        #expect(UMCTypography.largeTitle1Regular.size == 36)
+    }
+
+    @Test("Preview scales line boxes and adds tracking to rendered text")
+    func previewChangesRenderedText() {
+        var preview = UMCTypographyPreview()
+        preview.sizeScale = 1.25
+        preview.lineHeightScale = 1.2
+        let text = "HHHHHHHHHH\nHHHHHHHHHH"
+        let view = NSHostingView(rootView: Text(text)
+            .umcTypography(.largeTitle1Regular)
+            .environment(\.umcTypographyPreview, preview)
+            .fixedSize())
+
+        #expect(abs(view.fittingSize.height - 162) < 1)
+        let originalWidth = view.fittingSize.width
+        preview.trackingAdjustment = 2
+        view.rootView = Text(text)
+            .umcTypography(.largeTitle1Regular)
+            .environment(\.umcTypographyPreview, preview)
+            .fixedSize()
+
+        #expect(view.fittingSize.width > originalWidth + 15)
+    }
+
+    @Test("Disabling preview restores design metrics and preserves adjustments")
+    func previewCanCompareWithOriginal() {
+        var preview = UMCTypographyPreview()
+        preview.sizeScale = 1.5
+        preview.weight = .bold
+        preview.lineHeightScale = 1.4
+        preview.trackingAdjustment = 3
+        preview.isEnabled = false
+        let font = preview.font(for: .largeTitle1Regular)
+            .resolve(in: EnvironmentValues().fontResolutionContext).ctFont
+        let view = NSHostingView(rootView: Text("UMC\n디자인")
+            .umcTypography(.largeTitle1Regular)
+            .environment(\.umcTypographyPreview, preview)
+            .fixedSize())
+
+        #expect(CTFontGetSize(font) == 36)
+        #expect(CTFontCopyPostScriptName(font) as String == "Pretendard-Regular")
+        #expect(abs(view.fittingSize.height - 108) < 1)
+        #expect(preview.sizeScale == 1.5)
+    }
+    #endif
 }
