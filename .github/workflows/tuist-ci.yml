@@ -25,7 +25,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v5
       - name: Test automation scripts
-        run: python3 -m unittest discover -s ../tools/tests -v
+        run: |
+          python3 -m unittest discover -s ../tools/tests -v
+          node --test ../tools/tests/*.test.mjs
       - name: Install pinned Tuist
         uses: jdx/mise-action@v4
         with:

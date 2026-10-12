@@ -1,0 +1,106 @@
+# Created by euijjang97 on 10/13/26.
+name: Publish notarized Cloud DMG
+
+on:
+  push:
+    branches: ['prerelease/**']
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: Existing prerelease/<version>/<build> branch
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: publish-dmg-${{ inputs.branch || github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: macos-26
+    timeout-minutes: 75
+    env:
+      RELEASE_BRANCH: ${{ inputs.branch || github.ref_name }}
+      APPLE_KEY_ID: ${{ secrets.APPLE_KEY_ID }}
+      APPLE_ISSUER_ID: ${{ secrets.APPLE_ISSUER_ID }}
+      APPLE_PRIVATE_KEY: ${{ secrets.APPLE_PRIVATE_KEY }}
+      CERTIFICATE_P12_BASE64: ${{ secrets.DEVELOPER_ID_P12_BASE64 }}
+      CERTIFICATE_PASSWORD: ${{ secrets.DEVELOPER_ID_P12_PASSWORD }}
+      GH_TOKEN: ${{ github.token }}
+      SIGNING_IDENTITY: 'Developer ID Application: euichan Jeong (8B8B4462NV)'
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - name: Validate deployment source
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --input-type=module -e 'import {parseBranch} from "./tools/xcode-cloud/download_notarized.mjs"; parseBranch(process.env.RELEASE_BRANCH)'
+          SOURCE_SHA=$(git rev-parse "refs/remotes/origin/$RELEASE_BRANCH^{commit}")
+          git merge-base --is-ancestor "$SOURCE_SHA" origin/develop
+          echo "SOURCE_SHA=$SOURCE_SHA" >> "$GITHUB_ENV"
+          VERSION_BUILD=${RELEASE_BRANCH#prerelease/}
+          TAG="v${VERSION_BUILD%/*}-build.${VERSION_BUILD##*/}"
+          echo "RELEASE_TAG=$TAG" >> "$GITHUB_ENV"
+          if git ls-remote --exit-code --tags origin "refs/tags/$TAG"; then
+            echo 'Release tag already exists; refusing to overwrite it.' >&2
+            exit 1
+          fi
+          for NAME in APPLE_KEY_ID APPLE_ISSUER_ID APPLE_PRIVATE_KEY CERTIFICATE_P12_BASE64 CERTIFICATE_PASSWORD; do
+            test -n "${!NAME}" || { echo "Missing required secret: $NAME" >&2; exit 1; }
+          done
+      - name: Test Cloud publication selection
+        run: node --test tools/tests/cloud_publication.test.mjs
+      - name: Wait for matching notarized Cloud artifact
+        run: node tools/xcode-cloud/download_notarized.mjs "$RELEASE_BRANCH" "$SOURCE_SHA" "$RUNNER_TEMP/cloud-app"
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Install existing DMG tools
+        run: python -m pip install -r tools/dmg/requirements.txt
+      - name: Prepare temporary signing keychain
+        shell: bash
+        run: |
+          set -euo pipefail
+          KEYCHAIN="$RUNNER_TEMP/umc-publication.keychain-db"
+          PASSWORD=$(openssl rand -hex 32)
+          echo "::add-mask::$PASSWORD"
+          printf '%s' "$CERTIFICATE_P12_BASE64" | base64 --decode > "$RUNNER_TEMP/developer-id.p12"
+          printf '%s' "$APPLE_PRIVATE_KEY" > "$RUNNER_TEMP/AuthKey.p8"
+          chmod 600 "$RUNNER_TEMP/developer-id.p12" "$RUNNER_TEMP/AuthKey.p8"
+          security create-keychain -p "$PASSWORD" "$KEYCHAIN"
+          security set-keychain-settings -lut 7200 "$KEYCHAIN"
+          security unlock-keychain -p "$PASSWORD" "$KEYCHAIN"
+          security import "$RUNNER_TEMP/developer-id.p12" -k "$KEYCHAIN" -P "$CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -k "$PASSWORD" "$KEYCHAIN" >/dev/null
+          security list-keychains -d user -s "$KEYCHAIN" login.keychain-db
+          security default-keychain -d user -s "$KEYCHAIN"
+          xcrun notarytool store-credentials UMCDeskPublication --key "$RUNNER_TEMP/AuthKey.p8" --key-id "$APPLE_KEY_ID" --issuer "$APPLE_ISSUER_ID"
+      - name: Package, sign, notarize and staple DMG
+        run: python tools/dmg/package_cloud_dmg.py "$RUNNER_TEMP/cloud-app" release-output --identity "$SIGNING_IDENTITY" --profile UMCDeskPublication
+      - name: Publish complete release
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh release create "$RELEASE_TAG" release-output/*.dmg release-output/release.json 'release-output/설치 안내.txt' \
+            --draft --prerelease --target "$SOURCE_SHA" --title "UMC Desk $RELEASE_TAG" \
+            --notes-file release-output/release-notes.txt
+          gh release edit "$RELEASE_TAG" --draft=false
+      - name: Retain notarization records
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: notarization-records
+          path: release-output/.notarization
+          include-hidden-files: true
+          if-no-files-found: ignore
+      - name: Remove temporary credentials
+        if: always()
+        shell: bash
+        run: |
+          security delete-keychain "$RUNNER_TEMP/umc-publication.keychain-db" || true
+          rm -f "$RUNNER_TEMP/developer-id.p12" "$RUNNER_TEMP/AuthKey.p8"

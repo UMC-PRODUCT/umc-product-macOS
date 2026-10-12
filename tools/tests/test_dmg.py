@@ -4,16 +4,45 @@ import json
 from pathlib import Path
 import plistlib
 import shutil
+import stat
 import subprocess
 import sys
 import tempfile
 import unittest
+import zipfile
 from unittest.mock import patch
 
 
 ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = ROOT / "tools/dmg/build_dmg.py"
 HAS_TOOLS = sys.platform == "darwin" and importlib.util.find_spec("dmgbuild") is not None
+
+
+class CloudArchiveTests(unittest.TestCase):
+    def test_cloud_archive_rejects_traversal_and_escaping_symlinks(self):
+        specification = importlib.util.spec_from_file_location(
+            "package_cloud_dmg", ROOT / "tools/dmg/package_cloud_dmg.py")
+        packager = importlib.util.module_from_spec(specification)
+        specification.loader.exec_module(packager)
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "app.zip"
+            for name, target, valid in [
+                ("UMCDesk.app/Contents/current", "Versions/A", True),
+                ("../escape", None, False),
+                ("UMCDesk.app/link", "../../escape", False),
+                ("UMCDesk.app/link", "/tmp/escape", False),
+            ]:
+                with self.subTest(name=name, target=target):
+                    with zipfile.ZipFile(path, "w") as archive:
+                        info = zipfile.ZipInfo(name)
+                        if target:
+                            info.external_attr = (stat.S_IFLNK | 0o777) << 16
+                        archive.writestr(info, target or "content")
+                    if valid:
+                        packager.validate_archive(path)
+                    else:
+                        with self.assertRaises(ValueError):
+                            packager.validate_archive(path)
 
 
 @unittest.skipUnless(HAS_TOOLS, "Run make test-dmg on macOS to install packaging tools")

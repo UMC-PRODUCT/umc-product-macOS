@@ -31,7 +31,8 @@ def staple(path: Path):
     subprocess.run(["xcrun", "stapler", "validate", str(path)], check=True)
 
 
-def release(app: Path, output_directory: Path, identity: str, profile: str) -> Path:
+def release(app: Path, output_directory: Path, identity: str, profile: str,
+            *, already_notarized: bool = False) -> Path:
     app = app.resolve()
     output_directory = output_directory.resolve()
     output_directory.mkdir(parents=True, exist_ok=True)
@@ -40,10 +41,13 @@ def release(app: Path, output_directory: Path, identity: str, profile: str) -> P
         temporary = Path(directory)
         archive = temporary / "UMC-Desk-notarization.zip"
         subprocess.run(["codesign", "--verify", "--deep", "--strict", str(app)], check=True)
-        subprocess.run(["ditto", "-c", "-k", "--sequesterRsrc", "--keepParent", str(app),
-                        str(archive)], check=True)
-        notarize(archive, profile, logs)
-        staple(app)
+        if already_notarized:
+            subprocess.run(["xcrun", "stapler", "validate", str(app)], check=True)
+        else:
+            subprocess.run(["ditto", "-c", "-k", "--sequesterRsrc", "--keepParent", str(app),
+                            str(archive)], check=True)
+            notarize(archive, profile, logs)
+            staple(app)
         subprocess.run(["spctl", "--assess", "--type", "execute", str(app)], check=True)
         dmg = build(app, temporary, release=True)
         output = output_directory / dmg.name
