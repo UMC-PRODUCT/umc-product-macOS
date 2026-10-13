@@ -1,28 +1,31 @@
 # PR 리뷰 규칙
 
 > PR 리뷰 핵심 원칙, 작성 형식, 체크리스트 상세 레퍼런스.
-> 핵심 요약은 `Agent.MD` 참고.
+> 핵심 요약은 `AGENTS.md` 참고.
 
 - 작성자: 제옹(euijjang97)
+- 확인일: 2026-10-13
 
 ## 리뷰 핵심 원칙
 
 1. **서버 응답 숫자는 전 레이어 String 통일**
-   - 서버가 모든 정수를 String으로 직렬화 → Response DTO뿐 아니라 **Domain Model, Repository Protocol 파라미터까지 `String`**
+   - 서버 계약에서 String으로 받는 정수·식별자는 Response DTO뿐 아니라 **Domain Model, Repository Protocol 파라미터까지 `String`**
    - Int 변환은 연산이 필요한 시점에만 수행
-   - DTO에서 `decode(Int.self)` 직접 호출 금지 → `decodeIntFlexibleIfPresent` 사용
+   - String 식별자는 `decodeFlexibleString` 계열, Int가 필요한 필드는 `decodeIntFlexible` 계열 공통 헬퍼 사용
    - Request DTO (우리가 보내는 쪽)는 Int 허용
 
 2. **Response DTO는 Synthesized Codable 금지**
    - 반드시 custom `init(from:)` + `encode(to:)` 작성
-   - Int 필드가 없더라도 패턴 통일을 위해 custom init 권장
+   - 숫자 필드 유무와 관계없이 custom decode·encode 작성
 
 3. **모듈 간 접근 제어자**
    - Domain Model의 프로퍼티/이니셜라이저에 `public` 필수
    - 다른 모듈(Data, Presentation)에서 접근 시 컴파일 에러 방지
 
 4. **Mock 데이터는 `#if DEBUG` 가드**
-   - 릴리스 빌드에 포함되지 않도록 감싸기
+   - 정식 Release에 포함되지 않도록 감싸기
+   - 승인된 인증 디자인·타이포·흐름 프리뷰만 `DEBUG || UMC_PRERELEASE` 예외 허용
+   - 프리배포 조건은 `TUIST_PRERELEASE=1`로 프로젝트 생성 시 적용
 
 5. **파일 배치 일관성**
    - Color 확장 등 시각적 매핑의 배치 위치(CoreDesignSystem vs CoreUIComponents)를 팀 내 통일
@@ -52,15 +55,15 @@ PR 리뷰는 **지적 사항이 있는 파일만** 아래 형식으로 작성한
 
 ## 리뷰 시 체크리스트
 
-- [ ] 서버 응답 기반 숫자 필드가 `String`으로 선언되어 있는가
+- [ ] 서버 계약에서 String으로 받는 정수·식별자가 전 계층에서 `String`으로 유지되는가
 - [ ] Response DTO에 custom `init(from:)` 이 정의되어 있는가
 - [ ] Domain Model에 `public init` / `public let`이 있는가
-- [ ] Mock 데이터가 `#if DEBUG`로 감싸져 있는가
+- [ ] 일반 Mock은 `#if DEBUG`, 승인된 인증 프리뷰는 `DEBUG || UMC_PRERELEASE`로 제한됐는가
 - [ ] 동일 파일 수정하는 다른 PR과의 충돌 가능성 확인
 - [ ] 타입 불일치 없는가 (같은 필드가 한 곳은 Int, 다른 곳은 String 등)
 - [ ] Network Router에 인라인 딕셔너리 없이 DTO로 분리되어 있는가
 - [ ] 테스트 코드가 포함된 PR은 테스트 품질도 함께 리뷰
-- [ ] **식별자에 의미 없는 숫자 접미사가 없는가** (`text1`, `value2`, `btn3Color` 등) — `docs/claude/coding-style.md` 참고
+- [ ] **식별자에 의미 없는 숫자 접미사가 없는가** (`text1`, `value2`, `btn3Color` 등) — `docs/Codex/coding-style.md` 참고
 - [ ] 약어가 도메인 표준(`id`, `URL`, `API` 등)을 제외하고 풀어 써졌는가
 - [ ] 같은 종류 데이터를 `xxx1`/`xxx2`로 펼치지 않고 컬렉션/enum으로 묶었는가
 

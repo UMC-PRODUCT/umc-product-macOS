@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="770" viewBox="0 0 1200 770" role="img" aria-labelledby="title desc">
   <title id="title">UMC Desk module architecture</title>
-  <desc id="desc">AppDependencies composes seven Features and Core modules. Each Feature's Presentation and Data depend on Domain. Data depends on CoreNetwork, which depends on Aquila. Six other Core modules provide shared foundations, dependency injection, routing and future UI boundaries. The diagram omits secondary dependencies.</desc>
+  <desc id="desc">The app hosts AuthView and AppDependencies registers networking, token storage and session services. Seven Feature projects have Presentation and Data depending on Domain. Auth has local UI; the remaining service features are scaffolds. Data depends on CoreNetwork, which depends on Aquila. Six other Core modules provide shared foundations, dependency injection, routing boundaries, design tokens and UI components. The diagram omits secondary dependencies.</desc>
   <!-- Created by euijjang97 on 10/6/26. -->
   <defs>
     <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">

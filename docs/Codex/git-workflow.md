@@ -1,11 +1,12 @@
 # Git Workflow
 
 > 브랜치 전략, 커밋/PR 규칙 상세 레퍼런스.
-> 핵심 요약은 `Agent.MD` 참고.
+> 핵심 요약은 `AGENTS.md` 참고.
 
 Git Flow + **연속 브랜치 파생** 지원
 
 - 작성자: 제옹(euijjang97)
+- 확인일: 2026-10-13
 
 ## 브랜치 전략
 
@@ -21,10 +22,18 @@ Git Flow + **연속 브랜치 파생** 지원
 
 ## 배포 브랜치 전략
 
-- **TestFlight 배포**: `testFlight/{번호}` 브랜치 생성 → `testFlight`으로 PR 머지
-- **Release 배포**: `release/{번호}` 브랜치 생성 → `release`로 PR 머지
-- 배포 브랜치는 `develop`에서 분기하여 번호를 순차적으로 매김
-- 직접 푸시 금지, 반드시 PR을 통해 머지
+현재 macOS 프리배포 경로는 `prerelease/{앱버전}/{빌드번호}`다.
+
+- 승인·병합된 `origin/develop`에서 분기하고 직접 푸시한다. prerelease 대상 PR은 만들지 않는다.
+- 버전은 `MARKETING_VERSION`, 빌드 번호는 양의 정수이며 기존 배포 번호와 겹치지 않아야 한다.
+- Xcode Cloud post-clone은 브랜치를 검증하고 `TUIST_PRERELEASE=1`과 브랜치 빌드 번호로 생성한다.
+- `publish-cloud-dmg.yml`은 같은 브랜치·commit의 공증 앱으로 DMG를 만들어 GitHub prerelease를 발행한다.
+- workflow가 있다는 사실과 현재 Cloud 설정·배포 실행 성공은 구분한다.
+
+`testFlight/{번호}`·`release/{번호}`는 기존 배포 브랜치 규약과 Makefile의 번호 추출에 남아 있다.
+해당 방식으로 배포할 경우 develop에서 분기해 testFlight·release 대상 PR로 병합하고 직접
+푸시하지 않는다. 이 저장소의 현재 macOS DMG 자동화 트리거는 prerelease 브랜치다.
+상세는 [빌드 가이드](build-and-modules.md)와 [Cloud 안내](../../tools/xcode-cloud/README.md)를 본다.
 
 ## 커밋 형식
 
@@ -129,7 +138,7 @@ Git Flow + **연속 브랜치 파생** 지원
 ## 이슈 생성 규칙
 
 이슈는 **제목 접두사 + 라벨 + 이슈 Type + 보드(#3)·`우선순위` + 네이티브 `Priority`·`Effort`** 를
-**기본으로 모두 채워서** 생성한다. 날짜(Start/Target date)만 팀 일정이 있을 때 채운다. (`/create-issue` 스킬이 자동화)
+**기본으로 모두 채워서** 생성한다. 날짜(Start/Target date)만 팀 일정이 있을 때 채운다. 실제 이슈 템플릿과 GitHub 필드를 확인한다.
 이슈 제목·본문에도 "Generated with Claude Code" 등 **AI 작성 흔적(attribution) 문구를 절대 넣지 않는다.**
 
 | 템플릿 | 제목 접두사 | 라벨 | 이슈 Type |
@@ -143,16 +152,29 @@ Git Flow + **연속 브랜치 파생** 지원
 
 ### Type / Priority / Projects
 
-- **이슈 Type** (조직 레벨): 현재 `Task` / `Bug` / `Feature` 3종만 존재 → Bug/Feature 외 템플릿은 `Task`로 매핑.
-  `gh issue create`엔 `--type` 플래그가 없으므로(gh 2.83.1) **생성 직후 REST로 설정**한다:
+- **이슈 Type**: Bug/Feature 외 템플릿은 `Task`로 매핑한다. 현재 확인한 gh 2.95.0은
+  `gh issue create --type Task`를 지원한다. 구버전 CLI라면 생성 직후 REST로 보정한다:
   ```bash
-  gh api --method PATCH repos/YOUR-ORG/YOUR-REPO/issues/{번호} -f type=Feature
+  gh api --method PATCH repos/UMC-PRODUCT/umc-product-macOS/issues/{번호} -f type=Task
   ```
 - **보드 #3 + `우선순위`(Projects v2)**: 생성 시 **기본으로 보드 추가 + 우선순위 설정**. 단 `project` 스코프 필요 —
   없을 때만 이 부분을 건너뛰고(Type/라벨은 적용) `gh auth refresh -s project` 후 재적용.
-  - iOS 보드 = 조직 Projects **#3 `iOS 개발 프로젝트 템플릿`**, 우선순위 필드명은 영어가 아닌 한글 **`우선순위`**.
+  - 현재 사용하는 조직 Projects는 **#3 `iOS 개발 프로젝트 템플릿`**이다(2026-10-13 조회).
+    macOS 문서 이슈도 이 보드에 등록하며, 우선순위 필드명은 한글 **`우선순위`**다.
   - `gh project item-list` JSON은 한글 단일선택 필드를 노출하지 않음 → 설정 검증은 GraphQL `fieldValueByName("우선순위")` 사용.
 - **네이티브 이슈 Fields**(베타, 사이드바 "Fields"): 보드와 별개인 레포 이슈 자체 필드 `Priority`/`Effort`/`Start date`/`Target date`.
-  생성 시 **`Priority`·`Effort` 기본 설정**(날짜는 비움). `gh` 명령 없이 GraphQL `setIssueFieldValue` mutation 사용 (`/create-issue` 스킬 4-4·4-5에 id 캐싱).
+  생성 시 **`Priority`·`Effort` 기본 설정**(날짜는 비움). `gh` 명령 없이 GraphQL `setIssueFieldValue` mutation을 사용한다. 필드·옵션 ID는 실행 시 조회한다.
   - 보드 #3의 한글 `우선순위`와 **다른 필드**(영어 `Priority`)지만, **같은 '우선순위 레벨'로 일치**시켜 채운다: 최고→Urgent/🔥, 높음→High/🔨, 보통→Medium/🤔, 낮음→Low/💬.
 - 기본 assignee는 `@me`. 다른 담당자 지정 또는 미지정은 명시적으로 요청된 경우만.
+
+
+### 실제 템플릿과 협업 항목
+
+CLI에서도 `.github/ISSUE_TEMPLATE/{타입}.yml`의 입력 항목을 모두 채운다.
+목적·완료 조건 외에 `서버 지원 상태`와 `서버 확인 근거 및 협업 전달`이 필수다.
+서버 연동이 없는 문서·도구 작업은 해당 없음과 협업 불필요 사유를 적는다. API·설정·디자인 변경이
+필요하면 서버 코드와 Handbook의 최신 담당자를 확인하고 미전달·논의·합의 상태를 구분한다.
+
+템플릿의 초기 라벨과 실제 레포 라벨이 다를 수 있으므로 `gh label list`로 존재 여부를 확인한다.
+라벨을 임의로 새로 만들지 않고 위 대응표의 현재 레포 라벨을 사용한다. 본문은 임시 파일에
+저장해 `--body-file`로 전달하며 이슈·PR 본문은 한글 Markdown 윤문 예외다.

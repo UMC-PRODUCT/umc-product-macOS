@@ -1,126 +1,209 @@
 # UMCDesk development
 
-Requirements: Xcode with the macOS 26 SDK or later, Swift 6, and mise.
-Test DMG packaging also requires Python 3.10 or later.
-Tuist is pinned to 4.208.0, matching UMC App.
+Verified against the repository on 2026-10-13.
 
-Commands work from the repository root or from `UMCDesk/`. The root Makefile delegates to `UMCDesk/Makefile`, preserving variable overrides.
+Requirements: macOS 26 or later, Xcode with the macOS 26 SDK, Swift 6, and mise.
+Tuist is pinned to `4.208.0` in [mise.toml](mise.toml). DMG packaging needs Python;
+use Python 3.11 or later for the complete Cloud packaging toolchain.
+
+Commands work from the repository root or from `UMCDesk/`. The root Makefile
+delegates to `UMCDesk/Makefile` and preserves variable overrides.
+
+## First setup
+
+Install mise if needed, then run:
 
 ```sh
-cd UMCDesk
 make bootstrap
 make install
 make generate
-make edit
+make open
 ```
 
-`make edit` opens the Tuist manifest editor for the app, all seven Core projects, all seven Feature projects, and ProjectDescriptionHelpers. Remote SwiftPM dependencies are configured in `Tuist/Package.swift`, which is also included in the generated app workspace. Changes to generated Xcode projects should instead be made in these manifests.
+`bootstrap` checks for mise, trusts `mise.toml`, and installs the pinned tools. It
+does not install mise itself. `open` generates the workspace only if it is absent;
+use `generate` after changing a manifest or a Tuist environment variable.
+
+Copy `Secrets/Secrets.xcconfig.template` to the ignored `Secrets/Secrets.xcconfig`
+before connecting to a real API. The committed `.invalid` URL supports generation
+and startup without secrets, but is not a live server. See the
+[configuration guide](Secrets/README.md).
+
+## Current implementation
+
+The app hosts `AuthView` with the shared `UMCCheckboxStyle`. Authentication,
+registration, password reset, challenger verification, account confirmation,
+error, maintenance and update screens use local state. Auth Domain and Data are
+scaffolds; these screens do not perform authentication or update network calls.
+The other six Feature projects are also scaffolds.
+
+All seven Feature projects contain Domain, Data and Presentation static
+frameworks. Each of the seven Core projects contains one static framework.
+`AppDependencies` registers networking, Keychain token storage, the user session
+and session cleanup. `CoreDesignSystem` provides Light/Dark colors, typography,
+spacing and radii; `CoreUIComponents` provides the checkbox style.
+
+[Aquila](https://github.com/JEONG-J/Aquila) supplies HTTP transport, shared token
+refresh, Moya mapping and logging. The revision is pinned in `Tuist/Package.swift`.
+CoreNetwork retains UMC response decoding, localized errors and macOS session
+wiring. There is no repository-local network package under `Packages/`.
+
+## Development commands
 
 ```sh
 make help
 make doctor
 make build
-make dmg-test TUIST_BUILD_NUMBER=1
-make test-dmg
 make pick
-make build CONFIGURATION=Release
 make test
 make test-pick
+make test SCHEME=AuthPresentation
 make test SCHEME=CoreDI
 make test-network
+make build CONFIGURATION=Release CODE_SIGNING_ALLOWED=NO
 make graph
-make open
+make edit
+make edit-project
 make generate-open
 make cache-warm
 ```
 
-Feature projects create Domain, Data and Presentation static frameworks. Core projects create a single static framework. All destinations are macOS 26. The app owns dependency registration. No navigation or service screens are implemented.
+`make edit` opens the Tuist manifest editor for the app, seven Core projects,
+seven Feature projects and ProjectDescriptionHelpers. Remote dependencies live
+in `Tuist/Package.swift`, which is also included in the generated workspace.
+`edit-project` creates a permanent edit project. Change manifests rather than
+generated Xcode project files.
 
-Configure the API environment in `Secrets/Secrets.xcconfig` using the template before connecting to the server. A clean checkout can generate and build with the committed `.invalid` placeholder. The app entry hosts `AuthView`; packaging does not configure a working server connection.
+`pick` and `test-pick` use fzf when installed and numbered input otherwise. Select
+a scheme with a test target for `test-pick`. `graph` writes `graph.png` and needs
+Graphviz (`brew install graphviz`).
 
-[Aquila](https://github.com/JEONG-J/Aquila) provides HTTP transport, shared token refresh, Moya request mapping and Debug logging. `Tuist/Package.swift` pins the same commit used by UMC App. CoreNetwork retains UMC response decoding, localized error mapping, the macOS Keychain service and app-owned session cleanup. There is no local network package under `Packages/`.
+The default `UMCDesk` test scheme covers app, CoreDI, CoreDesignSystem and
+CoreNetwork tests. Run `make test SCHEME=AuthPresentation` separately for Auth form
+and appearance tests. `test-network` selects CoreNetwork against the pinned
+Aquila dependency. `CODE_SIGNING_ALLOWED=NO` supports unsigned local build/test
+checks; DMG commands intentionally sign the packaged app.
 
-`make edit-project` creates a permanent, non-blocking Tuist edit project for automated inspection. Generated project files and build artifacts are ignored.
+| Override | Default |
+| --- | --- |
+| `SCHEME` | `UMCDesk` |
+| `DESTINATION` | `platform=macOS` |
+| `CONFIGURATION` | `Debug` |
+| `CODE_SIGNING_ALLOWED` | `YES` |
+| `DERIVED_DATA` | `.local-derived-data` |
+| `TUIST_BUILD_NUMBER` | Branch-derived value, otherwise manifest default `1` |
+| `TUIST_PRERELEASE` | `1` for a valid prerelease branch, otherwise `0` |
 
-Validate changes with package installation, workspace generation, network integration tests, app/DI tests and Debug/Release builds. Use `CODE_SIGNING_ALLOWED=NO` for unsigned local checks. `make test` includes CoreNetwork tests in the app workspace scheme.
+## Debug, Release and prerelease controls
 
-The command names and grouped help follow UMC App. `pick` and `test-pick` select a scheme with fzf when installed and numbered input otherwise. Use a scheme with a test target, such as `UMCDesk` or `CoreDI`, for tests. `graph` writes `graph.png` and needs Graphviz (`brew install graphviz`).
+Debug includes Auth screen/flow, Light/Dark and typography preview controls.
+An ordinary Release excludes those controls and the simulated delayed flow.
+`TUIST_PRERELEASE=1` adds `UMC_PRERELEASE` at project generation, allowing the same
+controls in a prerelease Release build. This flag is separate from the Xcode
+configuration; changing it requires generation:
 
-Deployment branches such as `prerelease/0.0.1/3`, `release/7`, and `testFlight/8` export their trailing number as `TUIST_BUILD_NUMBER`. `CI_BRANCH` supports CI checkouts; an explicit `TUIST_BUILD_NUMBER` overrides automatic parsing. The new macOS app accepts build numbers starting at 1.
+```sh
+make generate TUIST_PRERELEASE=0
+make build CONFIGURATION=Release CODE_SIGNING_ALLOWED=NO
+make generate TUIST_PRERELEASE=1
+make build CONFIGURATION=Release CODE_SIGNING_ALLOWED=NO
+```
 
-Xcode Cloud runs `ci_scripts/ci_post_clone.sh` to install the pinned Tuist version and generate the workspace. For `prerelease/<app-version>/<build-number>`, the script requires the branch version to match `MARKETING_VERSION` and uses the branch build number for the app. Other workflows use `CI_BUILD_NUMBER`. The Cloud run counter and the app build number can therefore differ.
+The preview email code is `123456`. Preview success screens are UI simulation,
+not evidence of a server request or an installed update. The preview toolbar also
+supports choosing error scenarios and individual Figma screens.
+
+## Version and Xcode Cloud preparation
+
+The current marketing version is `0.0.1`. Use a new positive integer build number
+for each distribution and check existing tags before choosing one. Examples below
+illustrate syntax and do not reserve or identify the latest published build.
+
+Local Makefile generation reads the trailing build number from branches such as
+`prerelease/0.0.1/12`, `release/12`, and `testFlight/12`. `CI_BRANCH` supplies the
+branch in CI; an explicit `TUIST_BUILD_NUMBER` overrides local parsing. The
+Makefile rejects a nonempty build number below `1`.
+
+Xcode Cloud runs [ci_post_clone.sh](ci_scripts/ci_post_clone.sh) to install mise
+when missing, install Tuist/dependencies and generate the workspace. A
+`prerelease/<version>/<build>` branch must match `MARKETING_VERSION`; its trailing
+number becomes `CFBundleVersion` and enables prerelease controls. Other Cloud
+branches use `CI_BUILD_NUMBER` and disable prerelease controls. The Cloud run
+counter and the app build number can therefore differ.
 
 ## Internal test DMG
 
-Developers run `make dmg-test TUIST_BUILD_NUMBER=1` after the initial setup. It builds
-an ad-hoc signed Debug app for Apple Silicon and Intel, then packages `UMC Desk.app`
-with the supplied UMC icon. The Finder window shows the app on the left, an arrow in the
-middle, and an Applications shortcut on the right. Window metadata is written by
-[dmgbuild](https://dmgbuild.readthedocs.io/en/latest/settings.html) without Finder automation.
-Pinned packaging tools are installed into `.local-dmg-tools/` on first use; that step needs
-network access. Python dependencies and generated files are kept out of Git.
+```sh
+make dmg-test TUIST_BUILD_NUMBER=12
+make test-dmg
+```
+
+`dmg-test` generates the workspace and builds an ad-hoc signed universal Debug
+app for Apple Silicon and Intel. Pinned packaging dependencies are installed
+into `.local-dmg-tools/` on first use, which needs network access. The Finder
+layout uses the app, an arrow and an Applications shortcut; dmgbuild writes the
+window metadata without Finder automation.
 
 ![UMC Desk installer preview](../tools/dmg/preview.png)
 
-The output is `UMCDesk/dist/UMC-Desk-0.0.1-build1-test.dmg` from the
-repository root, or `dist/` when running inside `UMCDesk/`. Share the DMG and the generated
-Korean `설치 안내.txt` with teammates. They need macOS 26 or later and do not need Terminal,
-Xcode, Python, or mise. Install by dragging UMC Desk onto Applications, then opening it
-from Applications. Quit an older test app before replacing it with a new build.
+The example produces `UMCDesk/dist/UMC-Desk-0.0.1-build12-test.dmg` and
+`설치 안내.txt`. Recipients need macOS 26 or later. They drag UMC Desk onto
+Applications and quit any older copy before replacing it. They do not need the
+developer toolchain.
 
-Keep the app version (`MARKETING_VERSION`) at `0.0.1` during internal testing and increase
-the build number (`CFBundleVersion`) for each shared build. It does not increase automatically:
+Test packages are not notarized. Gatekeeper may require System Settings → Privacy
+& Security → Open Anyway for the first launch. Ad-hoc signing does not identify
+the developer. This command creates local files; it does not publish a release.
+
+## Local notarized DMG
+
+Prepare a valid Developer ID Application identity and a notarytool Keychain
+profile, then run:
 
 ```sh
-make dmg-test TUIST_BUILD_NUMBER=2  # 0.0.1 (2)
-make dmg-test TUIST_BUILD_NUMBER=3  # 0.0.1 (3)
-make test-dmg                     # Verify packaging, Finder metadata, and installed signature
+make dmg-release TUIST_BUILD_NUMBER=12 NOTARY_PROFILE=UMCDeskNotary
 ```
 
-Test packages are not notarized. If Gatekeeper blocks the first launch, follow
-[Apple's Open Anyway instructions](https://support.apple.com/en-us/102445) in
-System Settings → Privacy & Security. Ad-hoc signing does not verify the developer's
-identity. This command creates local files and does not create Git tags or GitHub Releases.
-Check the local `BASE_URL` before sharing builds that need server access.
+The command generates a workspace, builds a universal Release app with Hardened
+Runtime and a timestamp, notarizes/staples the app, then signs, notarizes/staples
+and assesses the DMG. The output is `UMCDesk/dist/UMC-Desk-0.0.1-build12.dmg` plus
+the installation guide. It refuses to replace an existing release DMG with the
+same filename. Submission IDs and results remain in `dist/.notarization/` for
+recovery with `xcrun notarytool info`.
 
-## Notarized GitHub pre-releases
+Defaults are `SIGNING_IDENTITY=Developer ID Application`,
+`DEVELOPMENT_TEAM=8B8B4462NV` and `NOTARY_PROFILE=UMCDeskNotary`. Override them for
+your prepared signing environment. The command does not create a tag or GitHub
+Release. A prerelease branch enables preview controls during generation; use an
+explicit `TUIST_PRERELEASE` when preparing a different local distribution.
 
-Keep the app version at `0.0.1` and choose a higher integer build number for each upload.
-The first notarized distribution follows local test build 1 and uses build 2.
-Use a valid Developer ID Application identity and an existing `notarytool` Keychain profile:
+## Automated Cloud prerelease
 
-```sh
-make dmg-release TUIST_BUILD_NUMBER=2 NOTARY_PROFILE=your-keychain-profile
-```
+Push `prerelease/<version>/<build>` from an approved commit already merged into
+`origin/develop`. The configured Xcode Cloud Pre-release workflow builds and
+notarizes the app. The GitHub Actions publication workflow waits for the matching
+branch, source commit and Cloud workflow, then packages the notarized app into a
+signed and notarized DMG. It uploads a draft with the DMG, `release.json` and
+installation guide, then publishes a GitHub Pre-release.
 
-The command builds a universal Release app with Hardened Runtime and a secure timestamp,
-notarizes and staples the app, then signs, notarizes, and staples the DMG. It validates both
-tickets and Gatekeeper assessments before placing `UMC-Desk-0.0.1-build2.dmg` in `dist/`.
-An existing DMG with the same name is preserved; choose a new build number. No certificate
-or credential is exported. Submission IDs and results are saved under `dist/.notarization/`;
-if interrupted, inspect those IDs with `xcrun notarytool info` before submitting again.
+The workflow requires external Cloud configuration and repository secrets; their
+presence and deployment success cannot be established from the source files.
+See [Cloud publication operations](../tools/xcode-cloud/README.md) for setup and
+recovery. This path has no separate prerelease PR or webhook receiver in this
+repository. Check API configuration separately before any server-connected
+distribution; notarization does not validate app functionality.
 
-Publish the verified file from its committed source, using a new tag for every build:
-
-```sh
-gh release create v0.0.1-build.2 dist/UMC-Desk-0.0.1-build2.dmg "dist/설치 안내.txt" \
-    --target "$(git rev-parse HEAD)" --prerelease \
-    --title "UMC Desk 0.0.1 (2)" --notes-file /absolute/path/to/release-notes.txt
-```
-
-For the next distribution, change the build number and tag to `3` and `v0.0.1-build.3`.
-Keep earlier release assets and tags. Teammates download the DMG from GitHub Pre-release,
-drag the app onto Applications, and accept the normal first-open confirmation. The notarized
-distribution does not require the Open Anyway procedure used for ad-hoc test builds.
-Check `BASE_URL` before building when server access is needed; notarization does not validate
-API configuration or app functionality.
+## Cleanup
 
 ```sh
-make clean      # Remove generated projects and resolved Tuist artifacts
-make clean-dd   # Remove local Xcode build data
-make reset      # Run both cleanup commands
-make install    # Restore dependencies after clean/reset
+make clean
+make clean-dd
+make reset
+make install
 make generate
 ```
 
-Cleanup operates inside `UMCDesk/` and preserves module sources and secret configuration. `test-network` runs the CoreNetwork tests against the pinned Aquila dependency.
+`clean` removes generated projects and resolved Tuist build data. `clean-dd`
+removes local DerivedData and `Build/`; `reset` runs both. Cleanup stays inside
+`UMCDesk/` and preserves module sources and secret configuration. Generated
+projects, packaging tools, DMGs and notarization records stay out of Git.

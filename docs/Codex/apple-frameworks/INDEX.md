@@ -1,23 +1,24 @@
 # Apple 프레임워크 가이드 인덱스
 
-> Apple Xcode 27에 내장된 AI 어시스턴트용 프레임워크 문서 **전량**입니다.
+> Apple Xcode 27용 프레임워크 문서와 스킬팩을 아래 커밋에서 가져온 **고정 스냅샷**입니다.
+> 2026-10-13에는 저장소 내 파일 수·프로젝트 관련 설명을 확인했으며 업스트림 최신본을 재동기화하지 않았습니다.
 > 출처: [artemnovichkov/xcode-27-system-prompts](https://github.com/artemnovichkov/xcode-27-system-prompts)
 > (이전 출처였던 `xcode-26-system-prompts` 는 더 이상 갱신되지 않는다.)
 >
 > **동기화 기준 커밋**: [`75f3b2ae`](https://github.com/artemnovichkov/xcode-27-system-prompts/commit/75f3b2ae68d9eab87c0b1fad3dce75931e0bddcf) (2026-08-25)
-> — 여기 있는 파일은 전부 이 커밋에서 무손실 복사한 것이다.
+> — 원문 가이드·스킬팩은 이 커밋의 내용으로 보관하며, 이 인덱스의 프로젝트 안내는 별도로 관리한다.
 > 다음 갱신 때 이 SHA를 기준으로 `git diff` 하면 무엇이 바뀌었는지 바로 나온다 (§5).
 >
 > **사용법**: Apple 프레임워크 API를 다룰 때 아래 해당 문서를 `Read` 로 열어
 > 정확한 API 시그니처/패턴/가용성을 확인한 뒤 코드를 작성한다.
 > 이 문서들은 컨텍스트 절약을 위해 **자동 로드하지 않고 필요 시에만** 읽는다.
 >
-> ⚠️ **가용성 주의**: 이 프로젝트의 Deployment Target은 **iOS 26.4** 다.
+> ⚠️ **가용성 주의**: 이 프로젝트의 Deployment Target은 **macOS 26.0** 다.
 > `*-whats-new-27` 계열이 설명하는 SDK 27 API는 그대로 쓰면 컴파일되지 않으므로
 > `@available` / `if #available` 게이팅이 필요하다. 각 문서의 "Availability" 표를 반드시 확인할 것.
 >
 > ⚠️ **우선순위**: 여기 문서는 전부 Apple 원문이며 **모델의 학습 지식보다 우선**한다.
-> 다만 이 저장소의 **절대 규칙(`Agent.MD`)이 더 우선**한다 — 충돌 시 프로젝트 규약을 따른다.
+> 다만 이 저장소의 **절대 규칙(`AGENTS.md`)이 더 우선**한다 — 충돌 시 프로젝트 규약을 따른다.
 
 ## 구성
 
@@ -25,35 +26,39 @@
 |------|------|
 | `*.md` (이 폴더 바로 아래) | 프레임워크 개별 가이드 20종 — 업스트림 `AdditionalDocumentation/` |
 | `skills/<이름>/SKILL.md` | Apple이 작성한 스킬팩 진입 문서 9종 — 언제 어떤 reference를 읽어야 하는지 안내 |
-| `skills/<이름>/references/*.md` | 스킬팩 본문 66종 — 실제 API 설명·코드 예시 |
+| `skills/<이름>/references/*.md` | 스킬팩 본문 79종 — 실제 API 설명·코드 예시 |
 | `skills/audit-xcode-security-settings/scripts/` | 스킬팩에 딸린 보조 스크립트 |
 
 ---
 
 ## 1. 이 프로젝트에 특히 관련 높은 문서
 
-이 템플릿 기반 앱은 SwiftUI + Liquid Glass + Widget + (Apple Intelligence) 기반이라 아래가 우선순위가 높다.
+현재 앱은 macOS SwiftUI 인증 화면과 공통 기반을 구현한 단계다. SwiftUI·Observation·동시성·
+macOS 툴바·AppKit 자료를 우선 읽는다. Widget·App Intents·SwiftData·FoundationModels·
+visionOS는 현재 타겟이나 기능에 포함되지 않으며 후속 작업의 참고 자료다.
 
 | 문서 | 다룰 때 |
 |------|---------|
 | `SwiftUI-Implementing-Liquid-Glass-Design.md` | `glassEffect`, `GlassEffectContainer`, Glass variant — **디자인 시스템 핵심** |
 | `skills/swiftui-specialist/` | **버전 무관 SwiftUI 베스트 프랙티스** — `@Observable` 무효화 범위, `ForEach`/`List` identity, 뷰 구조 분리, Environment 성능 함정. 코드 리뷰·성능 튜닝 시 1순위 |
-| `WidgetKit-Implementing-Liquid-Glass-Design.md` | `AppNameWidget` 위젯에 Liquid Glass 적용 |
-| `SwiftUI-New-Toolbar-Features.md` | 툴바 신규 API (`ToolBar/` 헬퍼 작업 시) |
-| `SwiftUI-Styled-Text-Editing.md` | `ArticleTextField` 등 리치 텍스트 입력/편집 |
+| `AppKit-Implementing-Liquid-Glass-Design.md` | macOS 창·툴바·AppKit 연동 |
+| `WidgetKit-Implementing-Liquid-Glass-Design.md` | Widget을 추가할 때 참고, 현재 타겟 없음 |
+| `SwiftUI-New-Toolbar-Features.md` | 툴바 신규 API (macOS 툴바를 작성할 때) |
+| `SwiftUI-Styled-Text-Editing.md` | 리치 텍스트 입력/편집을 도입할 때 |
 | `Foundation-AttributedString-Updates.md` | AttributedString 신규 기능 (마크다운/스타일 텍스트) |
 | `Swift-Concurrency-Updates.md` | async/await, actor, `@MainActor` 동시성 패턴 |
 | `SwiftData-Class-Inheritance.md` | SwiftData 모델 클래스 상속 |
 | `FoundationModels-Using-on-device-LLM-in-your-app.md` | 온디바이스 LLM (Apple Intelligence 기능) |
 | `skills/swiftui-whats-new-27/` | SDK 27 SwiftUI 신규 API·deprecation (⚠️ 가용성 게이팅 필요) |
-| `skills/app-intents-specialist/` | App Intents(Siri/단축어) 작성 규약 — The Ping·딥링크 확장 시 |
+| `skills/app-intents-specialist/` | App Intents(Siri/단축어) 작성 규약 — 기능을 도입할 때 |
 | `Widgets-for-visionOS.md` | visionOS 위젯 |
 
 ---
 
 ## 2. 프레임워크 개별 가이드 (20종)
 
-업스트림 `AdditionalDocumentation/` 그대로. Xcode 26 시절과 내용이 동일하다(바이트 단위 일치 확인).
+업스트림 `AdditionalDocumentation/`에서 보관한 자료다. API 사용 시 현재 Xcode SDK의
+시그니처와 macOS 지원 여부를 함께 확인한다. 여기서는 최신 업스트림과의 일치를 보장하지 않는다.
 
 | 문서 | 프레임워크 / 다룰 때 |
 |------|---------------------|
@@ -80,7 +85,7 @@
 
 ---
 
-## 3. Apple 스킬팩 (9종 · reference 66종)
+## 3. Apple 스킬팩 (9종 · reference 79종)
 
 각 스킬은 `SKILL.md`(언제 무엇을 읽을지 안내) + `references/*.md`(본문)로 구성된다.
 **먼저 `SKILL.md` 를 읽고, 필요한 reference만 골라 읽는다.**
@@ -103,7 +108,8 @@ Apple이 직접 쓴 SwiftUI 정석. 성능·구조·데이터 흐름 판단이 �
 
 ### 3-2. `skills/swiftui-whats-new-27/` — SDK 27 SwiftUI 신규/변경
 
-⚠️ 전부 iOS 27 API. iOS 26.4 타깃에서는 가용성 게이팅 필수.
+⚠️ SDK 27의 신규·변경 자료다. macOS 26.0 타깃에서는 각 API의 플랫폼·가용성을
+확인한다. iOS 전용 API는 macOS에서 사용할 수 없으며, 더 높은 macOS 버전 API는 게이팅한다.
 
 | reference | 내용 |
 |-----------|------|
@@ -111,7 +117,7 @@ Apple이 직접 쓴 SwiftUI 정석. 성능·구조·데이터 흐름 판단이 �
 | `content-builder.md` | 결과 빌더 `@ContentBuilder` 통합 — `overlay`/`background` `ShapeStyle` 오버로드 모호성, Swift Charts 타입 체크 성능 회귀 |
 | `reorderable.md` | 임의 컨테이너 드래그 재정렬 (`.reorderable()` + `.reorderContainer(for:)`, `ReorderDifference`) |
 | `toolbar.md` | 툴바 오버플로 제어 — `visibilityPriority`, `ToolbarOverflowMenu`, `.topBarPinnedTrailing`, `toolbarMinimizeBehavior` |
-| `swipe-actions.md` | `List` 밖(ScrollView·LazyVStack·LazyVGrid)에서의 스와이프 액션 — `swipeActionsContainer()` |
+| `swipe-actions.md` | `List` 밖(ScrollView·LazyVStack·LazyVGrid)에서 쓰는 스와이프 액션 — `swipeActionsContainer()` |
 | `item-binding.md` | `confirmationDialog`/`alert` 의 `item: Binding<T?>` 오버로드 (`sheet(item:)` 형태) |
 | `async-image.md` | `AsyncImage` HTTP 캐싱 기본 적용, `AsyncImage(request:)`, `asyncImageURLSession(_:)` |
 | `document-based-apps.md` | 신규 `ReadableDocument`/`WritableDocument` 프로토콜 — 파일 URL 직접 접근·백그라운드 읽기/쓰기 (`FileDocument` 대체) |
@@ -157,7 +163,7 @@ Apple이 직접 쓴 SwiftUI 정석. 성능·구조·데이터 흐름 판단이 �
 
 ### 3-5. `skills/uikit-app-modernization/` — UIKit 멀티윈도우 현대화
 
-레거시 전역 상태 API를 컨텍스트 기반 API로 교체. 이 프로젝트는 SwiftUI 중심이라 우선순위는 낮다.
+레거시 전역 상태 API를 컨텍스트 기반 API로 교체. 이 프로젝트는 macOS SwiftUI 앱이므로 UIKit 자료는 현재 구현에 직접 적용하지 않는다.
 
 | reference | 내용 |
 |-----------|------|
@@ -234,7 +240,7 @@ C 코드용 경계 안전성 언어 확장. 이 프로젝트는 순수 Swift라 
 ```bash
 PINNED=75f3b2ae68d9eab87c0b1fad3dce75931e0bddcf   # 현재 반영된 커밋 (문서 상단과 동일하게 유지할 것)
 SRC=/tmp/x27
-DEST=docs/claude/apple-frameworks
+DEST=docs/Codex/apple-frameworks
 
 git clone https://github.com/artemnovichkov/xcode-27-system-prompts.git "$SRC"   # --depth 1 금지: diff 를 위해 전체 히스토리 필요
 

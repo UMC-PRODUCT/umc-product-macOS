@@ -133,11 +133,6 @@ iOSInjectionProject/
 .mcp.json
 TEMPLATE_SETUP.md
 
-# Local planning and specifications
-/docs/plans/
-/docs/server/
-/docs/specs/
-
 # Tuist-generated projects and local build artifacts
 *.xcodeproj/
 Derived/
