@@ -16,7 +16,7 @@ struct AuthAppearanceTests {
         arguments: [ColorScheme.light, .dark])
     func brandPanelPreservesLightOverride(scheme: ColorScheme) throws {
         let viewModel = AuthViewModel()
-        #if DEBUG
+        #if DEBUG || UMC_PRERELEASE
         viewModel.playsPreviewFlow = false
         #endif
         let renderer = ImageRenderer(content: AuthView(viewModel: viewModel)

@@ -5,7 +5,7 @@
 //  Created by euijjang97 on 10/10/26.
 //
 
-#if DEBUG
+#if DEBUG || UMC_PRERELEASE
 import CoreDesignSystem
 import CoreUIComponents
 import SwiftUI
@@ -373,6 +373,9 @@ struct AuthPreviewSchool: Identifiable {
     ]
 }
 
+#endif
+
+#if DEBUG
 #Preview("로그인 방법 선택 · Light") {
     AuthView().frame(width: 1440, height: 908)
         .toggleStyle(UMCCheckboxStyle())

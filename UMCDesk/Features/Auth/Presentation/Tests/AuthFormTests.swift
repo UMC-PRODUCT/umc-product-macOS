@@ -53,7 +53,7 @@ struct AuthFormTests {
         }
     }
 
-    #if DEBUG
+    #if DEBUG || UMC_PRERELEASE
     @Test("Social login preview continues through session and member checks")
     func loginPreviewCompletesWaitingScreens() {
         let viewModel = AuthViewModel()

@@ -5,7 +5,7 @@
 //  Created by euijjang97 on 10/10/26.
 //
 
-#if DEBUG
+#if DEBUG || UMC_PRERELEASE
 import SwiftUI
 
 enum AuthPreviewScenario: String, CaseIterable, Identifiable {
