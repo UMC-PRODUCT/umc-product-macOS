@@ -186,16 +186,12 @@ struct AuthHeading: View {
     let title: String
     let subtitle: String
     var isLeading = false
-    var icon: String?
+    var icon: AuthStatusIcon?
 
     var body: some View {
         VStack(alignment: isLeading ? .leading : .center, spacing: UMCSpacing.value24) {
             if let icon {
-                Image(icon, bundle: .module)
-                    .resizable()
-                    .scaledToFit()
-                    .frame(width: 80, height: 80)
-                    .accessibilityHidden(true)
+                AuthStatusIconView(icon: icon)
             }
             VStack(alignment: isLeading ? .leading : .center, spacing: UMCSpacing.value12) {
                 Text(title)
