@@ -88,7 +88,7 @@ enum AuthScreen: String, CaseIterable, Identifiable {
                 quote: "“자신을 믿으세요.\n모든 마음은 그 단단한\n현의 울림에 응답합니다.”",
                 author: "랠프 월도 에머슨",
                 category: "ACCOUNT / 로그인",
-                icon: "offline"
+                icon: .offline
             )
         case .loginFailure:
             AuthScreenCopy(
@@ -97,7 +97,7 @@ enum AuthScreen: String, CaseIterable, Identifiable {
                 quote: "“우리를 흔드는 것은\n사건 자체가 아니라,\n그 사건을 바라보는\n우리의 생각입니다.”",
                 author: "에픽테토스",
                 category: "ACCOUNT / 로그인",
-                icon: "login-failure"
+                icon: .loginFailure
             )
         case .sessionChecking:
             AuthScreenCopy(
@@ -138,7 +138,7 @@ enum AuthScreen: String, CaseIterable, Identifiable {
                 quote: "“자신에게 들리는 음악에\n맞춰 걸어가세요.”",
                 author: "헨리 데이비드 소로",
                 category: "ACCOUNT / 로그인",
-                icon: "member-failure"
+                icon: .memberFailure
             )
         case .sessionExpired:
             AuthScreenCopy(
@@ -147,7 +147,7 @@ enum AuthScreen: String, CaseIterable, Identifiable {
                 quote: "“배우고 꾸준히 익히면\n즐겁지 않나요?”",
                 author: "공자",
                 category: "ACCOUNT / 로그인",
-                icon: "session-expired"
+                icon: .sessionExpired
             )
         case .signup:
             AuthScreenCopy(
@@ -164,7 +164,7 @@ enum AuthScreen: String, CaseIterable, Identifiable {
                 quote: "“자신의 길을 고수하세요.\n다른 사람을\n흉내 내지 마세요.”",
                 author: "랠프 월도 에머슨",
                 category: "ACCOUNT / 회원가입",
-                icon: "signup-complete"
+                icon: .signupComplete
             )
         case .signupLoginFailure:
             AuthScreenCopy(
@@ -173,7 +173,7 @@ enum AuthScreen: String, CaseIterable, Identifiable {
                 quote: "“삶이 넉넉하지 않더라도\n자신의 삶을 사랑하세요.”",
                 author: "헨리 데이비드 소로",
                 category: "ACCOUNT / 회원가입",
-                icon: "signup-complete"
+                icon: .signupComplete
             )
         case .challengerIntro:
             AuthScreenCopy(
@@ -214,7 +214,7 @@ enum AuthScreen: String, CaseIterable, Identifiable {
                 quote: "“단순하게,\n더 단순하게 살아가세요.”",
                 author: "헨리 데이비드 소로",
                 category: "ACCOUNT / 챌린저 인증",
-                icon: "challenger-pending"
+                icon: .challengerPending
             )
         case .challengerComplete:
             AuthScreenCopy(
@@ -239,7 +239,7 @@ enum AuthScreen: String, CaseIterable, Identifiable {
                 quote: "“남을 아는 사람은 지혜롭고,\n자신을 아는 사람은\n밝습니다.”",
                 author: "노자",
                 category: "ACCOUNT / 비밀번호 찾기",
-                icon: "password-complete"
+                icon: .passwordComplete
             )
         case .maintenance:
             AuthScreenCopy(
@@ -248,7 +248,7 @@ enum AuthScreen: String, CaseIterable, Identifiable {
                 quote: "“자신이 하는 일을 좋아하세요.\n그러면 최선을 다하게 됩니다.”",
                 author: "캐서린 존슨",
                 category: "SYSTEM / 점검",
-                icon: "maintenance"
+                icon: .maintenance
             )
         case .updateAvailable:
             AuthScreenCopy(
@@ -257,7 +257,7 @@ enum AuthScreen: String, CaseIterable, Identifiable {
                 quote: "“혼자서는 할 수 있는 일이\n적지만, 함께라면 많은 일을\n할 수 있습니다.”",
                 author: "헬렌 켈러",
                 category: "SYSTEM / 업데이트",
-                icon: "update"
+                icon: .update
             )
         case .updateDownloading:
             AuthScreenCopy(
@@ -306,7 +306,7 @@ enum AuthScreen: String, CaseIterable, Identifiable {
                 quote: "“친구란 내가 진솔해질 수\n있는 사람입니다.”",
                 author: "랠프 월도 에머슨",
                 category: "SYSTEM / 업데이트",
-                icon: "update-error"
+                icon: .updateError
             )
         case .updateVerificationError:
             AuthScreenCopy(
@@ -315,7 +315,7 @@ enum AuthScreen: String, CaseIterable, Identifiable {
                 quote: "“잘못하고도 고치지 않는 것,\n그것이 진짜 잘못입니다.”",
                 author: "공자",
                 category: "SYSTEM / 업데이트",
-                icon: "update-error"
+                icon: .updateError
             )
         case .updateInstallationError:
             AuthScreenCopy(
@@ -324,7 +324,7 @@ enum AuthScreen: String, CaseIterable, Identifiable {
                 quote: "“자신의 삶에 만족할 줄\n아는 사람이 부유합니다.”",
                 author: "노자",
                 category: "SYSTEM / 업데이트",
-                icon: "update-error"
+                icon: .updateError
             )
         case .logoutConfirmation:
             AuthScreenCopy(
@@ -333,7 +333,7 @@ enum AuthScreen: String, CaseIterable, Identifiable {
                 quote: "“결국 가장 소중한 것은\n자기 마음의 온전함입니다.”",
                 author: "랠프 월도 에머슨",
                 category: "ACCOUNT / 계정 관리",
-                icon: "logout"
+                icon: .logout
             )
         case .withdrawalConfirmation:
             AuthScreenCopy(
@@ -342,7 +342,7 @@ enum AuthScreen: String, CaseIterable, Identifiable {
                 quote: "“꿈을 향해 자신 있게\n나아가고 상상한 삶을\n살고자 노력하면,\n뜻밖의 성공을 만나게 됩니다.”",
                 author: "헨리 데이비드 소로",
                 category: "ACCOUNT / 계정 관리",
-                icon: "withdrawal"
+                icon: .withdrawal
             )
         }
     }
@@ -354,5 +354,5 @@ struct AuthScreenCopy {
     let quote: String
     let author: String
     let category: String
-    var icon: String? = nil
+    var icon: AuthStatusIcon? = nil
 }
