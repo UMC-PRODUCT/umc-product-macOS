@@ -13,6 +13,10 @@ public let recommendedProjectSettings: Settings = .settings(
     base: [
         "SWIFT_VERSION": "6.0",
         "SWIFT_STRICT_CONCURRENCY": "complete",
+        "SWIFT_ACTIVE_COMPILATION_CONDITIONS": .array(
+            ["$(inherited)"]
+                + (Environment.prerelease.getString(default: "0") == "1" ? ["UMC_PRERELEASE"] : [])
+        ),
         "ENABLE_USER_SCRIPT_SANDBOXING": "YES",
         "ENABLE_MODULE_VERIFIER": "YES",
         "MARKETING_VERSION": "0.0.1",

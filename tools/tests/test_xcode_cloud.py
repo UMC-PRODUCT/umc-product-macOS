@@ -36,6 +36,7 @@ class XcodeCloudPostCloneTests(unittest.TestCase):
             "CI_BUILD_NUMBER": "37",
             "CI_BRANCH": "develop",
             "TUIST_BUILD_NUMBER": "999",
+            "TUIST_PRERELEASE": "1",
             "HOMEBREW_NO_AUTO_UPDATE": "1",
         }
         self.mise = self.bin / "mise-fixture"
@@ -58,6 +59,7 @@ class XcodeCloudPostCloneTests(unittest.TestCase):
                     test -f dependencies-ready
                     test "${FAIL_STAGE:-}" != generate
                     printf '%s' "$TUIST_BUILD_NUMBER" > generated-build-number
+                    printf '%s' "${TUIST_PRERELEASE:-unset}" > generated-prerelease
                     ;;
                 *) exit 2 ;;
             esac
@@ -85,6 +87,7 @@ class XcodeCloudPostCloneTests(unittest.TestCase):
         completed = self.run_script()
         self.assertEqual(completed.returncode, 0, completed.stderr)
         self.assertEqual((self.project / "generated-build-number").read_text(), "37")
+        self.assertEqual((self.project / "generated-prerelease").read_text(), "0")
 
     def test_installs_mise_when_runner_does_not_have_it(self):
         (self.bin / "mise").unlink()
@@ -94,16 +97,26 @@ class XcodeCloudPostCloneTests(unittest.TestCase):
 
     def test_prerelease_branch_number_overrides_cloud_run_number(self):
         self.environment["CI_BRANCH"] = "prerelease/0.0.1/3"
+        self.environment["TUIST_PRERELEASE"] = "0"
         completed = self.run_script()
         self.assertEqual(completed.returncode, 0, completed.stderr)
         self.assertEqual((self.project / "generated-build-number").read_text(), "3")
+        self.assertEqual((self.project / "generated-prerelease").read_text(), "1")
 
     def test_canonical_git_ref_can_supply_the_prerelease_branch(self):
         self.environment.pop("CI_BRANCH")
+        self.environment["TUIST_PRERELEASE"] = "0"
         self.environment["CI_GIT_REF"] = "refs/heads/prerelease/0.0.1/3"
         completed = self.run_script()
         self.assertEqual(completed.returncode, 0, completed.stderr)
         self.assertEqual((self.project / "generated-build-number").read_text(), "3")
+        self.assertEqual((self.project / "generated-prerelease").read_text(), "1")
+
+    def test_cloud_formal_release_clears_inherited_prerelease_setting(self):
+        self.environment["CI_BRANCH"] = "release/8"
+        completed = self.run_script()
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.assertEqual((self.project / "generated-prerelease").read_text(), "0")
 
     def test_malformed_branch_or_wrong_app_version_stops_before_preparation(self):
         for branch in ["prerelease/3", "prerelease/0.0.1/0", "prerelease/0.0.1/3/extra",
@@ -117,8 +130,11 @@ class XcodeCloudPostCloneTests(unittest.TestCase):
 
     def test_make_uses_branch_build_number_for_local_generation(self):
         self.environment.pop("TUIST_BUILD_NUMBER")
-        for branch, number in [("prerelease/0.0.1/3", "3"), ("release/8", "8"),
-                               ("testFlight/9", "9"), ("testflight/external/0.0.1/10", "10")]:
+        self.environment.pop("TUIST_PRERELEASE")
+        for branch, number, prerelease in [
+            ("prerelease/0.0.1/3", "3", "1"), ("release/8", "8", "0"),
+            ("testFlight/9", "9", "0"), ("testflight/external/0.0.1/10", "10", "0"),
+        ]:
             with self.subTest(branch=branch):
                 self.environment["CI_BRANCH"] = branch
                 completed = subprocess.run(["make", "bootstrap", "install", "generate"],
@@ -126,6 +142,7 @@ class XcodeCloudPostCloneTests(unittest.TestCase):
                                            capture_output=True, text=True, timeout=10)
                 self.assertEqual(completed.returncode, 0, completed.stderr)
                 self.assertEqual((self.project / "generated-build-number").read_text(), number)
+                self.assertEqual((self.project / "generated-prerelease").read_text(), prerelease)
 
     def test_missing_cloud_environment_stops_before_preparation(self):
         for name in ["CI_PRIMARY_REPOSITORY_PATH", "CI_BUILD_NUMBER"]:

@@ -54,7 +54,7 @@ struct TypographyTests {
         #expect(difference < 9)
     }
 
-    #if DEBUG
+    #if DEBUG || UMC_PRERELEASE
     @Test("Preview changes the real font size and bundled face without changing tokens")
     func previewResolvesFont() {
         var preview = UMCTypographyPreview()

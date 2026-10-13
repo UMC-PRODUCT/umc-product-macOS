@@ -106,7 +106,7 @@ public extension View {
 private struct UMCTypographyModifier: ViewModifier {
     let style: UMCTypography
     @ScaledMetric private var scale: CGFloat
-    #if DEBUG
+    #if DEBUG || UMC_PRERELEASE
     @Environment(\.umcTypographyPreview) private var preview
     #endif
 
@@ -116,7 +116,7 @@ private struct UMCTypographyModifier: ViewModifier {
     }
 
     func body(content: Content) -> some View {
-        #if DEBUG
+        #if DEBUG || UMC_PRERELEASE
         content
             .font(preview.font(for: style))
             .tracking((style.tracking * preview.appliedSizeScale
