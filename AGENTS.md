@@ -1,22 +1,20 @@
 # AGENTS.md
 
-This file provides guidance to Codex (Codex.ai/code) when working with code in this repository.
+This is the canonical project guide for coding agents working in this repository.
 
 > **구조 안내**: 이 파일은 **핵심 요약 + 절대 규칙 + 레퍼런스 인덱스**만 담는 허브입니다.
 > 주제별 상세 내용은 `docs/Codex/` 로 분리되어 있으며, **필요할 때 해당 파일을 `Read` 로 열어** 참고합니다.
 > (컨텍스트 절약을 위해 `@import` 로 전체를 인라인하지 않습니다.)
->
-> **새 프로젝트 시작 시**: 아래 `{{ }}` 자리와 `AppName`/`com.example.appname` 플레이스홀더를
-> 실제 값으로 치환하고, 이 안내 블록은 지웁니다. 치환 대상 전체 목록은 `TEMPLATE_SETUP.md` 참고.
 
 ## Project Overview
 
-**{{프로젝트 이름}}** — SwiftUI + iOS {{최소 지원 버전}}+
+**UMC Desk** — SwiftUI + macOS 26.0+
 
-- **App Statement**: "{{한 줄 슬로건}}"
-- **목적**: {{해결하려는 문제}}
-- **주요 모듈**: {{인증/홈/…}}
-- **현재 버전**: {{x.y.z}}
+- **목적**: UMC 활동과 운영 업무를 데스크톱에서 지원하는 macOS 앱
+- **주요 모듈**: Auth, Home, Notice, Activity, Community, Matching, ProjectWorkspace
+- **현재 구현**: 인증 화면·폼 검증, 디자인 토큰, DI·네트워크·세션 기반. Auth API 연결과 나머지 Feature 화면은 후속 작업
+- **현재 소스 버전**: `0.0.1` (`MARKETING_VERSION`), 기본 빌드 번호 `1`
+- **확인 기준**: 2026-10-13, `UMCDesk/Project.swift`와 소스 코드
 
 ## 아키텍처 한눈에
 
@@ -34,8 +32,9 @@ View ←→ ViewModel(@Observable) → UseCase(Protocol) → Repository → Data
                                     ↑  DIContainer가 Protocol 구현체 주입
 ```
 
-- **Presentation → Domain → Data** 단방향. 상위는 하위의 Protocol에만 의존 (DIP)
-- **Router**: AppRouter(모듈 간/딥링크) + Feature Router(내부 화면). Tab별 독립 `NavigationStack`
+- **모듈 의존성은 Presentation → Domain ← Data**. UseCase는 Domain의 Repository Protocol에 의존하고 Data가 구현한다 (DIP).
+- **Router 설계 원칙**: AppRouter(모듈 간/딥링크) + Feature Router(내부 화면), Tab별 독립 `NavigationStack`.
+  현재 `CoreRouting`은 기반 타겟이며 Router 타입은 미구현. Auth는 `AuthViewModel`의 화면 상태로 전환한다.
 - 상세: `docs/Codex/architecture.md`
 
 ## 절대 규칙 (항상 적용)
@@ -46,12 +45,14 @@ View ←→ ViewModel(@Observable) → UseCase(Protocol) → Repository → Data
    예외: 앱 생명주기 전역 관리자(`AppFlowViewModel`). View는 `@State private var viewModel` 패턴.
 2. **서버 응답 정수는 전 레이어 `String` 통일** — 서버가 모든 정수를 String으로 직렬화하는 경우.
    Response DTO·Domain Model·Repository Protocol 파라미터까지 `String`. Int 변환은 연산 시점에만.
-   (서버가 정수를 정수로 내려주는 프로젝트라면 이 규칙은 삭제한다.)
+   실제 wire 타입은 엔드포인트별 서버 코드로 확인한다. String 식별자는 `decodeFlexibleString` 계열로 읽는다.
 3. **Response DTO는 synthesized Codable 금지** — custom `init(from:)` + `encode(to:)` 필수.
-   정수 필드는 `decode(Int.self)` 직접 호출 금지 → `decodeIntFlexibleIfPresent` 헬퍼 사용.
+   정수 필드는 `decode(Int.self)` 직접 호출 금지 → `UMCFoundation`의 flexible decoding 헬퍼 사용.
    (Request/Encodable DTO는 제외 — Int 그대로 OK)
 4. **모듈 간 노출 타입은 `public`** — Domain Model의 프로퍼티/이니셜라이저에 `public` 필수.
-5. **Mock 데이터는 `#if DEBUG` 가드** — 릴리스 빌드 미포함.
+5. **Mock 데이터는 `#if DEBUG` 가드** — 정식 릴리스 빌드 미포함.
+   승인된 인증 디자인·타이포·흐름 프리뷰만 `#if DEBUG || UMC_PRERELEASE`를 사용한다.
+   `UMC_PRERELEASE`는 프로젝트 생성 시 `TUIST_PRERELEASE=1`로 켜며 일반 Mock에 확대하지 않는다.
 6. **Network Router에 인라인 딕셔너리 금지** — 파라미터는 Query/Body DTO로 캡슐화.
 7. **식별자에 의미 없는 숫자 접미사 금지** — `text1`/`btn2Color` 등 금지, 역할이 드러나는 이름 부여.
 8. **커밋·PR·이슈에 AI 작성 흔적(attribution) 절대 금지** — 커밋 메시지의 `Co-Authored-By` 라인,
@@ -84,6 +85,13 @@ View ←→ ViewModel(@Observable) → UseCase(Protocol) → Repository → Data
     체크·해제 시 SF Symbol의 `.replace.magic(fallback: .replace)` 전환을 적용한다.
     `accessibilityReduceMotion`이 켜지면 애니메이션을 끄고, 키보드 조작과 VoiceOver 체크 상태를 유지한다.
 
+11. **SF Symbol은 코드로, Figma 이미지 에셋은 PDF로 사용** — SF Symbol을 이미지로 내보내지 않고
+    `Image(systemName:)`으로 사용한다. 배경·레이어·여백은 SwiftUI의 `Circle`·`ZStack`·`padding`으로
+    구성하고, 디자인 토큰과 Light·Dark 모드를 반영한다.
+    사진을 포함해 Figma에서 내려받는 앱 이미지 에셋은 PNG 대신 PDF로 Export한다.
+    원본이 벡터면 벡터 정보를 유지하고 Asset Catalog의 `preserves-vector-representation`을 켠다.
+    PNG의 확장자만 PDF로 바꾸지 않는다. AppIcon·문서·스크린샷·DMG 그래픽은 각 용도에 맞는 포맷을 따른다.
+
 ## 코딩 스타일 (요약)
 
 - 들여쓰기 4 spaces(탭 금지) · 줄 길이 최대 99자 · 외부 불필요 상태는 `private`
@@ -98,22 +106,27 @@ View ←→ ViewModel(@Observable) → UseCase(Protocol) → Repository → Data
 ## 에러 처리 (요약)
 
 - **Loadable** (`.idle/.loading/.loaded/.failed`): 화면 내 인라인 상태 (리스트 로딩, 도메인 에러, 검증 실패)
-- **ErrorHandler**: 흐름 중단형 전역 Alert (세션 만료, 권한, 네트워크 오류)
-- **AlertPrompt**: 확인/취소 다이얼로그 (파괴적 작업, 분기점) — `.alertPrompt(item:)`
+- **ErrorHandler 설계 원칙**: 흐름 중단형 전역 Alert (세션 만료, 권한, 네트워크 오류)
+- **AlertPrompt 설계 원칙**: 확인/취소 다이얼로그 (파괴적 작업, 분기점) — `.alertPrompt(item:)`
+- 현재 구현된 공통 타입은 `Loadable<Value>.failed(any Error)`와 네트워크·Repository 에러다.
+  `ErrorHandler`·`AlertPrompt`·`.alertPrompt(item:)`는 아직 없으므로 후속 구현 없이 호출하지 않는다.
 - 상세: `docs/Codex/architecture.md`
 
 ## 빌드 명령 (요약)
 
 ```bash
-# Tuist — 표준 진입점은 Makefile
-cd AppName && make bootstrap  # 최초 1회: mise + tuist 설치
-cd AppName && make open       # generate + Xcode 열기
-cd AppName && make test       # 테스트
-cd AppName && make doctor     # 환경 진단
+# 저장소 루트 Makefile이 UMCDesk/로 위임한다
+make bootstrap  # 최초 1회: mise로 고정 Tuist 설치
+make install    # 패키지 설치
+make generate   # 워크스페이스 생성
+make open       # Xcode 열기(워크스페이스가 없으면 생성)
+make test       # 앱·Core 테스트
+make test SCHEME=AuthPresentation  # 인증 화면 테스트
+make doctor     # 환경 진단
 ```
 
-- Tuist 버전은 `AppName/mise.toml` 로 고정
-- 상세: `docs/Codex/build-and-modules.md`, `AppName/MAKEFILE_GUIDE.md`
+- Tuist 버전은 `UMCDesk/mise.toml` (`4.208.0`) 로 고정
+- 상세: `docs/Codex/build-and-modules.md`, `UMCDesk/MAKEFILE_GUIDE.md`
 
 ## 상세 레퍼런스 (필요 시 Read)
 
@@ -136,7 +149,7 @@ Apple 프레임워크 API — 신규 Apple API를 다룰 때:
 | 모음 | 인덱스 | 언제 읽나 |
 |------|--------|----------|
 | Apple 프레임워크 가이드(20종) | `docs/Codex/apple-frameworks/INDEX.md` | `glassEffect`·`GlassEffectContainer`(Liquid Glass) · 툴바 신규 API · `AttributedString`/리치 텍스트 · FoundationModels(온디바이스 LLM) · SwiftData 상속 · `@MainActor`/actor/async 동시성 · Swift Charts 3D · WebKit·AlarmKit·MapKit·StoreKit 연동 |
-| Apple 스킬팩(9종 · reference 66종, Apple 원문) | `docs/Codex/apple-frameworks/INDEX.md` §3 | **SwiftUI·App Intents 코드를 새로 쓰거나 리뷰할 때.** `@Observable`/`@State`/`@Binding` 소유권 · `@Environment`/`@Entry` 무효화 경고 · `ForEach`/`List` identity(`id: \.self` 안티패턴) · soft-deprecated API 확인(`NavigationView`, 구 `onChange`) · 조건부 `.if` 모디파이어 · 뷰 분해/init 비용 · `Animatable` · App Intents 스키마/`AppEnum` · UIKit 현대화 · Xcode 보안 빌드 설정 |
+| Apple 스킬팩(9종 · reference 79종, Apple 원문) | `docs/Codex/apple-frameworks/INDEX.md` §3 | **SwiftUI·App Intents 코드를 새로 쓰거나 리뷰할 때.** `@Observable`/`@State`/`@Binding` 소유권 · `@Environment`/`@Entry` 무효화 경고 · `ForEach`/`List` identity(`id: \.self` 안티패턴) · soft-deprecated API 확인(`NavigationView`, 구 `onChange`) · 조건부 `.if` 모디파이어 · 뷰 분해/init 비용 · `Animatable` · App Intents 스키마/`AppEnum` · UIKit 현대화 · Xcode 보안 빌드 설정 |
 
 기획·설계 문서 — **이 레포 `docs/` 안에서 관리한다**:
 
@@ -160,7 +173,7 @@ Apple 프레임워크 API — 신규 Apple API를 다룰 때:
 
 | 대상 | 위치 | 언제 참고하나 |
 |------|------|--------------|
-| 서버 레포 | https://github.com/UMC-PRODUCT/umc-product-server | 기능 기획 단계의 서버 현황 파악, API 엔드포인트·요청/응답 스펙 확인, 권한 규칙 확인, 에러 코드 조회, iOS DTO와 실제 응답이 어긋날 때 원인 추적 |
+| 서버 레포 | https://github.com/UMC-PRODUCT/umc-product-server | 기능 기획 단계의 서버 현황 파악, API 엔드포인트·요청/응답 스펙 확인, 권한 규칙 확인, 에러 코드 조회, macOS DTO와 실제 응답이 어긋날 때 원인 추적 |
 
 **상세 내비게이션은 `docs/Codex/server-repo.md`** — 도메인 패키지 매핑, 조회 명령어,
 확인된 경로·권한 규약이 정리돼 있다. 서버 관련 작업을 시작할 때 그 파일을 먼저 읽는다.
@@ -169,7 +182,7 @@ Apple 프레임워크 API — 신규 Apple API를 다룰 때:
   클론하지 않고 필요한 파일만 읽는다.
 - **읽기 전용으로만 사용** — 서버 레포에 커밋·PR·이슈를 만들지 않는다(메인테이너가 명시적으로 지시한 경우 제외).
 - **스펙 추측 금지** — 필드명·타입·nullable 여부는 서버의 컨트롤러/DTO 실제 코드로 확인한 뒤
-  iOS Response DTO에 반영한다(절대 규칙 #2·#3과 함께 적용).
+  macOS Response DTO에 반영한다(절대 규칙 #2·#3과 함께 적용).
 - **권한 규칙도 추측하지 않는다** — "이 역할이면 다 되겠지"로 화면을 분기하지 말고
   `docs/guides/프로젝트_권한_정책.md` 와 서버가 제공하는 capability API를 확인한다.
   기획 문서에 권한 서술을 쓸 때도 같은 기준을 적용한다.
@@ -183,7 +196,7 @@ Apple 프레임워크 API — 신규 Apple API를 다룰 때:
 - **플랫폼 팀 관련 작업은 [공통 엔진 도메인 책임 범위 가이드](https://app.notion.com/p/makeus-challenge/3f2b57f4596b806f9532f2e82f73f15c?source=copy_link)도 함께 참고한다.**
   handbook에서 팀 DRI·조직 역할을, 엔진 가이드에서 알림·채팅·Form·인증인가의 상세 책임 경계와
   문제별 우선 확인 담당을 확인한다. Platform은 공통 처리 엔진을, 목적팀은 제품별 사용 정책을 맡는다.
-  Notion에 접근할 수 없으면 [저장된 복사본](docs/claude/platform-domain-ownership.md)을 읽는다.
+  Notion에 접근할 수 없으면 [저장된 복사본](docs/Codex/platform-domain-ownership.md)을 읽는다.
   복사본은 2026-10-10 사용자 제공 본문 기준이며, 최신본을 확인하지 못했으면 그 사실을 명시한다.
   책임 범위를 현재 구현·출시 상태로 해석하지 않는다. API 계약·제공 여부는 실제 서버 코드로 확인하고,
   확인되지 않은 작업 상태·담당자·일정은 추측하지 않는다.

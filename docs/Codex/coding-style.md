@@ -1,7 +1,7 @@
 # Swift 코딩 스타일 + 네이밍 규칙
 
 > 코드 스타일, 식별자 네이밍 규칙 상세 레퍼런스.
-> 핵심 요약은 `Agent.MD` 참고.
+> 핵심 요약은 `AGENTS.md` 참고.
 
 - **들여쓰기**: 4 spaces (탭 금지)
 - **줄 길이**: 최대 99자
@@ -33,8 +33,8 @@ fileprivate enum Constants {
     static let title1: String = "로그인"
     static let title2: String = "회원가입"
 
-    static let btn1Color: Color = .indigo500
-    static let btn2Color: Color = .grey400
+    static let btn1Color: Color = UMCColor.Semantic.textBrandDefault
+    static let btn2Color: Color = UMCColor.Semantic.textDisabled
 }
 ```
 
@@ -50,8 +50,8 @@ fileprivate enum Constants {
     static let loginScreenTitle: String = "로그인"
     static let signUpScreenTitle: String = "회원가입"
 
-    static let primaryActionColor: Color = .indigo500
-    static let disabledActionColor: Color = .grey400
+    static let primaryActionColor: Color = UMCColor.Semantic.textBrandDefault
+    static let disabledActionColor: Color = UMCColor.Semantic.textDisabled
 }
 ```
 
@@ -64,3 +64,13 @@ fileprivate enum Constants {
 // MARK: - Body
 // MARK: - Function
 ```
+
+## 파일 헤더와 토큰 이름
+
+소스 파일 작성자는 `euijjang97`, 문서·위키 작성자는 `제옹(euijjang97)`로 표기한다.
+새 Swift 파일 헤더는 `//  Created by euijjang97 on {날짜}.`, 스크립트·Makefile·workflow는
+같은 내용을 `#` 주석으로 쓴다.
+
+`UMCSpacing.value16`·`UMCRadius.value8`·색상 단계의 `teal500`은 디자인 토큰의 값·단계를
+명시하는 이름이다. 역할이 없는 임의 숫자 접미사와 구분한다. View에서 색상을 고를 때는
+`UMCColor.Semantic`의 역할 이름을 우선하고 화면 배경에는 `UMCColor.Custom`을 사용한다.
