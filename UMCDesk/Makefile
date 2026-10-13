@@ -37,6 +37,9 @@ NOTARY_PROFILE ?= UMCDeskNotary
 # CI_BRANCH 또는 TUIST_BUILD_NUMBER로 직접 지정할 수 있습니다.
 # 개발 브랜치는 매니페스트 기본값 1을 사용합니다.
 BRANCH := $(if $(CI_BRANCH),$(CI_BRANCH),$(shell git rev-parse --abbrev-ref HEAD 2>/dev/null))
+TUIST_PRERELEASE ?= $(if $(shell printf '%s' '$(BRANCH)' | sed -nE \
+    's,^prerelease/[0-9]+\.[0-9]+\.[0-9]+/[1-9][0-9]*$$,1,p'),1,0)
+export TUIST_PRERELEASE
 TUIST_BUILD_NUMBER ?= $(shell printf '%s' '$(BRANCH)' | sed -nE \
     -e 's,^prerelease/[0-9]+\.[0-9]+\.[0-9]+/([1-9][0-9]*)$$,\1,p' \
     -e 's,^(release|testFlight|testflight/external)/([0-9.]+/)?([0-9]+)$$,\3,p')
@@ -224,7 +227,7 @@ test: ## 테스트 실행
 		-configuration "$(CONFIGURATION)" \
 		-destination "$(DESTINATION)" \
 		-derivedDataPath "$(DERIVED_DATA)" CODE_SIGNING_ALLOWED=$(CODE_SIGNING_ALLOWED) \
-		test
+		ENABLE_TESTABILITY=YES test
 
 .PHONY: test-network
 test-network: ## Aquila 연동 네트워크·토큰 테스트

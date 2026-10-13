@@ -5,7 +5,7 @@
 //  Created by euijjang97 on 10/12/26.
 //
 
-#if DEBUG
+#if DEBUG || UMC_PRERELEASE
 import SwiftUI
 
 /// 실행 중 화면 비교에만 사용하며 디자인 토큰과 저장된 설정은 변경하지 않는다.

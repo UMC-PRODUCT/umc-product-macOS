@@ -13,6 +13,7 @@ cd "$CI_PRIMARY_REPOSITORY_PATH/UMCDesk"
 source_branch="${CI_BRANCH:-${CI_GIT_REF:-}}"
 source_branch="${source_branch#refs/heads/}"
 build_number="$CI_BUILD_NUMBER"
+export TUIST_PRERELEASE=0
 if [[ "$source_branch" == prerelease/* ]]; then
     if [[ ! "$source_branch" =~ ^prerelease/([0-9]+\.[0-9]+\.[0-9]+)/([1-9][0-9]*)$ ]]; then
         echo 'Expected prerelease/<app-version>/<positive-build-number>.' >&2
@@ -26,6 +27,7 @@ if [[ "$source_branch" == prerelease/* ]]; then
         echo "prerelease version $branch_version does not match app version $app_version." >&2
         exit 1
     fi
+    export TUIST_PRERELEASE=1
 fi
 
 if ! command -v mise >/dev/null 2>&1; then

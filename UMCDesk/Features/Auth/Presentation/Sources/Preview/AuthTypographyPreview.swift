@@ -5,7 +5,7 @@
 //  Created by euijjang97 on 10/12/26.
 //
 
-#if DEBUG
+#if DEBUG || UMC_PRERELEASE
 import CoreDesignSystem
 import CoreUIComponents
 import SwiftUI
@@ -36,7 +36,7 @@ struct AuthTypographyPreview: View {
                 Text("타이포그래피 조절")
                     .font(.headline)
                 Spacer()
-                Text("DEBUG")
+                Text("화면 비교")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
