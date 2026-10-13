@@ -80,7 +80,7 @@ final class AuthViewModel {
     private(set) var navigationID = UUID()
     private var accountReturnScreen: AuthScreen = .challengerIntro
 
-    #if DEBUG
+    #if DEBUG || UMC_PRERELEASE
     var playsPreviewFlow = true
     var previewScenario: AuthPreviewScenario = .success
     #endif
@@ -105,7 +105,7 @@ final class AuthViewModel {
         navigationID = UUID()
         if resetsForm { form = AuthFormState() }
         if screen == .updateDownloading { downloadProgress = 0 }
-        #if DEBUG
+        #if DEBUG || UMC_PRERELEASE
         playsPreviewFlow = true
         #endif
     }
@@ -115,7 +115,7 @@ final class AuthViewModel {
     }
 
     func submitLogin() {
-        #if DEBUG
+        #if DEBUG || UMC_PRERELEASE
         if previewScenario == .credentialsError {
             previewScenario = .success
             navigate(to: .credentialsError)
@@ -126,7 +126,7 @@ final class AuthViewModel {
     }
 
     func completeRegistration() {
-        #if DEBUG
+        #if DEBUG || UMC_PRERELEASE
         if previewScenario == .signupLoginFailure {
             previewScenario = .success
             navigate(to: .signupLoginFailure)

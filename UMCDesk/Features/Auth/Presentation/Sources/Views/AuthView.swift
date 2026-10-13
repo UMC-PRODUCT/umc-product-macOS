@@ -93,7 +93,7 @@ public struct AuthView: View {
                 AuthTypographyPreview(settings: $typographyPreview)
             }
             #endif
-            #if DEBUG
+            #if DEBUG || UMC_PRERELEASE
             ToolbarItem(placement: .automatic) {
                 AuthPreviewFlowMenu(viewModel: viewModel)
             }
@@ -108,7 +108,7 @@ public struct AuthView: View {
         .preferredColorScheme(previewColorScheme)
         .environment(\.umcTypographyPreview, typographyPreview)
         #endif
-        #if DEBUG
+        #if DEBUG || UMC_PRERELEASE
         .task(id: viewModel.navigationID) { await viewModel.runPreviewFlow() }
         .onAppear {
             let arguments = ProcessInfo.processInfo.arguments

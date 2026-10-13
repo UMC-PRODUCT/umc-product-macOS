@@ -130,7 +130,7 @@ private struct AuthEmailVerificationFields: View {
                             isInvalid: form.emailVerification == .invalid
                         )
                         AuthButton(title: "인증번호 확인") {
-                            #if DEBUG
+                            #if DEBUG || UMC_PRERELEASE
                             if form.verificationCode != "123456" {
                                 form.emailVerification = .invalid
                                 return
@@ -259,7 +259,7 @@ private struct AuthSchoolOptions: View {
     var body: some View {
         ScrollView {
             VStack(spacing: 0) {
-                #if DEBUG
+                #if DEBUG || UMC_PRERELEASE
                 ForEach(AuthPreviewSchool.all) { school in
                     Button {
                         form.school = school.name
