@@ -71,13 +71,18 @@ enum AuthStatusIcon: CaseIterable {
 }
 
 struct AuthStatusIconView: View {
+    // MARK: - Property
+
     let icon: AuthStatusIcon
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var effectTrigger = false
+
+    // MARK: - Body
 
     var body: some View {
         ZStack {
             Circle().fill(icon.background)
-            Image(systemName: icon.systemName)
-                .resizable()
+            animatedSymbol
                 .scaledToFit()
                 .symbolRenderingMode(.monochrome)
                 .font(.system(size: 40, weight: .medium))
@@ -87,5 +92,47 @@ struct AuthStatusIconView: View {
         }
         .frame(width: 80, height: 80)
         .accessibilityHidden(true)
+        .task(id: icon) {
+            guard !Task.isCancelled, !reduceMotion else { return }
+            effectTrigger.toggle()
+        }
+    }
+
+    @ViewBuilder
+    private var animatedSymbol: some View {
+        let image = Image(systemName: icon.systemName).resizable()
+            .symbolEffectsRemoved(reduceMotion)
+        switch icon {
+        case .signupComplete, .passwordComplete:
+            image.symbolEffect(.bounce.up, options: .nonRepeating, value: effectTrigger)
+        case .loginFailure, .memberFailure, .updateError:
+            image.symbolEffect(.wiggle, options: .nonRepeating.speed(1.5), value: effectTrigger)
+        default:
+            image.symbolEffect(.pulse, options: .nonRepeating, value: effectTrigger)
+        }
     }
 }
+
+#if DEBUG
+#Preview("Status symbol motion") {
+    @Previewable @State var replay = false
+    VStack(spacing: UMCSpacing.value24) {
+        Button("Replay") { replay.toggle() }
+        LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 4),
+            spacing: UMCSpacing.value24) {
+            ForEach(AuthStatusIcon.allCases, id: \.systemName) { icon in
+                VStack(spacing: UMCSpacing.value8) {
+                    AuthStatusIconView(icon: icon)
+                    Text(icon.systemName)
+                        .umcTypography(.captionRegular)
+                        .foregroundStyle(UMCColor.Semantic.textNeutralDefault)
+                }
+            }
+        }
+        .id(replay)
+    }
+    .padding(UMCSpacing.value24)
+    .frame(width: 720)
+    .background(UMCColor.Custom.backgroundDefault)
+}
+#endif
