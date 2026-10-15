@@ -20,7 +20,7 @@ struct AuthButton: View {
     var body: some View {
         Button(action: action) {
             Text(title)
-                .umcTypography(.title3Regular)
+                .umcTypography(.title4Regular)
                 .frame(maxWidth: .infinity, minHeight: 48)
                 .contentShape(.capsule)
         }
@@ -110,7 +110,7 @@ struct AuthTextField: View {
     var body: some View {
         VStack(alignment: .leading, spacing: UMCSpacing.value4) {
             Text(title)
-                .umcTypography(.title3Regular)
+                .umcTypography(.title4Regular)
                 .foregroundStyle(UMCColor.Semantic.textNeutralDefault)
             HStack(spacing: UMCSpacing.value8) {
                 Group {
@@ -200,7 +200,7 @@ struct AuthHeading: View {
                     .accessibilityAddTraits(.isHeader)
                 if !subtitle.isEmpty {
                     Text(subtitle)
-                        .umcTypography(.title3Regular)
+                        .umcTypography(.title4Regular)
                         .foregroundStyle(UMCColor.Semantic.textNeutralMedium600)
                 }
             }
@@ -286,7 +286,7 @@ struct AuthSteps: View {
                         }
                         .accessibilityHidden(true)
                     Text(title)
-                        .umcTypography(index < completedCount ? .title3Bold : .title3Regular)
+                        .umcTypography(index < completedCount ? .title4Bold : .title4Regular)
                 }
                 .foregroundStyle(
                     index <= completedCount ? UMCColor.Semantic.textBrandDefault :

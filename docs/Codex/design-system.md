@@ -42,13 +42,14 @@ Pretendard Regular·Bold를 리소스 번들에 포함하고 프로세스당 한
 | largeTitle3 Regular·Bold | 26pt | 1.5 | -2% |
 | title1 Regular·Bold | 22pt | 1.3 | -2% |
 | title2 Regular·Bold | 20pt | 1.3 | -1% |
-| title3 Regular·Bold | 16pt | 1.4 | -1% |
+| title3 Regular·Bold | 18pt | 1.4 | -1% |
+| title4 Regular·Bold | 16pt | 1.4 | -1% |
 | headline Regular·Bold | 14pt | 1.4 | 0 |
 | bodyRegular·calloutRegular | 12pt | 1.4 | 0 |
 | subheadlineRegular | 11pt | 1.4 | 0 |
 | footnoteRegular·captionRegular | 10pt | 1.4 | 0 |
 
-총 19개 스타일이다. Debug·프리배포의 타이포 조정은 `UMCTypographyPreview` 환경값을 통해
+총 21개 스타일이다. Debug·프리배포의 타이포 조정은 `UMCTypographyPreview` 환경값을 통해
 비교하며 기본 토큰 값을 덮어쓰지 않는다. `TUIST_PRERELEASE=1`로 **프로젝트를 생성**하면
 Release에서도 `UMC_PRERELEASE` 분기가 포함된다. 일반 Release에는 이 도구가 없다.
 

@@ -24,6 +24,8 @@ public enum UMCTypography: String, CaseIterable, Sendable {
     case title2Regular = "Title/2-Regular"
     case title3Bold = "Title/3-Bold"
     case title3Regular = "Title/3-Regular"
+    case title4Bold = "Title/4-Bold"
+    case title4Regular = "Title/4-Regular"
     case headlineBold = "Headline/Bold"
     case headlineRegular = "Headline/Regular"
     case bodyRegular = "Body/Regular"
@@ -41,7 +43,7 @@ public enum UMCTypography: String, CaseIterable, Sendable {
     public var weight: Font.Weight {
         switch self {
         case .largeTitle1Bold, .largeTitle2Bold, .largeTitle3Bold,
-             .title1Bold, .title2Bold, .title3Bold, .headlineBold:
+             .title1Bold, .title2Bold, .title3Bold, .title4Bold, .headlineBold:
             .bold
         default:
             .regular
@@ -79,6 +81,8 @@ public enum UMCTypography: String, CaseIterable, Sendable {
         case .title2Bold, .title2Regular:
             (20, 1.3, -1, .title2)
         case .title3Bold, .title3Regular:
+            (18, 1.4, -1, .title3)
+        case .title4Bold, .title4Regular:
             (16, 1.4, -1, .title3)
         case .headlineBold, .headlineRegular:
             (14, 1.4, 0, .headline)

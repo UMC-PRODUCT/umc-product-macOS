@@ -128,7 +128,7 @@ private struct AuthSocialButton: View {
                 .frame(width: 48, height: 48)
                 .accessibilityHidden(true)
                 Text(provider.title)
-                    .umcTypography(.title3Regular)
+                    .umcTypography(.title4Regular)
                     .frame(maxWidth: .infinity)
             }
             .padding(.horizontal, UMCSpacing.value12)
@@ -201,7 +201,7 @@ struct AuthSupportButton: View {
         Button { showsNotice = true } label: {
             Text(isInline ? "고객센터" : "고객센터 문의")
                 .underline(isInline)
-                .umcTypography(isInline ? .bodyRegular : .title3Regular)
+                .umcTypography(isInline ? .bodyRegular : .title4Regular)
                 .foregroundStyle(
                     isInline ? UMCColor.Semantic.textBrandDefault :
                         UMCColor.Semantic.textNeutralWeak500
