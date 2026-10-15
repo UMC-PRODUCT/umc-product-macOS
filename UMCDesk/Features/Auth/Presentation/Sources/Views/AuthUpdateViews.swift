@@ -96,7 +96,7 @@ private struct AuthUpdateCard: View {
                 )
                 .accessibilityHidden(true)
                 Text(title)
-                    .umcTypography(.title3Regular)
+                    .umcTypography(.title4Regular)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 if let progress {
                     Text(progress, format: .percent.precision(.fractionLength(0)))

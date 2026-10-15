@@ -15,15 +15,23 @@ import Testing
 @MainActor
 struct TypographyTests {
     @Test("Pretendard faces resolve from the module bundle", arguments: [
-        (UMCTypography.largeTitle1Regular, "Pretendard-Regular"),
-        (UMCTypography.largeTitle1Bold, "Pretendard-Bold"),
+        (UMCTypography.largeTitle1Regular, "Pretendard-Regular", CGFloat(36)),
+        (UMCTypography.largeTitle1Bold, "Pretendard-Bold", CGFloat(36)),
+        (UMCTypography.title3Regular, "Pretendard-Regular", CGFloat(18)),
+        (UMCTypography.title3Bold, "Pretendard-Bold", CGFloat(18)),
+        (UMCTypography.title4Regular, "Pretendard-Regular", CGFloat(16)),
+        (UMCTypography.title4Bold, "Pretendard-Bold", CGFloat(16)),
     ])
-    func fontsLoadFromModuleBundle(style: UMCTypography, postScriptName: String) throws {
+    func fontsLoadFromModuleBundle(
+        style: UMCTypography,
+        postScriptName: String,
+        size: CGFloat
+    ) throws {
         let font = style.font.resolve(in: EnvironmentValues().fontResolutionContext).ctFont
         let url = try #require(CTFontCopyAttribute(font, kCTFontURLAttribute) as? URL)
 
         #expect(CTFontCopyPostScriptName(font) as String == postScriptName)
-        #expect(CTFontGetSize(font) == 36)
+        #expect(CTFontGetSize(font) == size)
         #expect(url.path.contains("CoreDesignSystem_CoreDesignSystem.bundle"))
         #expect(url.lastPathComponent == postScriptName + ".otf")
     }
@@ -31,7 +39,10 @@ struct TypographyTests {
     @Test("Line boxes retain Figma's 150, 130 and 140 percent heights", arguments: [
         (UMCTypography.largeTitle1Bold, CGFloat(54)),
         (UMCTypography.title1Regular, CGFloat(28.6)),
-        (UMCTypography.title3Regular, CGFloat(22.4)),
+        (UMCTypography.title3Regular, CGFloat(25.2)),
+        (UMCTypography.title3Bold, CGFloat(25.2)),
+        (UMCTypography.title4Regular, CGFloat(22.4)),
+        (UMCTypography.title4Bold, CGFloat(22.4)),
     ])
     func lineBoxesMatchFigma(style: UMCTypography, height: CGFloat) {
         for lineCount in [1, 2] {
@@ -42,16 +53,20 @@ struct TypographyTests {
         }
     }
 
-    @Test("Negative Figma tracking reduces the rendered text width")
-    func trackingAppliesToText() {
-        let text = "HHHHHHHHHH"
-        let style = UMCTypography.largeTitle1Bold
+    @Test("Negative Figma tracking reduces the rendered text width", arguments: [
+        (UMCTypography.largeTitle1Bold, CGFloat(72)),
+        (UMCTypography.title3Regular, CGFloat(18)),
+        (UMCTypography.title3Bold, CGFloat(18)),
+        (UMCTypography.title4Regular, CGFloat(16)),
+        (UMCTypography.title4Bold, CGFloat(16)),
+    ])
+    func trackingAppliesToText(style: UMCTypography, widthReduction: CGFloat) {
+        let text = String(repeating: "H", count: 100)
         let styled = NSHostingView(rootView: Text(text).umcTypography(style).fixedSize())
         let untracked = NSHostingView(rootView: Text(text).font(style.font).fixedSize())
         let difference = untracked.fittingSize.width - styled.fittingSize.width
 
-        #expect(difference > 6)
-        #expect(difference < 9)
+        #expect(abs(difference - widthReduction) < 1)
     }
 
     #if DEBUG || UMC_PRERELEASE

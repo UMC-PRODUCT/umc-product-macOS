@@ -210,7 +210,7 @@ private struct AuthSchoolPicker: View {
     var body: some View {
         VStack(alignment: .leading, spacing: UMCSpacing.value4) {
             Text("학교")
-                .umcTypography(.title3Regular)
+                .umcTypography(.title4Regular)
             Button { form.showsSchoolPicker.toggle() } label: {
                 HStack {
                     Text(form.school.isEmpty ? "학교를 선택해 주세요." : form.school)
@@ -309,7 +309,7 @@ private struct AuthTermsAgreement: View {
             ) { selectedTerm = "개인정보 처리방침" }
         }
         .toggleStyle(UMCCheckboxStyle())
-        .umcTypography(.title3Regular)
+        .umcTypography(.title4Regular)
         .foregroundStyle(UMCColor.Semantic.textNeutralStrong800)
         .alert(selectedTerm ?? "", isPresented: Binding(
             get: { selectedTerm != nil }, set: { if !$0 { selectedTerm = nil } }
