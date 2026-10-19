@@ -21,6 +21,7 @@ public struct AuthView: View {
     fileprivate enum Constants {
         static let sidebarWidth: CGFloat = 576
         static let sidebarFraction: CGFloat = 0.4
+        static let referenceViewportWidth: CGFloat = 864
     }
 
     // MARK: - Init
@@ -36,39 +37,42 @@ public struct AuthView: View {
     // MARK: - Body
 
     public var body: some View {
-        GeometryReader { geometry in
-            HStack(spacing: 0) {
-                AuthBrandPanel(
-                    quote: viewModel.quoteOverride ?? viewModel.screen.copy.quote,
-                    author: viewModel.authorOverride ?? viewModel.screen.copy.author,
-                    category: viewModel.screen.copy.category
-                )
-                .frame(width: min(
-                    Constants.sidebarWidth,
-                    geometry.size.width * Constants.sidebarFraction
-                ))
-                // Figma pins the brand panel to Light in both screen appearances.
-                .environment(\.colorScheme, .light)
-
-                ScrollView {
-                    VStack(spacing: 0) {
-                        Spacer(minLength: UMCSpacing.value32)
-                        ZStack {
-                            AuthPageContent(screen: viewModel.screen, viewModel: viewModel)
-                                .id(viewModel.navigationID)
-                                .transition(AuthMotion.pageTransition(reduceMotion: reduceMotion))
-                        }
-                            .frame(maxWidth: viewModel.screen.contentWidth)
-                            .padding(.horizontal, UMCSpacing.value32)
-                            .animation(AuthMotion.animation(reduceMotion: reduceMotion),
-                                value: viewModel.navigationID)
-                        Spacer(minLength: UMCSpacing.value32)
-                    }
-                    .frame(maxWidth: .infinity, minHeight: geometry.size.height)
-                }
-                .scrollBounceBehavior(.basedOnSize)
+        HStack(spacing: 0) {
+            AuthBrandPanel(
+                quote: viewModel.quoteOverride ?? viewModel.screen.copy.quote,
+                author: viewModel.authorOverride ?? viewModel.screen.copy.author,
+                category: viewModel.screen.copy.category
+            )
+            // Figma pins the brand panel to Light in both screen appearances.
+            .environment(\.colorScheme, .light)
+            .containerRelativeFrame(.horizontal) { width, _ in
+                min(width * Constants.sidebarFraction, Constants.sidebarWidth)
             }
+
+            ScrollView {
+                ZStack {
+                    AuthPageContent(screen: viewModel.screen, viewModel: viewModel)
+                        .id(viewModel.navigationID)
+                        .transition(AuthMotion.pageTransition(reduceMotion: reduceMotion))
+                }
+                .containerRelativeFrame(.horizontal) { viewportWidth, _ in
+                    let availableWidth = max(0, viewportWidth - UMCSpacing.value64)
+                    let scale = max(1, viewportWidth / Constants.referenceViewportWidth)
+                    let preferredWidth = viewModel.screen.contentWidth * scale
+                    return min(availableWidth, min(
+                        preferredWidth, viewModel.screen.maximumContentWidth
+                    ))
+                }
+                .padding(UMCSpacing.value32)
+                .frame(minWidth: 0, maxWidth: .infinity)
+                .animation(AuthMotion.animation(reduceMotion: reduceMotion),
+                    value: viewModel.navigationID)
+            }
+            .defaultScrollAnchor(.center, for: .alignment)
+            .scrollBounceBehavior(.basedOnSize)
+            .frame(minWidth: 0, maxWidth: .infinity)
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
         .background(UMCColor.Custom.backgroundDefault)
         .tint(UMCColor.Semantic.textBrandDefault)
         .toolbar {
@@ -130,8 +134,12 @@ private struct AuthBrandPanel: View {
     let category: String
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
+    fileprivate enum Constants {
+        static let contentWidth: CGFloat = 448
+    }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: UMCSpacing.value32) {
+        VStack(alignment: .leading, spacing: 0) {
             VStack(alignment: .leading, spacing: UMCSpacing.value12) {
                 Image("logoLight", bundle: .module)
                     .renderingMode(.template)
@@ -143,7 +151,7 @@ private struct AuthBrandPanel: View {
                     .umcTypography(.bodyRegular)
             }
 
-            Spacer(minLength: 0)
+            Spacer(minLength: UMCSpacing.value24)
 
             VStack(alignment: .leading, spacing: UMCSpacing.value20) {
                 Text(quote)
@@ -156,7 +164,7 @@ private struct AuthBrandPanel: View {
             }
             .accessibilityElement(children: .combine)
 
-            Spacer(minLength: 0)
+            Spacer(minLength: UMCSpacing.value24)
 
             VStack(alignment: .leading, spacing: UMCSpacing.value16) {
                 Rectangle()
@@ -171,8 +179,9 @@ private struct AuthBrandPanel: View {
         .foregroundStyle(UMCColor.Semantic.textInverse)
         .animation(AuthMotion.animation(reduceMotion: reduceMotion), value: quote)
         .animation(AuthMotion.animation(reduceMotion: reduceMotion), value: category)
+        .frame(maxWidth: Constants.contentWidth)
         .padding(UMCSpacing.value64)
-        .frame(maxHeight: .infinity)
+        .frame(maxWidth: .infinity, minHeight: 0, maxHeight: .infinity, alignment: .leading)
         .background {
             LinearGradient(
                 stops: [

@@ -53,6 +53,63 @@ Pretendard Regular·Bold를 리소스 번들에 포함하고 프로세스당 한
 비교하며 기본 토큰 값을 덮어쓰지 않는다. `TUIST_PRERELEASE=1`로 **프로젝트를 생성**하면
 Release에서도 `UMC_PRERELEASE` 분기가 포함된다. 일반 Release에는 이 도구가 없다.
 
+## 창 크기에 맞춘 레이아웃
+
+창이나 스크롤 영역에 맞춰 크기를 정할 때는 `containerRelativeFrame`을 먼저 검토한다.
+사용자가 공유한 [containerRelativeFrame 소개 글](https://medium.com/@euijjang97/swiftui-containerrelativeframe-a-new-layout-solution-to-replace-geometryreader-7401c3cd1ff8)의
+방법처럼 컨테이너에 대한 크기 규칙을 선언하고 측정값을 상태에 저장해 다시 배치하지 않는다.
+`GeometryReader` 금지는 이 프로젝트의 규약이며 Apple의 폐기·비권장 선언을 뜻하지 않는다.
+API 교체만으로 성능이 항상 좋아진다고 가정하지 않는다.
+
+`containerRelativeFrame`은 macOS 14 이상에서 제공되므로 이 앱의 macOS 26 타깃에서 사용할 수
+있다. 기준은 가장 가까운 **지원 컨테이너**다. macOS 창, `NavigationSplitView`의 열,
+`NavigationStack`, `TabView`의 탭, `ScrollView`·`List`가 여기에 해당한다.
+`HStack`·`VStack` 자체는 기준 컨테이너가 아니므로 단순히 바로 위 부모의 크기라고 생각하면
+안 된다. 전달되는 길이에서는 해당 컨테이너의 safe area inset이 차감된다.
+[Apple API 문서](https://developer.apple.com/documentation/swiftui/view/containerrelativeframe(_:alignment:_:))
+
+클로저의 `length`는 선택한 축에서 사용할 컨테이너 길이이고 `axis`는 계산 중인 축이다.
+비율과 최소·최대폭을 함께 정할 수 있다. 다음 수치는 사용 예시이며 화면별 시안에 맞춰 정한다.
+
+```swift
+Rectangle()
+    .fill(UMCColor.Semantic.backgroundBrandWeak)
+    .containerRelativeFrame(.horizontal) { length, _ in
+        min(length, max(320, min(length * 0.4, 576)))
+    }
+    .frame(height: UMCSpacing.value64)
+```
+
+여러 항목을 같은 간격으로 배치할 때는 `count`로 컨테이너를 나눌 칸 수를, `span`으로 한 항목이
+차지할 칸 수를 정한다. `spacing`은 칸 사이 간격 계산에 쓰인다. 실제 스택의 간격과 같은 값을
+사용해야 의도한 배치가 나온다. 아래 예시는 가로 스크롤 영역을 네 칸으로 보고 각 항목을 한 칸
+너비로 배치한다.
+[Apple count·span API 문서](https://developer.apple.com/documentation/swiftui/view/containerrelativeframe(_:count:span:spacing:alignment:))
+
+```swift
+ScrollView(.horizontal) {
+    HStack(spacing: UMCSpacing.value16) {
+        ForEach(0..<4) { _ in
+            RoundedRectangle(cornerRadius: UMCRadius.value12)
+                .fill(UMCColor.Semantic.backgroundBrandWeak)
+                .containerRelativeFrame(
+                    .horizontal, count: 4, span: 1, spacing: UMCSpacing.value16
+                )
+                .frame(height: UMCSpacing.value64)
+        }
+    }
+}
+```
+
+컨테이너에 붙인 `overlay`·`background` 안에서는 장식 대상 컨테이너를 건너뛰고 그 상위
+컨테이너를 기준으로 삼을 수 있다. 스크롤 내부 항목과 스크롤 바깥의 장식이 같은 너비를 받는다고
+가정하지 말고 modifier 위치와 지원 컨테이너를 확인한다. 창 기준 동작은 실제 `NSWindow`에
+호스팅해서 확인한다. 창 컨테이너가 없는 렌더링만으로 창 크기 변경 동작을 판정하지 않는다.
+
+기본 스택·`frame`·정렬·스크롤 API로 해결하고 이들로 표현하기 어려운 배치에만 `Layout`을
+사용한다. `GeometryReader`를 배경에 숨기거나 측정값을 `State`·`Binding`·`PreferenceKey`로
+보낸 뒤 프레임에 되돌리는 구현은 허용하지 않는다.
+
 ## 공용 체크박스와 Feature 컴포넌트
 
 현재 `CoreUIComponents`의 실제 공용 스타일은 `UMCCheckboxStyle`이다.

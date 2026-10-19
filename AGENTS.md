@@ -92,6 +92,14 @@ View ←→ ViewModel(@Observable) → UseCase(Protocol) → Repository → Data
     원본이 벡터면 벡터 정보를 유지하고 Asset Catalog의 `preserves-vector-representation`을 켠다.
     PNG의 확장자만 PDF로 바꾸지 않는다. AppIcon·문서·스크린샷·DMG 그래픽은 각 용도에 맞는 포맷을 따른다.
 
+12. **`GeometryReader` 사용 금지** — 화면·컴포넌트의 크기 계산과 배치를 위해 사용하지 않는다.
+    `background`·`overlay`에 숨겨 크기를 측정하는 방식도 금지한다. 창·스크롤 컨테이너에
+    상대적인 크기는 `containerRelativeFrame`을 우선하고, SwiftUI 기본 레이아웃과
+    `frame`·정렬·스크롤 API를 함께 사용한다. 기본 API로 표현하기 어려운 배치에만
+    `Layout` 프로토콜의 제안 크기와 하위 뷰 배치를 사용한다. 측정값을
+    `State`·`Binding`·`PreferenceKey` 등으로 전달한 뒤 다시 프레임에 반영하는 우회도 금지한다.
+    지원 컨테이너와 예시는 [디자인 시스템 가이드](docs/Codex/design-system.md#창-크기에-맞춘-레이아웃)를 따른다.
+
 ## 코딩 스타일 (요약)
 
 - 들여쓰기 4 spaces(탭 금지) · 줄 길이 최대 99자 · 외부 불필요 상태는 `private`

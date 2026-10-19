@@ -52,6 +52,14 @@ enum AuthScreen: String, CaseIterable, Identifiable {
         }
     }
 
+    var maximumContentWidth: CGFloat {
+        switch self {
+        case .signup, .passwordReset: 1080
+        case .emailLogin, .credentialsError: 800
+        default: contentWidth
+        }
+    }
+
     var updateStep: Int? {
         switch self {
         case .updateDownloading: 1
