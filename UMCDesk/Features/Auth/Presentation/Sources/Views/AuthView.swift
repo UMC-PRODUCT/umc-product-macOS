@@ -152,7 +152,7 @@ private struct AuthBrandPanel: View {
                     .fixedSize(horizontal: false, vertical: true)
                 Text("- \(author)")
                     .contentTransition(.opacity)
-                    .umcTypography(.title4Regular)
+                    .umcTypography(.title2Regular)
             }
             .accessibilityElement(children: .combine)
 
@@ -165,7 +165,7 @@ private struct AuthBrandPanel: View {
                     .accessibilityHidden(true)
                 Text(category)
                     .contentTransition(.opacity)
-                    .umcTypography(.bodyRegular)
+                    .umcTypography(.headlineRegular)
             }
         }
         .foregroundStyle(UMCColor.Semantic.textInverse)

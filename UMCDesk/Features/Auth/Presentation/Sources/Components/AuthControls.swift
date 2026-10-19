@@ -20,8 +20,8 @@ struct AuthButton: View {
     var body: some View {
         Button(action: action) {
             Text(title)
-                .umcTypography(.title4Regular)
-                .frame(maxWidth: .infinity, minHeight: 48)
+                .umcTypography(.title3Regular)
+                .frame(maxWidth: .infinity, minHeight: 50)
                 .contentShape(.capsule)
         }
         .buttonStyle(AuthButtonStyle(kind: kind))
@@ -38,10 +38,7 @@ private struct AuthButtonStyle: ButtonStyle {
             .foregroundStyle(foreground)
             .background(background, in: .capsule)
             .overlay {
-                Capsule().strokeBorder(
-                    kind == .secondary ? UMCColor.Semantic.borderNeutralWeaker100 : .clear,
-                    lineWidth: 1
-                )
+                Capsule().strokeBorder(border, lineWidth: 1)
             }
             .modifier(AuthPressFeedback(isPressed: configuration.isPressed))
             .animation(AuthMotion.animation(reduceMotion: reduceMotion, duration: 0.16),
@@ -49,24 +46,35 @@ private struct AuthButtonStyle: ButtonStyle {
     }
 
     private var foreground: Color {
-        guard isEnabled else { return UMCColor.Semantic.textDisabled }
+        guard isEnabled else { return UMCColor.Semantic.textInverse }
         switch kind {
-        case .primary, .destructive: return UMCColor.Semantic.textInverse
+        case .primary: return UMCColor.Semantic.textInverse
+        case .destructive: return UMCColor.Custom.backgroundTextWhite
         case .brand: return UMCColor.Semantic.textBrandDefault
         case .destructiveQuiet: return UMCColor.Semantic.textError
         case .tertiary: return UMCColor.Semantic.textNeutralWeak500
-        case .secondary: return UMCColor.Semantic.textNeutralDefault
+        case .secondary: return UMCColor.Semantic.textNeutralStrong800
         }
     }
 
     private var background: Color {
-        guard isEnabled else { return UMCColor.Semantic.fillNeutralDisabled }
+        guard isEnabled else { return UMCColor.Semantic.fillNeutralInverseWeak400 }
         switch kind {
         case .primary: return UMCColor.Primitives.black
-        case .secondary, .tertiary: return .clear
+        case .secondary: return UMCColor.Custom.backgroundSurfaceWhite
+        case .tertiary: return .clear
         case .brand: return UMCColor.Semantic.fillPrimaryWeaker50
         case .destructive: return UMCColor.Semantic.fillErrorStrong500
         case .destructiveQuiet: return UMCColor.Semantic.fillErrorWeak50
+        }
+    }
+
+    private var border: Color {
+        switch kind {
+        case .secondary: UMCColor.Semantic.borderNeutralWeak200
+        case .brand: UMCColor.Semantic.borderPrimaryWeaker100
+        case .destructiveQuiet: UMCColor.Semantic.borderErrorWeaker100
+        default: .clear
         }
     }
 }
@@ -110,7 +118,7 @@ struct AuthTextField: View {
     var body: some View {
         VStack(alignment: .leading, spacing: UMCSpacing.value4) {
             Text(title)
-                .umcTypography(.title4Regular)
+                .umcTypography(.title3Regular)
                 .foregroundStyle(UMCColor.Semantic.textNeutralDefault)
             HStack(spacing: UMCSpacing.value8) {
                 Group {
@@ -121,7 +129,7 @@ struct AuthTextField: View {
                     }
                 }
                 .textFieldStyle(.plain)
-                .umcTypography(.headlineRegular)
+                .umcTypography(.title3Regular)
                 .foregroundStyle(isDisabled ? UMCColor.Semantic.textDisabled :
                     UMCColor.Semantic.textNeutralDefault)
                 .focused(focus, equals: field)
@@ -157,10 +165,10 @@ struct AuthTextField: View {
             }
             .padding(.leading, UMCSpacing.value16)
             .padding(.trailing, UMCSpacing.value12)
-            .frame(minHeight: 48)
+            .frame(minHeight: 50)
             .background(
-                isDisabled ? UMCColor.Semantic.fillNeutralWeak75 :
-                    UMCColor.Custom.backgroundSurface,
+                isDisabled ? UMCColor.Semantic.fillNeutralDisabled :
+                    UMCColor.Custom.backgroundSurfaceWhite,
                 in: .rect(cornerRadius: UMCRadius.value12)
             )
             .overlay {
@@ -175,7 +183,7 @@ struct AuthTextField: View {
     }
 
     private var borderColor: Color {
-        if isDisabled { return UMCColor.Semantic.borderDisabled }
+        if isDisabled { return UMCColor.Semantic.borderNeutralMedium300 }
         if isInvalid { return UMCColor.Semantic.borderErrorStrong500 }
         if focus.wrappedValue == field { return UMCColor.Semantic.borderPrimaryStrong500 }
         return UMCColor.Semantic.borderNeutralMedium300
@@ -187,6 +195,7 @@ struct AuthHeading: View {
     let subtitle: String
     var isLeading = false
     var icon: AuthStatusIcon?
+    var subtitleTypography: UMCTypography = .title3Regular
 
     var body: some View {
         VStack(alignment: isLeading ? .leading : .center, spacing: UMCSpacing.value24) {
@@ -200,7 +209,7 @@ struct AuthHeading: View {
                     .accessibilityAddTraits(.isHeader)
                 if !subtitle.isEmpty {
                     Text(subtitle)
-                        .umcTypography(.title4Regular)
+                        .umcTypography(subtitleTypography)
                         .foregroundStyle(UMCColor.Semantic.textNeutralMedium600)
                 }
             }
@@ -215,7 +224,7 @@ struct AuthBanner: View {
     let title: String
     var message = ""
     var isError = false
-    var isBrand = false
+    var isLoginStatus = false
     var symbol: String?
 
     var body: some View {
@@ -226,19 +235,20 @@ struct AuthBanner: View {
                     .frame(width: 32, height: 32)
                     .accessibilityHidden(true)
             }
-            VStack(alignment: .leading, spacing: UMCSpacing.value8) {
+            VStack(alignment: .leading, spacing: UMCSpacing.value4) {
                 Text(title)
-                    .umcTypography(symbol == nil ? .bodyRegular : .headlineRegular)
+                    .umcTypography(isLoginStatus ? .title3Bold : .title4Regular)
                     .foregroundStyle(
                         isError ? UMCColor.Semantic.textError :
-                            isBrand ? UMCColor.Semantic.textBrandDefault :
                             symbol == nil ? UMCColor.Semantic.textNeutralDefault :
                             UMCColor.Semantic.textNeutralWeak500
                     )
                 if !message.isEmpty {
                     Text(message)
-                        .umcTypography(.bodyRegular)
-                        .foregroundStyle(UMCColor.Semantic.textNeutralWeak500)
+                        .umcTypography(isLoginStatus ? .title4Regular : .headlineRegular)
+                        .foregroundStyle(isLoginStatus ?
+                            UMCColor.Semantic.textNeutralMedium600 :
+                            UMCColor.Semantic.textNeutralWeak500)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -247,10 +257,16 @@ struct AuthBanner: View {
         .padding(.horizontal, symbol == nil ? UMCSpacing.value16 : UMCSpacing.value12)
         .padding(.vertical, symbol == nil ? UMCSpacing.value16 : UMCSpacing.value8)
         .background(
-            isBrand ? UMCColor.Semantic.backgroundBrandWeak :
-                UMCColor.Semantic.backgroundNeutralMedium,
+            isLoginStatus ? .clear :
+                isError ? UMCColor.Semantic.fillErrorWeak50 :
+                UMCColor.Semantic.fillNeutralMedium100,
             in: .rect(cornerRadius: UMCRadius.value12)
         )
+        .overlay {
+            RoundedRectangle(cornerRadius: UMCRadius.value12)
+                .strokeBorder(isLoginStatus ?
+                    UMCColor.Semantic.borderNeutralWeak200 : .clear)
+        }
         .accessibilityElement(children: .combine)
     }
 }

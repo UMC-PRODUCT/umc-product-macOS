@@ -39,20 +39,11 @@ enum AuthStatusIcon: CaseIterable {
         }
     }
 
-    var glyphSize: CGFloat {
-        switch self {
-        case .sessionExpired, .update, .updateError, .withdrawal: 40
-        case .passwordComplete: 48
-        default: 44
-        }
-    }
-
-    // SF Symbols' optical margins otherwise shift these glyphs inside a centered frame.
+    // Badge symbols need optical correction inside the centered 30pt native font frame.
     var centeringOffset: CGSize {
         switch self {
-        case .loginFailure, .memberFailure: CGSize(width: -1, height: 1.25)
-        case .signupComplete, .challengerPending: CGSize(width: 1.5, height: 1.5)
-        case .logout: CGSize(width: 1.5, height: 0)
+        case .loginFailure, .memberFailure: CGSize(width: 2.5, height: 1.25)
+        case .signupComplete, .challengerPending: CGSize(width: -3.5, height: 0)
         default: .zero
         }
     }
@@ -83,11 +74,9 @@ struct AuthStatusIconView: View {
         ZStack {
             Circle().fill(icon.background)
             animatedSymbol
-                .scaledToFit()
                 .symbolRenderingMode(.monochrome)
-                .font(.system(size: 40, weight: .medium))
+                .font(.system(size: 30, weight: .medium))
                 .foregroundStyle(icon.foreground)
-                .frame(width: icon.glyphSize, height: icon.glyphSize)
                 .offset(icon.centeringOffset)
         }
         .frame(width: 80, height: 80)
@@ -100,7 +89,7 @@ struct AuthStatusIconView: View {
 
     @ViewBuilder
     private var animatedSymbol: some View {
-        let image = Image(systemName: icon.systemName).resizable()
+        let image = Image(systemName: icon.systemName)
             .symbolEffectsRemoved(reduceMotion)
         switch icon {
         case .signupComplete, .passwordComplete:

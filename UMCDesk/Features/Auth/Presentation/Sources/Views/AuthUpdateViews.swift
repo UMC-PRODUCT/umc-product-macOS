@@ -17,8 +17,10 @@ struct AuthUpdateProgress: View {
             VStack(alignment: .leading, spacing: UMCSpacing.value24) {
                 if let step = screen.updateStep {
                     HStack(spacing: UMCSpacing.value4) {
-                        Text(String(format: "STEP %02d", step)).umcTypography(.headlineBold)
-                        Text("/ 05").umcTypography(.headlineRegular)
+                        Text(String(format: "STEP %02d", step)).umcTypography(.title4Bold)
+                        Text("/ 05")
+                            .umcTypography(.title4Regular)
+                            .foregroundStyle(UMCColor.Semantic.textBrandDisabled)
                     }
                     .foregroundStyle(UMCColor.Semantic.textBrandDefault)
                     .padding(.horizontal, UMCSpacing.value12)
@@ -31,7 +33,9 @@ struct AuthUpdateProgress: View {
                 AuthHeading(
                     title: screen.copy.title,
                     subtitle: screen.copy.subtitle,
-                    isLeading: true
+                    isLeading: true,
+                    subtitleTypography: screen == .updateDownloading ?
+                        .title4Regular : .title3Regular
                 )
             }
             VStack(spacing: UMCSpacing.value24) {
@@ -76,27 +80,27 @@ private struct AuthUpdateCard: View {
     let title: String
     var message = ""
     var progress: Double?
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        VStack(alignment: .leading, spacing: UMCSpacing.value16) {
+        VStack(alignment: .leading, spacing: progress == nil ?
+            UMCSpacing.value12 : UMCSpacing.value16) {
             HStack(spacing: UMCSpacing.value12) {
-                Group {
-                    if progress != nil {
-                        Image(systemName: "arrow.down")
-                            .font(.system(size: 20))
-                    } else {
-                        ProgressView().controlSize(.small)
-                    }
-                }
-                .foregroundStyle(UMCColor.Semantic.iconBrandMedium500)
-                .frame(width: 40, height: 40)
-                .background(
-                    UMCColor.Semantic.backgroundBrandWeak,
-                    in: .rect(cornerRadius: UMCRadius.value8)
-                )
-                .accessibilityHidden(true)
+                Image(systemName: progress == nil ? "progress.indicator" : "arrow.down")
+                    .font(.system(size: 15, weight: .medium))
+                    .symbolEffect(.rotate, options: .repeating,
+                        isActive: progress == nil && !reduceMotion)
+                    .symbolEffectsRemoved(reduceMotion)
+                    .foregroundStyle(UMCColor.Semantic.iconBrandMedium500)
+                    .frame(width: 40, height: 40)
+                    .background(
+                        UMCColor.Semantic.backgroundBrandWeak,
+                        in: .rect(cornerRadius: UMCRadius.value8)
+                    )
+                    .accessibilityHidden(true)
                 Text(title)
-                    .umcTypography(.title4Regular)
+                    .umcTypography(.title3Regular)
+                    .foregroundStyle(UMCColor.Semantic.textNeutralDefault)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 if let progress {
                     Text(progress, format: .percent.precision(.fractionLength(0)))
@@ -111,14 +115,14 @@ private struct AuthUpdateCard: View {
                     .accessibilityLabel("업데이트 다운로드 진행률")
             } else {
                 Text(message)
-                    .umcTypography(.headlineRegular)
+                    .umcTypography(.title4Regular)
                     .foregroundStyle(UMCColor.Semantic.textNeutralMedium600)
             }
         }
         .padding(.horizontal, UMCSpacing.value16)
         .padding(.top, UMCSpacing.value16)
         .padding(.bottom, UMCSpacing.value20)
-        .background(UMCColor.Custom.backgroundSurface, in: .rect(cornerRadius: UMCRadius.value12))
+        .background(UMCColor.Custom.backgroundDefault, in: .rect(cornerRadius: UMCRadius.value12))
         .overlay {
             RoundedRectangle(cornerRadius: UMCRadius.value12)
                 .strokeBorder(UMCColor.Semantic.borderNeutralWeak200)

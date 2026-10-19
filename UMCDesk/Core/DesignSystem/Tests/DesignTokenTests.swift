@@ -21,6 +21,20 @@ struct DesignTokenTests {
         (UMCColor.Semantic.fillPrimaryWeaker50, [CGFloat(8) / 255, 38 / 255, 36 / 255, 1]),
         (UMCColor.Semantic.iconBrandMedium500, [CGFloat(69) / 255, 189 / 255, 180 / 255, 1]),
         (UMCColor.Semantic.borderNeutralMedium300, [CGFloat(56) / 255, 59 / 255, 59 / 255, 1]),
+        (UMCColor.Semantic.fillNeutralDisabled, [CGFloat(29) / 255, 32 / 255, 32 / 255, 1]),
+        (UMCColor.Primitives.yellow900, [CGFloat(252) / 255, 234 / 255, 198 / 255, 1]),
+        (UMCColor.Primitives.violet50, [CGFloat(64) / 255, 48 / 255, 79 / 255, 1]),
+        (UMCColor.Primitives.violet500, [CGFloat(169) / 255, 111 / 255, 235 / 255, 1]),
+        (UMCColor.Primitives.purple50, [CGFloat(41) / 255, 36 / 255, 53 / 255, 1]),
+        (UMCColor.Primitives.purple500, [CGFloat(148) / 255, 117 / 255, 226 / 255, 1]),
+        (UMCColor.Primitives.pink50, [CGFloat(64) / 255, 36 / 255, 47 / 255, 1]),
+        (UMCColor.Primitives.pink500, [CGFloat(231) / 255, 95 / 255, 159 / 255, 1]),
+        (UMCColor.Primitives.cobalt50, [CGFloat(32) / 255, 42 / 255, 66 / 255, 1]),
+        (UMCColor.Primitives.cobalt500, [CGFloat(100) / 255, 132 / 255, 245 / 255, 1]),
+        (UMCColor.Primitives.blue50, [CGFloat(31) / 255, 43 / 255, 59 / 255, 1]),
+        (UMCColor.Primitives.blue500, [CGFloat(91) / 255, 154 / 255, 245 / 255, 1]),
+        (UMCColor.Primitives.brown50, [CGFloat(48) / 255, 42 / 255, 37 / 255, 1]),
+        (UMCColor.Primitives.brown500, [CGFloat(185) / 255, 139 / 255, 98 / 255, 1]),
         (UMCColor.Custom.backgroundDefault, [CGFloat(23) / 255, 25 / 255, 25 / 255, 1]),
         (UMCColor.Custom.backgroundAppShell, [CGFloat(15) / 255, 16 / 255, 16 / 255, 1]),
         (UMCColor.Custom.backgroundSurface, [CGFloat(29) / 255, 32 / 255, 32 / 255, 1]),
@@ -85,7 +99,6 @@ struct DesignTokenTests {
     }
 
     @Test("Library aliases retain their identical Light and Dark values", arguments: [
-        UMCColor.Semantic.fillNeutralDisabled,
         UMCColor.Semantic.fillNeutralStronger300,
         UMCColor.Semantic.fillNeutralStrongerHoverPressed,
     ])
@@ -96,6 +109,25 @@ struct DesignTokenTests {
         #expect(abs(light.greenComponent - dark.greenComponent) < 0.00001)
         #expect(abs(light.blueComponent - dark.blueComponent) < 0.00001)
         #expect(light.alphaComponent == dark.alphaComponent)
+    }
+
+    @Test("Custom surfaces preserve their Light and Dark Figma values", arguments: [
+        (UMCColor.Custom.backgroundSurfaceWhite, [255, 255, 255, 255], [29, 32, 32, 255]),
+        (UMCColor.Custom.backgroundSurfaceGreyWeaker, [251, 252, 252, 255], [29, 32, 32, 255]),
+        (UMCColor.Custom.backgroundSurfaceGreyWeak, [239, 240, 240, 255], [56, 59, 59, 255]),
+        (UMCColor.Custom.backgroundTagGrey, [239, 240, 240, 255], [56, 59, 59, 255]),
+        (UMCColor.Custom.backgroundDimmed, [15, 16, 16, 51], [0, 0, 0, 102]),
+        (UMCColor.Custom.backgroundTextWhite, [255, 255, 255, 255], [255, 255, 255, 255]),
+    ])
+    func customSurfacesPreserveAppearances(color: Color, light: [Int], dark: [Int]) throws {
+        for (appearance, expected) in [(NSAppearance.Name.aqua, light), (.darkAqua, dark)] {
+            let color = try resolvedColor(color, appearance: appearance)
+            let actual = [color.redComponent, color.greenComponent,
+                color.blueComponent, color.alphaComponent]
+            for (actual, expected) in zip(actual, expected) {
+                #expect(abs(actual - CGFloat(expected) / 255) < 0.00001)
+            }
+        }
     }
 
     private func resolvedColor(
