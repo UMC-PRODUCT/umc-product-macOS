@@ -24,11 +24,11 @@ struct AuthLoginSelection: View {
                         AuthBanner(
                             title: "\(viewModel.socialProvider) 로그인 중⋯",
                             message: "열린 인증 창에서 로그인을 마쳐 주세요.",
-                            isBrand: true
+                            isLoginStatus: true
                         )
                         Button("로그인 취소") { viewModel.navigate(to: .loginSelection) }
                             .buttonStyle(.plain)
-                            .umcTypography(.headlineRegular)
+                            .umcTypography(.title4Regular)
                             .foregroundStyle(UMCColor.Semantic.textBrandDefault)
                     }
                 }
@@ -64,7 +64,7 @@ struct AuthLoginSelection: View {
                         Text("로 문의해 주세요.")
                     }
                 }
-                .umcTypography(.bodyRegular)
+                .umcTypography(.headlineRegular)
                 .foregroundStyle(UMCColor.Semantic.textNeutralWeak500)
             }
         }
@@ -122,16 +122,17 @@ private struct AuthSocialButton: View {
                             .resizable().scaledToFit().frame(width: 26, height: 26)
                     case .email:
                         Image(systemName: "envelope")
-                            .font(.system(size: 26, weight: .medium))
+                            .font(.system(size: 18, weight: .medium))
                     }
                 }
                 .frame(width: 48, height: 48)
                 .accessibilityHidden(true)
                 Text(provider.title)
-                    .umcTypography(.title4Regular)
+                    .umcTypography(.title3Regular)
                     .frame(maxWidth: .infinity)
             }
             .padding(.horizontal, UMCSpacing.value12)
+            .frame(minHeight: 50)
             .foregroundStyle(provider.foreground)
             .background(provider.background, in: .capsule)
             .contentShape(.capsule)
@@ -201,12 +202,12 @@ struct AuthSupportButton: View {
         Button { showsNotice = true } label: {
             Text(isInline ? "고객센터" : "고객센터 문의")
                 .underline(isInline)
-                .umcTypography(isInline ? .bodyRegular : .title4Regular)
+                .umcTypography(isInline ? .headlineRegular : .title3Regular)
                 .foregroundStyle(
                     isInline ? UMCColor.Semantic.textBrandDefault :
                         UMCColor.Semantic.textNeutralWeak500
                 )
-                .frame(minHeight: isInline ? 17 : 48)
+                .frame(minHeight: isInline ? 20 : 50)
         }
         .buttonStyle(.plain)
         .alert("고객센터 연결 준비 중", isPresented: $showsNotice) {

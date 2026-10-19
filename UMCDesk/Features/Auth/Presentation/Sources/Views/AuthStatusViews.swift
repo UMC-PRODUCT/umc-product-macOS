@@ -17,7 +17,9 @@ struct AuthStatusPage: View {
             AuthHeading(
                 title: screen.copy.title,
                 subtitle: screen.copy.subtitle,
-                icon: screen.copy.icon
+                icon: screen.copy.icon,
+                subtitleTypography: screen == .maintenance || screen == .updateAvailable ?
+                    .title4Regular : .title3Regular
             )
             VStack(spacing: UMCSpacing.value24) {
                 AuthStatusBanner(screen: screen)
@@ -89,7 +91,7 @@ private struct AuthStatusActions: View {
             switch screen {
             case .offline:
                 AuthButton(title: "다시 확인") { viewModel.navigate(to: .sessionChecking) }
-                AuthButton(title: "고객센터 문의", kind: .secondary) { showsSupport = true }
+                AuthButton(title: "고객센터 문의", kind: .tertiary) { showsSupport = true }
             case .loginFailure:
                 AuthButton(title: "다시 확인") { viewModel.navigate(to: .sessionChecking) }
                 AuthButton(title: "다른 로그인 방법 선택", kind: .secondary) {
@@ -224,7 +226,7 @@ struct AuthChallengerCode: View {
                         )
                     } else {
                         Text("이름, 학교는 회원가입 때 입력한 정보와 일치해야 해요.")
-                            .umcTypography(.bodyRegular)
+                            .umcTypography(.headlineRegular)
                             .foregroundStyle(UMCColor.Semantic.textNeutralWeak500)
                     }
                 }

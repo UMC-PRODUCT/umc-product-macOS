@@ -22,6 +22,7 @@ final class AuthFormState {
             if email != oldValue {
                 emailVerification = .idle
                 verificationCode = ""
+                showsEmailError = false
             }
         }
     }
@@ -36,11 +37,29 @@ final class AuthFormState {
     var showsPassword = false
     var showsPasswordConfirmation = false
     var showsSchoolPicker = false
+    var showsEmailError = false
     var showsPasswordError = false
     var initialFocus: AuthField?
 
     var canRequestCode: Bool {
         email.wholeMatch(of: /[^\s@]+@[^\s@.]+(?:\.[^\s@.]+)+/) != nil
+    }
+
+    var canSubmitEmailVerification: Bool {
+        !email.isEmpty && emailVerification != .verified
+    }
+
+    @discardableResult
+    func requestVerificationCode() -> Bool {
+        guard canSubmitEmailVerification else { return false }
+        guard canRequestCode else {
+            showsEmailError = true
+            return false
+        }
+        showsEmailError = false
+        verificationCode = ""
+        emailVerification = .sent
+        return true
     }
 
     var passwordsMatchRequirements: Bool {
@@ -98,6 +117,7 @@ final class AuthViewModel {
             form.password = ""
             form.passwordConfirmation = ""
             form.showsPasswordError = false
+            form.showsEmailError = false
         }
         self.screen = screen
         quoteOverride = nil

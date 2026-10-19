@@ -110,16 +110,23 @@ private struct AuthEmailVerificationFields: View {
                     "이메일", placeholder: "이메일을 입력해 주세요.",
                     text: $form.email, field: .email, focus: focus,
                     isDisabled: form.emailVerification == .verified,
+                    isInvalid: form.showsEmailError,
                     showsClear: focus.wrappedValue == .email
                 )
                 AuthButton(title: buttonTitle) {
-                    // Local display state only; email delivery is connected in a later task.
-                    form.verificationCode = ""
-                    form.emailVerification = .sent
-                    focus.wrappedValue = .verificationCode
+                    if form.requestVerificationCode() {
+                        focus.wrappedValue = .verificationCode
+                    } else {
+                        focus.wrappedValue = .email
+                    }
                 }
                 .frame(width: 183)
-                .disabled(!form.canRequestCode || form.emailVerification == .verified)
+                .disabled(!form.canSubmitEmailVerification)
+            }
+            if form.showsEmailError {
+                Text("올바른 이메일 주소를 입력해 주세요.")
+                    .umcTypography(.headlineRegular)
+                    .foregroundStyle(UMCColor.Semantic.textError)
             }
             if form.emailVerification == .sent || form.emailVerification == .invalid {
                 VStack(alignment: .leading, spacing: UMCSpacing.value8) {
@@ -147,7 +154,7 @@ private struct AuthEmailVerificationFields: View {
                     }
                     if form.emailVerification == .invalid {
                         Text("최신 메일의 번호를 입력하세요. 재전송 시 이전 번호는 만료돼요.")
-                            .umcTypography(.bodyRegular)
+                            .umcTypography(.headlineRegular)
                             .foregroundStyle(UMCColor.Semantic.textError)
                     }
                 }
@@ -193,7 +200,7 @@ private struct AuthPasswordFields: View {
             }
             if form.showsPasswordError {
                 Text("입력 조건을 충족하지 않거나 비밀번호가 일치하지 않아요.")
-                    .umcTypography(.bodyRegular)
+                    .umcTypography(.headlineRegular)
                     .foregroundStyle(UMCColor.Semantic.textError)
                     .transition(.opacity)
             }
@@ -210,27 +217,29 @@ private struct AuthSchoolPicker: View {
     var body: some View {
         VStack(alignment: .leading, spacing: UMCSpacing.value4) {
             Text("학교")
-                .umcTypography(.title4Regular)
+                .umcTypography(.title3Regular)
             Button { form.showsSchoolPicker.toggle() } label: {
                 HStack {
                     Text(form.school.isEmpty ? "학교를 선택해 주세요." : form.school)
-                        .umcTypography(.headlineRegular)
+                        .umcTypography(.title3Regular)
                         .foregroundStyle(
                             form.school.isEmpty ? UMCColor.Semantic.textPlaceholder :
                                 UMCColor.Semantic.textNeutralDefault
                         )
                     Spacer()
                     Image(systemName: "chevron.down")
+                        .font(.system(size: 16, weight: .medium))
                         .foregroundStyle(UMCColor.Semantic.iconNeutralMedium500)
                         .frame(width: 32)
                         .rotationEffect(.degrees(form.showsSchoolPicker ? 180 : 0))
                 }
                 .padding(.horizontal, UMCSpacing.value16)
-                .frame(minHeight: 48)
+                .frame(minHeight: 50)
                 .contentShape(.rect)
             }
             .buttonStyle(AuthPressStyle())
-            .background(UMCColor.Custom.backgroundSurface)
+            .background(UMCColor.Custom.backgroundSurfaceWhite,
+                in: .rect(cornerRadius: UMCRadius.value12))
             .overlay {
                 RoundedRectangle(cornerRadius: UMCRadius.value12)
                     .strokeBorder(UMCColor.Semantic.borderNeutralMedium300)
@@ -240,7 +249,7 @@ private struct AuthSchoolPicker: View {
             .overlay(alignment: .top) {
                 if form.showsSchoolPicker {
                     AuthSchoolOptions(form: form)
-                        .padding(.top, 52)
+                        .padding(.top, 54)
                         .transition(AuthMotion.dropdownTransition(reduceMotion: reduceMotion))
                 }
             }
@@ -255,6 +264,7 @@ private struct AuthSchoolPicker: View {
 
 private struct AuthSchoolOptions: View {
     @Bindable var form: AuthFormState
+    @State private var hoveredSchool: String?
 
     var body: some View {
         ScrollView {
@@ -266,18 +276,23 @@ private struct AuthSchoolOptions: View {
                         form.showsSchoolPicker = false
                     } label: {
                         Text(school.label)
-                            .umcTypography(.headlineRegular)
-                            .frame(maxWidth: .infinity, minHeight: 40, alignment: .leading)
+                            .umcTypography(.title4Regular)
+                            .frame(maxWidth: .infinity, minHeight: 48, alignment: .leading)
                             .padding(.horizontal, UMCSpacing.value16)
+                            .background(hoveredSchool == school.id ?
+                                UMCColor.Primitives.tealGrey75 : UMCColor.Custom.backgroundDefault,
+                                in: .rect(cornerRadius: UMCRadius.value8))
                             .contentShape(.rect)
                     }
                     .buttonStyle(.plain)
+                    .onHover { hoveredSchool = $0 ? school.id : nil }
                 }
                 #endif
             }
         }
-        .frame(height: 240)
-        .background(UMCColor.Custom.backgroundSurface, in: .rect(cornerRadius: UMCRadius.value12))
+        .padding(UMCSpacing.value4)
+        .frame(height: 250)
+        .background(UMCColor.Custom.backgroundDefault, in: .rect(cornerRadius: UMCRadius.value12))
         .overlay {
             RoundedRectangle(cornerRadius: UMCRadius.value12)
                 .strokeBorder(UMCColor.Semantic.borderNeutralWeak200)
@@ -309,7 +324,7 @@ private struct AuthTermsAgreement: View {
             ) { selectedTerm = "개인정보 처리방침" }
         }
         .toggleStyle(UMCCheckboxStyle())
-        .umcTypography(.title4Regular)
+        .umcTypography(.title3Regular)
         .foregroundStyle(UMCColor.Semantic.textNeutralStrong800)
         .alert(selectedTerm ?? "", isPresented: Binding(
             get: { selectedTerm != nil }, set: { if !$0 { selectedTerm = nil } }

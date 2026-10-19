@@ -127,6 +127,29 @@ struct AuthFormTests {
         #expect(form.canRequestCode)
     }
 
+    @Test("Email submission is enabled by input while invalid addresses cannot send a code")
+    func emailSubmissionValidatesBeforeSending() {
+        let form = AuthFormState()
+        #expect(!form.canSubmitEmailVerification)
+        for email in ["member", "member@.", "member@example.", "   "] {
+            form.email = email
+            #expect(form.canSubmitEmailVerification)
+            #expect(!form.requestVerificationCode())
+            #expect(form.showsEmailError)
+            #expect(form.emailVerification == .idle)
+            #expect(!form.canRegister)
+            #expect(!form.canResetPassword)
+        }
+        form.email = "member@example.com"
+        #expect(!form.showsEmailError)
+        #expect(form.requestVerificationCode())
+        #expect(form.emailVerification == .sent)
+        form.emailVerification = .verified
+        #expect(!form.canSubmitEmailVerification)
+        #expect(!form.requestVerificationCode())
+        #expect(form.emailVerification == .verified)
+    }
+
     @Test("Changing an email clears its displayed verification state")
     func changingEmailClearsVerification() {
         let form = AuthFormState()

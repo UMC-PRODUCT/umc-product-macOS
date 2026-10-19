@@ -718,7 +718,32 @@ public enum UMCColor {
             "Custom/Background/App Shell", bundle: .module
         )
 
-        /// Custom/Background/Surface
-        public static let backgroundSurface = Color("Custom/Background/Surface", bundle: .module)
+        /// Custom/Background/Surface-White
+        public static let backgroundSurfaceWhite = Color(
+            "Custom/Background/Surface-White", bundle: .module
+        )
+
+        public static let backgroundSurface = backgroundSurfaceWhite
+
+        /// Custom/Background/Surface-Grey(Weaker)
+        public static let backgroundSurfaceGreyWeaker = Color(
+            "Custom/Background/Surface-Grey(Weaker)", bundle: .module
+        )
+
+        /// Custom/Background/Surface-Grey(Weak)
+        public static let backgroundSurfaceGreyWeak = Color(
+            "Custom/Background/Surface-Grey(Weak)", bundle: .module
+        )
+
+        /// Custom/Background/Tag-Grey
+        public static let backgroundTagGrey = Color("Custom/Background/Tag-Grey", bundle: .module)
+
+        /// Custom/Background/Dimmed
+        public static let backgroundDimmed = Color("Custom/Background/Dimmed", bundle: .module)
+
+        /// Custom/Background/Text-White
+        public static let backgroundTextWhite = Color(
+            "Custom/Background/Text-White", bundle: .module
+        )
     }
 }
