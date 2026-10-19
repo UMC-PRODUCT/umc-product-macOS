@@ -134,17 +134,30 @@ private struct AuthDownloadProgressStyle: ProgressViewStyle {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     func makeBody(configuration: Configuration) -> some View {
-        GeometryReader { geometry in
-            Capsule()
-                .fill(UMCColor.Semantic.fillNeutralWeak75)
-                .overlay(alignment: .leading) {
-                    Capsule()
-                        .fill(UMCColor.Semantic.iconBrandMedium500)
-                        .frame(width: geometry.size.width * (configuration.fractionCompleted ?? 0))
-                }
-        }
-        .frame(height: 5)
-        .animation(reduceMotion ? nil : .linear(duration: 0.08),
-            value: configuration.fractionCompleted)
+        Capsule()
+            .fill(UMCColor.Semantic.fillNeutralWeak75)
+            .overlay {
+                AuthDownloadProgressFill(fractionCompleted: configuration.fractionCompleted ?? 0)
+                    .fill(UMCColor.Semantic.iconBrandMedium500)
+            }
+            .frame(height: 5)
+            .animation(reduceMotion ? nil : .linear(duration: 0.08),
+                value: configuration.fractionCompleted)
+    }
+}
+
+struct AuthDownloadProgressFill: Shape {
+    var fractionCompleted: Double
+
+    var animatableData: Double {
+        get { fractionCompleted }
+        set { fractionCompleted = newValue }
+    }
+
+    func path(in rect: CGRect) -> Path {
+        let progress = fractionCompleted.isFinite ? min(max(fractionCompleted, 0), 1) : 0
+        return Capsule().path(in: CGRect(
+            x: rect.minX, y: rect.minY, width: rect.width * progress, height: rect.height
+        ))
     }
 }
