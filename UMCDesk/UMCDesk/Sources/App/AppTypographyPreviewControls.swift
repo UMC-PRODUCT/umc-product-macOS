@@ -1,5 +1,5 @@
 //
-//  AuthTypographyPreview.swift
+//  AppTypographyPreviewControls.swift
 //  AuthPresentation
 //
 //  Created by euijjang97 on 10/12/26.
@@ -10,27 +10,14 @@ import CoreDesignSystem
 import CoreUIComponents
 import SwiftUI
 
-struct AuthTypographyPreview: View {
+struct AppTypographyPreviewControls: View {
     // MARK: - Property
 
     @Binding var settings: UMCTypographyPreview
-    @State private var isPresented = false
 
     // MARK: - Body
 
     var body: some View {
-        Button {
-            isPresented.toggle()
-        } label: {
-            Label("타이포그래피 조절", systemImage: "textformat.size")
-        }
-        .help("글자 크기·굵기·자간·줄높이를 실시간으로 비교합니다.")
-        .popover(isPresented: $isPresented, arrowEdge: .bottom) {
-            controls
-        }
-    }
-
-    private var controls: some View {
         VStack(alignment: .leading, spacing: UMCSpacing.value16) {
             HStack {
                 Text("타이포그래피 조절")

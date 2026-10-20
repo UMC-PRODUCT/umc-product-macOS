@@ -23,18 +23,21 @@ struct SettingsAppearanceTests {
         for id in ["757:12600", "807:13303", "903:3596", "903:14091", "903:14321", "906:3869"] {
             let model = try #require(SettingsDesignPreview.makeViewModel(id: id,
                 preferences: preferences))
-            let host = NSHostingView(rootView: SettingsView(viewModel: model)
+            let controller = NSHostingController(rootView: SettingsView(viewModel: model)
                 .environment(\.colorScheme, scheme))
-            let window = NSWindow(contentRect: CGRect(origin: .zero, size: size),
-                styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
-                backing: .buffered, defer: false)
+            let window = NSWindow(contentViewController: controller)
+            window.styleMask = [.titled, .closable, .miniaturizable, .resizable]
+            window.toolbarStyle = .unifiedCompact
             window.titleVisibility = .hidden
-            window.titlebarAppearsTransparent = true
-            window.contentView = host
+            let host = controller.view
             window.setContentSize(size)
             host.layoutSubtreeIfNeeded()
             window.displayIfNeeded()
             #expect(host.bounds.size == size)
+            let toolbar = try #require(window.toolbar)
+            #expect(toolbar.isVisible)
+            #expect(window.toolbarStyle == .unifiedCompact)
+            #expect(!toolbar.items.isEmpty)
             for button in [NSWindow.ButtonType.closeButton, .miniaturizeButton, .zoomButton] {
                 #expect(window.standardWindowButton(button)?.isHidden == false)
             }
@@ -43,7 +46,7 @@ struct SettingsAppearanceTests {
                 let frame = host.convert(scroll.bounds, from: scroll)
                 return host.isFlipped ? frame.minY : host.bounds.height - frame.maxY
             }
-            #expect(topInsets.contains { $0 >= 72 && $0 <= 98 })
+            #expect(topInsets.contains { $0 >= 12 && $0 <= 40 })
             #expect(!descendants(in: host, type: NSScrollView.self).isEmpty)
             let fields = descendants(in: host, type: NSTextField.self).filter(\.isEditable)
             for field in fields {

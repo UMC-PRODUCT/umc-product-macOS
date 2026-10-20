@@ -17,6 +17,9 @@ import SettingsPresentation
 struct UMCDeskApp: App {
     @NSApplicationDelegateAdaptor(AppLifecycleDelegate.self) private var lifecycle
     private let dependencies = AppDependencies()
+    #if DEBUG || UMC_PRERELEASE
+    @State private var typographyPreview = UMCTypographyPreview()
+    #endif
 
     var body: some Scene {
         @Bindable var preferences = dependencies.settingsPreferences
@@ -27,12 +30,20 @@ struct UMCDeskApp: App {
                 .preferredColorScheme(preferences.theme.colorScheme)
                 .environment(\.umcBodyTextScale, preferences.bodyTextSize.scale)
                 .frame(minWidth: 1040, minHeight: 720)
+                #if DEBUG || UMC_PRERELEASE
+                .environment(\.umcTypographyPreview, typographyPreview)
+                #endif
                 .onAppear { lifecycle.preferences = preferences }
         }
         .defaultSize(width: 1440, height: 960)
-        .windowStyle(.hiddenTitleBar)
-        .windowToolbarStyle(.unified)
-        .commands { AppSettingsCommands(dependencies: dependencies) }
+        .windowStyle(.titleBar)
+        .windowToolbarStyle(.unifiedCompact(showsTitle: false))
+        .commands {
+            AppSettingsCommands(dependencies: dependencies)
+            #if DEBUG || UMC_PRERELEASE
+            AuthPreviewCommands()
+            #endif
+        }
 
         Settings {
             SettingsSceneView(dependencies: dependencies)
@@ -40,9 +51,20 @@ struct UMCDeskApp: App {
                 .preferredColorScheme(preferences.theme.colorScheme)
                 .environment(\.umcBodyTextScale, preferences.bodyTextSize.scale)
                 .frame(minWidth: 1040, minHeight: 720)
+                #if DEBUG || UMC_PRERELEASE
+                .environment(\.umcTypographyPreview, typographyPreview)
+                #endif
         }
         .defaultSize(width: 1440, height: 960)
-        .windowStyle(.hiddenTitleBar)
+        .windowStyle(.titleBar)
+        .windowToolbarStyle(.unifiedCompact(showsTitle: false))
+
+        #if DEBUG || UMC_PRERELEASE
+        Window("타이포그래피 조절", id: "typography-preview") {
+            AppTypographyPreviewControls(settings: $typographyPreview)
+        }
+        .windowResizability(.contentSize)
+        #endif
 
         MenuBarExtra(
             "UMC Desk", systemImage: "square.grid.2x2", isInserted: $preferences.showsMenuBar
@@ -55,7 +77,6 @@ struct UMCDeskApp: App {
 private struct AppRootView: View {
     let dependencies: AppDependencies
     @Environment(\.openWindow) private var openWindow
-    @Environment(\.openSettings) private var openSettings
 
     var body: some View {
         Group {
@@ -63,15 +84,6 @@ private struct AppRootView: View {
                 SettingsView(viewModel: dependencies.settingsViewModel)
             } else {
                 AuthView()
-                    .toolbar {
-                        ToolbarItem(placement: .automatic) {
-                            Button("설정", systemImage: "gearshape") {
-                                dependencies.settingsViewModel.showSettings()
-                                openSettings()
-                            }
-                            .help("설정 열기 (⌘,)")
-                        }
-                    }
             }
         }
         .onAppear { configureLoginAction() }
@@ -92,8 +104,7 @@ private struct SettingsSceneView: View {
 
     var body: some View {
         SettingsView(viewModel: dependencies.settingsViewModel)
-            .background(SettingsWindowChrome())
-            .toolbarBackgroundVisibility(.hidden, for: .windowToolbar)
+            .background(SettingsWindowToolbar())
             .onAppear {
                 dependencies.settingsViewModel.showSettings()
                 dependencies.settingsViewModel.onOpenLogin = {
@@ -105,25 +116,21 @@ private struct SettingsSceneView: View {
     }
 }
 
-private struct SettingsWindowChrome: NSViewRepresentable {
-    func makeNSView(context: Context) -> SettingsChromeView { SettingsChromeView() }
-    func updateNSView(_ view: SettingsChromeView, context: Context) { view.configureWindow() }
+private struct SettingsWindowToolbar: NSViewRepresentable {
+    func makeNSView(context: Context) -> SettingsToolbarView { SettingsToolbarView() }
+    func updateNSView(_ view: SettingsToolbarView, context: Context) { view.configureWindow() }
 }
 
-private final class SettingsChromeView: NSView {
+private final class SettingsToolbarView: NSView {
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
         configureWindow()
     }
 
     func configureWindow() {
-        guard let window else { return }
-        // Settings scenes retain their native title bar despite SwiftUI's window style.
-        window.styleMask.insert(.fullSizeContentView)
-        window.toolbar = nil
-        window.titlebarSeparatorStyle = .none
-        window.titleVisibility = .hidden
-        window.titlebarAppearsTransparent = true
+        // The Settings scene overrides its SwiftUI toolbar style with preference-window chrome.
+        window?.toolbarStyle = .unifiedCompact
+        window?.titleVisibility = .hidden
     }
 }
 
@@ -155,8 +162,13 @@ private struct AppMenuBarContent: View {
 private struct AppSettingsCommands: Commands {
     let dependencies: AppDependencies
     @Environment(\.openSettings) private var openSettings
+    #if DEBUG || UMC_PRERELEASE
+    @Environment(\.openWindow) private var openWindow
+    #endif
 
     var body: some Commands {
+        @Bindable var preferences = dependencies.settingsPreferences
+
         CommandGroup(replacing: .appSettings) {
             Button("설정…") {
                 dependencies.settingsViewModel.showSettings()
@@ -164,6 +176,16 @@ private struct AppSettingsCommands: Commands {
             }
             .keyboardShortcut(",", modifiers: .command)
         }
+        #if DEBUG || UMC_PRERELEASE
+        CommandGroup(after: .sidebar) {
+            Picker("화면 모드", selection: $preferences.theme) {
+                Text("시스템 설정").tag(SettingsTheme.system)
+                Text("라이트").tag(SettingsTheme.light)
+                Text("다크").tag(SettingsTheme.dark)
+            }
+            Button("타이포그래피 조절…") { openWindow(id: "typography-preview") }
+        }
+        #endif
     }
 }
 

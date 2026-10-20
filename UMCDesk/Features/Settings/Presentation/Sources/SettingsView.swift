@@ -20,7 +20,6 @@ public struct SettingsView: View {
     fileprivate enum Constants {
         static let railWidth: CGFloat = 44
         static let sidebarWidth: CGFloat = 271
-        static let toolbarHeight: CGFloat = 60
     }
 
     public init(viewModel: SettingsViewModel) {
@@ -34,20 +33,16 @@ public struct SettingsView: View {
             appRail
                 .frame(width: Constants.railWidth)
                 .environment(\.colorScheme, .light)
-            VStack(spacing: 0) {
-                navigationBar
-                SettingsDivider()
-                HStack(spacing: 0) {
-                    if viewModel.page != .myPage {
-                        settingsSidebar
-                        Rectangle()
-                            .fill(UMCColor.Semantic.borderNeutralWeak200)
-                            .frame(width: 1)
-                            .accessibilityHidden(true)
-                    }
-                    pageContent
-                        .frame(minWidth: 0, maxWidth: .infinity, maxHeight: .infinity)
+            HStack(spacing: 0) {
+                if viewModel.page != .myPage {
+                    settingsSidebar
+                    Rectangle()
+                        .fill(UMCColor.Semantic.borderNeutralWeak200)
+                        .frame(width: 1)
+                        .accessibilityHidden(true)
                 }
+                pageContent
+                    .frame(minWidth: 0, maxWidth: .infinity, maxHeight: .infinity)
             }
             .background(UMCColor.Custom.backgroundDefault)
             .clipShape(.rect(cornerRadius: UMCRadius.value16))
@@ -63,7 +58,7 @@ public struct SettingsView: View {
         .padding(.leading, UMCSpacing.value4)
         .padding([.top, .bottom, .trailing], UMCSpacing.value12)
         .background(UMCColor.Custom.backgroundAppShell)
-        .ignoresSafeArea(.container, edges: .top)
+        .toolbar { navigationToolbar }
         .foregroundStyle(UMCColor.Semantic.textNeutralDefault)
         .tint(UMCColor.Semantic.textBrandDefault)
         .sheet(item: $viewModel.dialog, onDismiss: viewModel.dismissDialog) { dialog in
@@ -86,7 +81,6 @@ public struct SettingsView: View {
 
     private var appRail: some View {
         VStack(spacing: 0) {
-            Color.clear.frame(height: 40).accessibilityHidden(true)
             VStack(spacing: 0) {
                 railItem("홈", symbol: "house")
                 railItem("공지", symbol: "megaphone")
@@ -185,43 +179,29 @@ public struct SettingsView: View {
         .buttonStyle(.plain)
     }
 
-    private var navigationBar: some View {
-        HStack(spacing: UMCSpacing.value12) {
-            Button(action: viewModel.goBack) {
-                Image(systemName: "arrow.left").frame(width: 44, height: 44)
-            }
+    @ToolbarContentBuilder
+    private var navigationToolbar: some ToolbarContent {
+        ToolbarItemGroup(placement: .navigation) {
+            Button("뒤로", systemImage: "arrow.left", action: viewModel.goBack)
                 .disabled(!viewModel.canGoBack)
                 .accessibilityLabel("뒤로")
                 .keyboardShortcut("[", modifiers: .command)
-            Button(action: viewModel.goForward) {
-                Image(systemName: "arrow.right").frame(width: 44, height: 44)
-            }
+            Button("앞으로", systemImage: "arrow.right", action: viewModel.goForward)
                 .disabled(!viewModel.canGoForward)
                 .accessibilityLabel("앞으로")
                 .keyboardShortcut("]", modifiers: .command)
-            Spacer()
-            if viewModel.page == .myPage {
-                Button { Task { await viewModel.refreshProfile() } } label: {
-                    Image(systemName: "arrow.clockwise")
-                        .font(.system(size: 12, weight: .medium))
-                        .frame(width: 32, height: 32)
-                        .background(UMCColor.Custom.backgroundSurfaceWhite, in: .circle)
-                        .overlay {
-                            Circle().strokeBorder(UMCColor.Semantic.borderNeutralWeak200)
-                        }
+        }
+        if viewModel.page == .myPage {
+            ToolbarItem(placement: .primaryAction) {
+                Button("마이페이지 새로고침", systemImage: "arrow.clockwise") {
+                    Task { await viewModel.refreshProfile() }
                 }
-                .buttonStyle(.plain)
                 .disabled(viewModel.isRefreshing || viewModel.isAccountBusy)
                 .accessibilityLabel("마이페이지 새로고침")
                 .help("프로필과 활동 정보를 다시 불러오기")
                 .keyboardShortcut("r", modifiers: .command)
             }
         }
-        .font(.system(size: 16, weight: .medium))
-        .buttonStyle(.plain)
-        .foregroundStyle(UMCColor.Semantic.iconNeutralStronger700)
-        .padding(.horizontal, UMCSpacing.value24)
-        .frame(height: Constants.toolbarHeight)
     }
 
     private var settingsSidebar: some View {

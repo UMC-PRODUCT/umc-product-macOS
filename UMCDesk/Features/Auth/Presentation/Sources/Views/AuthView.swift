@@ -13,10 +13,6 @@ public struct AuthView: View {
 
     @State private var viewModel: AuthViewModel
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    #if DEBUG || UMC_PRERELEASE
-    @State private var typographyPreview = UMCTypographyPreview()
-    @State private var previewColorScheme: ColorScheme?
-    #endif
 
     fileprivate enum Constants {
         static let sidebarWidth: CGFloat = 576
@@ -75,44 +71,8 @@ public struct AuthView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
         .background(UMCColor.Custom.backgroundDefault)
         .tint(UMCColor.Semantic.textBrandDefault)
-        .toolbar {
-            ToolbarItem(placement: .navigation) {
-                Text("UMC")
-                    .umcTypography(.headlineBold)
-                    .foregroundStyle(UMCColor.Semantic.textNeutralStrong800)
-            }
-            .sharedBackgroundVisibility(.hidden)
-            #if DEBUG || UMC_PRERELEASE
-            ToolbarItem(placement: .automatic) {
-                Menu("화면 모드", systemImage: "circle.lefthalf.filled") {
-                    Picker("화면 모드", selection: $previewColorScheme) {
-                        Text("시스템 설정").tag(ColorScheme?.none)
-                        Text("라이트").tag(ColorScheme?.some(.light))
-                        Text("다크").tag(ColorScheme?.some(.dark))
-                    }
-                }
-                .help("현재 화면을 시스템·라이트·다크 모드로 비교")
-            }
-            ToolbarItem(placement: .automatic) {
-                AuthTypographyPreview(settings: $typographyPreview)
-            }
-            #endif
-            #if DEBUG || UMC_PRERELEASE
-            ToolbarItem(placement: .automatic) {
-                AuthPreviewFlowMenu(viewModel: viewModel)
-            }
-            ToolbarItem(placement: .automatic) {
-                AuthPreviewMenu(viewModel: $viewModel)
-            }
-            #endif
-        }
-        .toolbarBackground(UMCColor.Custom.backgroundDefault, for: .windowToolbar)
-        .toolbarBackgroundVisibility(.visible, for: .windowToolbar)
         #if DEBUG || UMC_PRERELEASE
-        .preferredColorScheme(previewColorScheme)
-        .environment(\.umcTypographyPreview, typographyPreview)
-        #endif
-        #if DEBUG || UMC_PRERELEASE
+        .focusedSceneValue(\.authPreviewModel, $viewModel)
         .task(id: viewModel.navigationID) { await viewModel.runPreviewFlow() }
         .onAppear {
             let arguments = ProcessInfo.processInfo.arguments
