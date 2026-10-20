@@ -14,6 +14,12 @@ public struct SettingsView: View {
 
     @State private var viewModel: SettingsViewModel
     @State private var showsProfileMenu = false
+    @FocusState private var profileMenuFocus: ProfileMenuFocus?
+    @AccessibilityFocusState private var accessibleProfileMenuFocus: ProfileMenuFocus?
+
+    private enum ProfileMenuFocus: Hashable {
+        case trigger, myPage, settings, logout
+    }
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -63,6 +69,32 @@ public struct SettingsView: View {
         .padding(.leading, UMCSpacing.value4)
         .padding([.bottom, .trailing], UMCSpacing.value12)
         .background(UMCColor.Custom.backgroundAppShell)
+        .disabled(showsProfileMenu)
+        .accessibilityHidden(showsProfileMenu)
+        .overlay(alignment: .bottomLeading) {
+            if showsProfileMenu {
+                ZStack(alignment: .bottomLeading) {
+                    Color.clear
+                        .contentShape(.rect)
+                        .onTapGesture { dismissProfileMenu() }
+                        .accessibilityHidden(true)
+                    profileMenu
+                        .padding(.leading, Constants.railWidth + UMCSpacing.value12)
+                        .padding(.bottom, UMCSpacing.value12 + UMCSpacing.value16)
+                        .onAppear {
+                            profileMenuFocus = .myPage
+                            accessibleProfileMenuFocus = .myPage
+                        }
+                }
+            }
+        }
+        .onExitCommand(perform: dismissProfileMenu)
+        .onChange(of: showsProfileMenu) { _, isPresented in
+            if !isPresented {
+                profileMenuFocus = .trigger
+                accessibleProfileMenuFocus = .trigger
+            }
+        }
         .toolbar { navigationToolbar }
         .toolbarBackground(UMCColor.Custom.backgroundAppShell, for: .windowToolbar)
         .toolbarBackgroundVisibility(.visible, for: .windowToolbar)
@@ -109,9 +141,9 @@ public struct SettingsView: View {
                 cornerRadius: UMCRadius.value12))
             .accessibilityLabel("프로필 메뉴")
             .help("마이페이지, 설정 및 계정 메뉴")
-            .popover(isPresented: $showsProfileMenu, arrowEdge: .trailing) {
-                profileMenu
-            }
+            .focusable()
+            .focused($profileMenuFocus, equals: .trigger)
+            .accessibilityFocused($accessibleProfileMenuFocus, equals: .trigger)
             .padding(.bottom, UMCSpacing.value16)
         }
     }
@@ -149,12 +181,12 @@ public struct SettingsView: View {
                 SettingsDivider()
             }
             VStack(spacing: UMCSpacing.value4) {
-                profileMenuButton("마이페이지") { viewModel.showProfile() }
-                profileMenuButton("설정") { viewModel.showSettings() }
+                profileMenuButton("마이페이지", focus: .myPage) { viewModel.showProfile() }
+                profileMenuButton("설정", focus: .settings) { viewModel.showSettings() }
             }
             if viewModel.profile != nil {
                 SettingsDivider()
-                profileMenuButton("로그아웃") {
+                profileMenuButton("로그아웃", focus: .logout) {
                     viewModel.dialogMessage = nil
                     viewModel.dialog = .logout
                 }
@@ -163,7 +195,19 @@ public struct SettingsView: View {
         .padding(UMCSpacing.value12)
         .frame(width: 304)
         .foregroundStyle(UMCColor.Semantic.textNeutralStrong800)
-        .background(UMCColor.Custom.backgroundDefault)
+        .background(UMCColor.Custom.backgroundDefault,
+            in: .rect(cornerRadius: UMCRadius.value16))
+        .overlay {
+            RoundedRectangle(cornerRadius: UMCRadius.value16)
+                .strokeBorder(UMCColor.Semantic.borderNeutralWeak200)
+        }
+        .shadow(color: .black.opacity(0.16), radius: 16, y: 4)
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("프로필 메뉴")
+    }
+
+    private func dismissProfileMenu() {
+        showsProfileMenu = false
     }
 
     private func profileMenuSummary(_ profile: SettingsProfile) -> String {
@@ -174,9 +218,11 @@ public struct SettingsView: View {
         return values.joined(separator: " · ")
     }
 
-    private func profileMenuButton(_ title: String, action: @escaping () -> Void) -> some View {
+    private func profileMenuButton(
+        _ title: String, focus: ProfileMenuFocus, action: @escaping () -> Void
+    ) -> some View {
         Button {
-            showsProfileMenu = false
+            dismissProfileMenu()
             action()
         } label: {
             Text(title)
@@ -186,6 +232,9 @@ public struct SettingsView: View {
                 .contentShape(.rect)
         }
         .buttonStyle(SettingsPlainButtonStyle())
+        .focusable()
+        .focused($profileMenuFocus, equals: focus)
+        .accessibilityFocused($accessibleProfileMenuFocus, equals: focus)
     }
 
     @ToolbarContentBuilder
@@ -193,27 +242,16 @@ public struct SettingsView: View {
         ToolbarItemGroup(placement: .navigation) {
             Button("뒤로", systemImage: "chevron.left", action: viewModel.goBack)
                 .buttonStyle(.plain)
-                .disabled(!viewModel.canGoBack)
+                .disabled(showsProfileMenu || !viewModel.canGoBack)
                 .accessibilityLabel("뒤로")
                 .keyboardShortcut("[", modifiers: .command)
             Button("앞으로", systemImage: "chevron.right", action: viewModel.goForward)
                 .buttonStyle(.plain)
-                .disabled(!viewModel.canGoForward)
+                .disabled(showsProfileMenu || !viewModel.canGoForward)
                 .accessibilityLabel("앞으로")
                 .keyboardShortcut("]", modifiers: .command)
         }
         .sharedBackgroundVisibility(.hidden)
-        if viewModel.page == .myPage {
-            ToolbarItem(placement: .primaryAction) {
-                Button("마이페이지 새로고침", systemImage: "arrow.clockwise") {
-                    Task { await viewModel.refreshProfile() }
-                }
-                .disabled(viewModel.isRefreshing || viewModel.isAccountBusy)
-                .accessibilityLabel("마이페이지 새로고침")
-                .help("프로필과 활동 정보를 다시 불러오기")
-                .keyboardShortcut("r", modifiers: .command)
-            }
-        }
     }
 
     private var settingsSidebar: some View {

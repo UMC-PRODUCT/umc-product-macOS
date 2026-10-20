@@ -70,6 +70,18 @@ struct SettingsProfileView: View {
                         .foregroundStyle(UMCColor.Semantic.textNeutralWeak500)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
+                Button {
+                    Task { await viewModel.refreshProfile() }
+                } label: {
+                    Image(systemName: "arrow.clockwise")
+                        .frame(width: 32, height: 32)
+                        .contentShape(.rect)
+                }
+                .buttonStyle(SettingsPlainButtonStyle())
+                .disabled(viewModel.isRefreshing || viewModel.isAccountBusy)
+                .accessibilityLabel("마이페이지 새로고침")
+                .help("프로필과 활동 정보를 다시 불러오기")
+                .keyboardShortcut("r", modifiers: .command)
             }
         }
     }
@@ -104,9 +116,11 @@ struct SettingsProfileView: View {
                                         .umcTypography(.headlineRegular)
                                         .lineLimit(1)
                                         .truncationMode(.middle)
-                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                        .padding(.horizontal, UMCSpacing.value8)
+                                        .padding(.vertical, UMCSpacing.value4)
                                 }
                                 .buttonStyle(SettingsPlainButtonStyle())
+                                .frame(maxWidth: .infinity, alignment: .leading)
                                 .foregroundStyle(UMCColor.Semantic.textBrandDefault)
                                 .help(profile.links[kind])
                             } else {
@@ -190,6 +204,7 @@ struct SettingsProfileView: View {
                     SettingsActionButton(title: "다시 시도", kind: .brand) {
                         Task { await viewModel.refreshProfile() }
                     }
+                    .keyboardShortcut("r", modifiers: .command)
                 }
             }
             .multilineTextAlignment(.center)
