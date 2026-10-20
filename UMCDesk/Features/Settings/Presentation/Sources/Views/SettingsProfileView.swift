@@ -84,7 +84,7 @@ struct SettingsProfileView: View {
                         Label("편집", systemImage: "pencil")
                             .umcTypography(.headlineRegular)
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(SettingsPlainButtonStyle())
                     .padding(.top, UMCSpacing.value4)
                     .disabled(viewModel.isAccountBusy)
                     .accessibilityLabel("프로필 링크 편집")
@@ -106,7 +106,7 @@ struct SettingsProfileView: View {
                                         .truncationMode(.middle)
                                         .frame(maxWidth: .infinity, alignment: .leading)
                                 }
-                                .buttonStyle(.plain)
+                                .buttonStyle(SettingsPlainButtonStyle())
                                 .foregroundStyle(UMCColor.Semantic.textBrandDefault)
                                 .help(profile.links[kind])
                             } else {

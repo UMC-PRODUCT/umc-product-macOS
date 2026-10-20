@@ -35,7 +35,7 @@ struct SettingsDialogContent: View {
                         .font(.system(size: 18))
                         .frame(width: 32, height: 32)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(SettingsPlainButtonStyle())
                 .disabled(isBusy)
                 .accessibilityLabel("닫기")
             }
@@ -187,7 +187,7 @@ struct SettingsDialogContent: View {
                         viewModel.dismissDialog()
                         viewModel.navigate(to: .about)
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(SettingsPlainButtonStyle())
                     .foregroundStyle(UMCColor.Semantic.textBrandDefault)
                     .umcTypography(.headlineRegular)
                 }

@@ -47,12 +47,17 @@ public struct SettingsView: View {
             .background(UMCColor.Custom.backgroundDefault)
             .clipShape(.rect(cornerRadius: UMCRadius.value16))
             .overlay(alignment: .bottom) {
-                if let toast = viewModel.toast {
-                    toastView(toast)
-                        .padding(UMCSpacing.value24)
-                        .transition(reduceMotion ? .opacity : .move(edge: .bottom).combined(
-                            with: .opacity))
+                ZStack {
+                    if let toast = viewModel.toast {
+                        toastView(toast)
+                            .padding(UMCSpacing.value24)
+                            .id(toast.id)
+                            .transition(reduceMotion ? .opacity : .offset(y: 8).combined(
+                                with: .opacity))
+                    }
                 }
+                .animation(reduceMotion ? nil : .easeOut(duration: 0.22),
+                    value: viewModel.toast?.id)
             }
         }
         .padding(.leading, UMCSpacing.value4)
@@ -100,7 +105,8 @@ public struct SettingsView: View {
                     .frame(width: 44, height: 44)
                     .contentShape(.rect)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(SettingsPlainButtonStyle(highlight: .white.opacity(0.1),
+                cornerRadius: UMCRadius.value12))
             .accessibilityLabel("프로필 메뉴")
             .help("마이페이지, 설정 및 계정 메뉴")
             .popover(isPresented: $showsProfileMenu, arrowEdge: .trailing) {
@@ -179,7 +185,7 @@ public struct SettingsView: View {
                 .padding(UMCSpacing.value8)
                 .contentShape(.rect)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(SettingsPlainButtonStyle())
     }
 
     @ToolbarContentBuilder
@@ -227,7 +233,7 @@ public struct SettingsView: View {
                     Button { viewModel.searchText = "" } label: {
                         Image(systemName: "xmark.circle.fill")
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(SettingsPlainButtonStyle())
                     .accessibilityLabel("검색어 지우기")
                 }
             }
@@ -254,7 +260,7 @@ public struct SettingsView: View {
                                 UMCColor.Semantic.backgroundBrandWeak : .clear,
                                 in: .rect(cornerRadius: UMCRadius.value8))
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(SettingsPlainButtonStyle())
                         .foregroundStyle(viewModel.page == category ?
                             UMCColor.Semantic.textBrandDefault :
                             UMCColor.Semantic.textNeutralStrong800)
@@ -316,7 +322,7 @@ public struct SettingsView: View {
             Image(systemName: toast.isError ? "exclamationmark.circle" : "checkmark.circle")
             Text(toast.message).umcTypography(.title4Regular)
             Button { viewModel.toast = nil } label: { Image(systemName: "xmark") }
-                .buttonStyle(.plain)
+                .buttonStyle(SettingsPlainButtonStyle())
                 .accessibilityLabel("안내 닫기")
         }
         .foregroundStyle(toast.isError ? UMCColor.Semantic.textError :

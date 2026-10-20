@@ -138,6 +138,7 @@ struct SettingsLicenseList: View {
             }
             .padding(.vertical, UMCSpacing.value8)
         }
+        .buttonStyle(SettingsPlainButtonStyle())
         .foregroundStyle(UMCColor.Semantic.textBrandDefault)
     }
 }
