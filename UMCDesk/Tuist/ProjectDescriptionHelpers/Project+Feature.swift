@@ -10,6 +10,7 @@ import ProjectDescription
 /// Creates Domain, Data and Presentation macOS frameworks for one Feature.
 public func featureProject(
     name: String,
+    settings: Settings = recommendedProjectSettings,
     domainExtraDependencies: [TargetDependency] = [],
     dataExtraDependencies: [TargetDependency] = [],
     presentationExtraDependencies: [TargetDependency] = [],
@@ -85,5 +86,5 @@ public func featureProject(
             )
         )
     }
-    return Project(name: name, settings: recommendedProjectSettings, targets: targets)
+    return Project(name: name, settings: settings, targets: targets)
 }

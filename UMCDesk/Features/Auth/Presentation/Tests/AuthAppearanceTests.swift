@@ -223,12 +223,14 @@ struct AuthAppearanceTests {
         size: CGSize, scheme: ColorScheme, viewModel: AuthViewModel,
         check: (NSView) throws -> Void
     ) rethrows {
-        let host = NSHostingView(rootView: AuthView(viewModel: viewModel)
+        let controller = NSHostingController(rootView: AuthView(viewModel: viewModel)
             .environment(\.colorScheme, scheme)
             .frame(minWidth: 1040, minHeight: 720))
-        let window = NSWindow(contentRect: CGRect(origin: .zero, size: size),
-            styleMask: [.borderless], backing: .buffered, defer: false)
-        window.contentView = host
+        let window = NSWindow(contentViewController: controller)
+        window.styleMask = [.titled, .closable, .miniaturizable, .resizable]
+        window.toolbarStyle = .unifiedCompact
+        window.titleVisibility = .hidden
+        let host = controller.view
         defer { window.contentView = nil }
         window.setContentSize(size)
         host.layoutSubtreeIfNeeded()
@@ -266,8 +268,9 @@ struct AuthAppearanceTests {
             guard let color = bitmap.colorAt(x: x, y: y)?.usingColorSpace(.sRGB) else {
                 return false
             }
+            // Calibrated display snapshots convert Kakao yellow to about 0.42 blue in sRGB.
             return color.redComponent > 0.9 && color.greenComponent > 0.8
-                && color.blueComponent < 0.4
+                && color.blueComponent < 0.5
         }
         let top = try #require((0..<bitmap.pixelsHigh).first { isYellow(x: centerX, y: $0) })
         let centerY = min(bitmap.pixelsHigh - 1, top + Int(25 * scale))

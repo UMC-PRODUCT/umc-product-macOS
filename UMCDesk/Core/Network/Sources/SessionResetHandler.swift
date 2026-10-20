@@ -7,9 +7,9 @@
 
 /// Bridges transport cleanup to the app's MainActor session state.
 public struct SessionResetHandler: SessionResetting {
-    private let action: @MainActor @Sendable () -> Void
+    private let action: @MainActor @Sendable () async -> Void
 
-    public init(action: @escaping @MainActor @Sendable () -> Void) {
+    public init(action: @escaping @MainActor @Sendable () async -> Void) {
         self.action = action
     }
 

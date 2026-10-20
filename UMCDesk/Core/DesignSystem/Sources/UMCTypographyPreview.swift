@@ -30,13 +30,13 @@ public struct UMCTypographyPreview: Equatable, Sendable {
     var appliedTrackingAdjustment: CGFloat { isEnabled ? trackingAdjustment : 0 }
     var appliedLineHeightScale: CGFloat { isEnabled ? lineHeightScale : 1 }
 
-    func font(for style: UMCTypography) -> Font {
+    func font(for style: UMCTypography, bodyScale: CGFloat = 1) -> Font {
         let appliedWeight: Font.Weight = switch isEnabled ? weight : .design {
         case .design: style.weight
         case .regular: .regular
         case .bold: .bold
         }
-        return style.font(size: style.size * appliedSizeScale, weight: appliedWeight)
+        return style.font(size: style.size * appliedSizeScale * bodyScale, weight: appliedWeight)
     }
 }
 

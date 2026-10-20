@@ -69,6 +69,20 @@ struct TypographyTests {
         #expect(abs(difference - widthReduction) < 1)
     }
 
+    @Test("Body preference scales descriptions and leaves headings unchanged")
+    func bodyPreferenceScopesToDescriptions() {
+        let description = NSHostingView(rootView: Text("설명")
+            .umcTypography(.title4Regular)
+            .environment(\.umcBodyTextScale, 1.3)
+            .fixedSize())
+        let heading = NSHostingView(rootView: Text("제목")
+            .umcTypography(.title1Bold)
+            .environment(\.umcBodyTextScale, 1.3)
+            .fixedSize())
+        #expect(abs(description.fittingSize.height - 22.4 * 1.3) < 1)
+        #expect(abs(heading.fittingSize.height - 28.6) < 1)
+    }
+
     #if DEBUG || UMC_PRERELEASE
     @Test("Preview changes the real font size and bundled face without changing tokens")
     func previewResolvesFont() {
