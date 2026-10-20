@@ -13,6 +13,8 @@ public actor NetworkClient {
     // MARK: - Property
 
     nonisolated let aquilaClient: Aquila.NetworkClient
+    private let logoutTokens: LogoutTokenStore
+    private var logoutTask: Task<String?, Error>?
     nonisolated static let logger = Aquila.VerboseLogger(redactedKeys: [
         "authorizationCode", "oAuthVerificationToken", "emailVerificationToken",
         "googleAccessToken", "kakaoAccessToken", "rawPassword", "currentPassword", "newPassword",
@@ -29,10 +31,12 @@ public actor NetworkClient {
         maxRetryCount: Int = 1,
         sessionResetter: (any SessionResetting)? = nil
     ) {
+        let logoutTokens = LogoutTokenStore(backing: tokenStore)
+        self.logoutTokens = logoutTokens
         aquilaClient = Aquila.NetworkClient(
             session: session,
-            tokenStore: tokenStore,
-            refreshService: AppTokenRefreshService(service: refreshService),
+            tokenStore: logoutTokens,
+            refreshService: AppTokenRefreshService(service: refreshService, logoutTokens: logoutTokens),
             authPolicy: authPolicy,
             maxRetryCount: maxRetryCount,
             sessionResetter: sessionResetter,
@@ -67,11 +71,22 @@ public actor NetworkClient {
     }
 
     public func logout() async throws {
-        do {
-            try await aquilaClient.logout()
-        } catch {
-            throw Self.appError(from: error)
+        _ = try await logoutReturningRefreshToken()
+    }
+
+    public func logoutReturningRefreshToken() async throws -> String? {
+        if let logoutTask { return try await logoutTask.value }
+        let task = Task<String?, Error> {
+            defer { logoutTask = nil }
+            do {
+                try await aquilaClient.logout()
+                return await logoutTokens.takeClearedRefreshToken()
+            } catch {
+                throw Self.appError(from: error)
+            }
         }
+        logoutTask = task
+        return try await task.value
     }
 
     public func isLoggedIn() async -> Bool {
@@ -108,12 +123,57 @@ public actor NetworkClient {
 
 private struct AppTokenRefreshService: TokenRefreshService {
     let service: TokenRefreshService
+    let logoutTokens: LogoutTokenStore
 
     func refresh(_ refreshToken: String) async throws -> TokenPair {
         do {
-            return try await service.refresh(refreshToken)
+            // Drain rotation even when logout cancels Aquila's waiting refresh task.
+            let operation = Task { try await service.refresh(refreshToken) }
+            let pair = try await operation.value
+            await logoutTokens.recordIssuedRefreshToken(pair.refreshToken)
+            return pair
         } catch {
             throw NetworkClient.appError(from: error, refreshing: true)
         }
+    }
+}
+
+private actor LogoutTokenStore: TokenStore {
+    private let backing: any TokenStore
+    private var issuedRefreshToken: String?
+    private var clearedRefreshToken: String?
+
+    init(backing: any TokenStore) {
+        self.backing = backing
+    }
+
+    func getAccessToken() async -> String? { await backing.getAccessToken() }
+    func getRefreshToken() async -> String? { await backing.getRefreshToken() }
+
+    func save(accessToken: String, refreshToken: String) async throws {
+        try await backing.save(accessToken: accessToken, refreshToken: refreshToken)
+        if issuedRefreshToken == refreshToken { issuedRefreshToken = nil }
+    }
+
+    func recordIssuedRefreshToken(_ token: String) {
+        guard !token.isEmpty else { return }
+        issuedRefreshToken = token
+    }
+
+    func clear() async throws {
+        let refreshToken: String?
+        if let issuedRefreshToken {
+            refreshToken = issuedRefreshToken
+        } else {
+            refreshToken = await backing.getRefreshToken()
+        }
+        try await backing.clear()
+        clearedRefreshToken = refreshToken
+        issuedRefreshToken = nil
+    }
+
+    func takeClearedRefreshToken() -> String? {
+        defer { clearedRefreshToken = nil }
+        return clearedRefreshToken
     }
 }

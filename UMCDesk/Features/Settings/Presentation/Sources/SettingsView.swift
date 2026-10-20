@@ -1,0 +1,348 @@
+//
+//  SettingsView.swift
+//  SettingsPresentation
+//
+//  Created by euijjang97 on 10/20/26.
+//
+
+import CoreDesignSystem
+import SettingsDomain
+import SwiftUI
+
+public struct SettingsView: View {
+    // MARK: - Property
+
+    @State private var viewModel: SettingsViewModel
+    @State private var showsProfileMenu = false
+    @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    fileprivate enum Constants {
+        static let railWidth: CGFloat = 44
+        static let sidebarWidth: CGFloat = 271
+        static let toolbarHeight: CGFloat = 60
+    }
+
+    public init(viewModel: SettingsViewModel) {
+        _viewModel = State(initialValue: viewModel)
+    }
+
+    // MARK: - Body
+
+    public var body: some View {
+        HStack(spacing: UMCSpacing.value4) {
+            appRail
+                .frame(width: Constants.railWidth)
+                .environment(\.colorScheme, .light)
+            VStack(spacing: 0) {
+                navigationBar
+                SettingsDivider()
+                HStack(spacing: 0) {
+                    if viewModel.page != .myPage {
+                        settingsSidebar
+                        Rectangle()
+                            .fill(UMCColor.Semantic.borderNeutralWeak200)
+                            .frame(width: 1)
+                            .accessibilityHidden(true)
+                    }
+                    pageContent
+                        .frame(minWidth: 0, maxWidth: .infinity, maxHeight: .infinity)
+                }
+            }
+            .background(UMCColor.Custom.backgroundDefault)
+            .clipShape(.rect(cornerRadius: UMCRadius.value16))
+            .overlay(alignment: .bottom) {
+                if let toast = viewModel.toast {
+                    toastView(toast)
+                        .padding(UMCSpacing.value24)
+                        .transition(reduceMotion ? .opacity : .move(edge: .bottom).combined(
+                            with: .opacity))
+                }
+            }
+        }
+        .padding(.leading, UMCSpacing.value4)
+        .padding([.top, .bottom, .trailing], UMCSpacing.value12)
+        .background(UMCColor.Custom.backgroundAppShell)
+        .ignoresSafeArea(.container, edges: .top)
+        .foregroundStyle(UMCColor.Semantic.textNeutralDefault)
+        .tint(UMCColor.Semantic.textBrandDefault)
+        .sheet(item: $viewModel.dialog, onDismiss: viewModel.dismissDialog) { dialog in
+            SettingsDialogContent(dialog: dialog, viewModel: viewModel)
+                .interactiveDismissDisabled(viewModel.isAccountBusy || viewModel.isClearingCache)
+        }
+        .task { await viewModel.load() }
+        .task(id: viewModel.toast?.id) {
+            guard let toast = viewModel.toast, !viewModel.isDesignPreview else { return }
+            try? await Task.sleep(for: .seconds(5))
+            if !Task.isCancelled, viewModel.toast?.id == toast.id { viewModel.toast = nil }
+        }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active { Task { await viewModel.refreshSystemStatus() } }
+        }
+        #if DEBUG
+        .onAppear { showsProfileMenu = viewModel.previewShowsProfileMenu }
+        #endif
+    }
+
+    private var appRail: some View {
+        VStack(spacing: 0) {
+            Color.clear.frame(height: 40).accessibilityHidden(true)
+            VStack(spacing: 0) {
+                railItem("홈", symbol: "house")
+                railItem("공지", symbol: "megaphone")
+                railItem("활동", symbol: "calendar.badge.checkmark")
+                railItem("스레드", symbol: "bubble.left")
+                railItem("프로젝트", symbol: "square.grid.2x2")
+                railItem("커뮤니티", symbol: "person.2")
+                railItem("도움말", symbol: "questionmark.circle")
+            }
+            Spacer(minLength: UMCSpacing.value24)
+            Button { showsProfileMenu.toggle() } label: {
+                SettingsAvatar(url: viewModel.profile?.profileImageURL, size: 32,
+                    usesDesignImage: viewModel.isDesignPreview)
+                    .frame(width: 44, height: 44)
+                    .contentShape(.rect)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("프로필 메뉴")
+            .help("마이페이지, 설정 및 계정 메뉴")
+            .popover(isPresented: $showsProfileMenu, arrowEdge: .trailing) {
+                profileMenu
+            }
+            .padding(.bottom, UMCSpacing.value16)
+        }
+    }
+
+    private func railItem(_ title: String, symbol: String) -> some View {
+        Image(systemName: symbol)
+            .font(.system(size: 16, weight: .medium))
+            .foregroundStyle(UMCColor.Custom.backgroundTextWhite.opacity(0.75))
+            .frame(width: 44, height: 44)
+            .accessibilityLabel("\(title), 준비 중")
+            .help("\(title) 화면은 아직 제공하지 않아요.")
+    }
+
+    private var profileMenu: some View {
+        VStack(alignment: .leading, spacing: UMCSpacing.value16) {
+            if let profile = viewModel.profile {
+                HStack(spacing: UMCSpacing.value12) {
+                    SettingsAvatar(url: profile.profileImageURL, size: 48,
+                        usesDesignImage: viewModel.isDesignPreview)
+                    VStack(alignment: .leading, spacing: UMCSpacing.value4) {
+                        HStack(spacing: UMCSpacing.value8) {
+                            Text("\(profile.nickname) / \(profile.name)")
+                                .umcTypography(.title3Bold)
+                            if let activity = profile.activities.first {
+                                SettingsPartTag(part: activity.part, minimumHeight: 22)
+                            }
+                        }
+                        Text(profileMenuSummary(profile))
+                            .umcTypography(.headlineRegular)
+                            .foregroundStyle(UMCColor.Semantic.textNeutralWeak500)
+                    }
+                    .fixedSize(horizontal: false, vertical: true)
+                }
+                .padding(UMCSpacing.value8)
+                SettingsDivider()
+            }
+            VStack(spacing: UMCSpacing.value4) {
+                profileMenuButton("마이페이지") { viewModel.showProfile() }
+                profileMenuButton("설정") { viewModel.showSettings() }
+            }
+            if viewModel.profile != nil {
+                SettingsDivider()
+                profileMenuButton("로그아웃") {
+                    viewModel.dialogMessage = nil
+                    viewModel.dialog = .logout
+                }
+            }
+        }
+        .padding(UMCSpacing.value12)
+        .frame(width: 304)
+        .foregroundStyle(UMCColor.Semantic.textNeutralStrong800)
+        .background(UMCColor.Custom.backgroundDefault)
+    }
+
+    private func profileMenuSummary(_ profile: SettingsProfile) -> String {
+        var values: [String] = []
+        if let activity = profile.activities.first { values.append("\(activity.generation)기") }
+        if let school = profile.schoolName { values.append(school) }
+        if let activity = profile.activities.first { values += activity.roles.map(roleTitle) }
+        return values.joined(separator: " · ")
+    }
+
+    private func profileMenuButton(_ title: String, action: @escaping () -> Void) -> some View {
+        Button {
+            showsProfileMenu = false
+            action()
+        } label: {
+            Text(title)
+                .umcTypography(.title4Regular)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(UMCSpacing.value8)
+                .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var navigationBar: some View {
+        HStack(spacing: UMCSpacing.value12) {
+            Button(action: viewModel.goBack) {
+                Image(systemName: "arrow.left").frame(width: 44, height: 44)
+            }
+                .disabled(!viewModel.canGoBack)
+                .accessibilityLabel("뒤로")
+                .keyboardShortcut("[", modifiers: .command)
+            Button(action: viewModel.goForward) {
+                Image(systemName: "arrow.right").frame(width: 44, height: 44)
+            }
+                .disabled(!viewModel.canGoForward)
+                .accessibilityLabel("앞으로")
+                .keyboardShortcut("]", modifiers: .command)
+            Spacer()
+            if viewModel.page == .myPage {
+                Button { Task { await viewModel.refreshProfile() } } label: {
+                    Image(systemName: "arrow.clockwise")
+                        .font(.system(size: 12, weight: .medium))
+                        .frame(width: 32, height: 32)
+                        .background(UMCColor.Custom.backgroundSurfaceWhite, in: .circle)
+                        .overlay {
+                            Circle().strokeBorder(UMCColor.Semantic.borderNeutralWeak200)
+                        }
+                }
+                .buttonStyle(.plain)
+                .disabled(viewModel.isRefreshing || viewModel.isAccountBusy)
+                .accessibilityLabel("마이페이지 새로고침")
+                .help("프로필과 활동 정보를 다시 불러오기")
+                .keyboardShortcut("r", modifiers: .command)
+            }
+        }
+        .font(.system(size: 16, weight: .medium))
+        .buttonStyle(.plain)
+        .foregroundStyle(UMCColor.Semantic.iconNeutralStronger700)
+        .padding(.horizontal, UMCSpacing.value24)
+        .frame(height: Constants.toolbarHeight)
+    }
+
+    private var settingsSidebar: some View {
+        VStack(alignment: .leading, spacing: UMCSpacing.value24) {
+            VStack(alignment: .leading, spacing: UMCSpacing.value8) {
+                Text("설정").umcTypography(.title1Bold)
+                Text("UMC Desk")
+                    .umcTypography(.headlineRegular)
+                    .foregroundStyle(UMCColor.Semantic.textNeutralWeak500)
+            }
+            HStack(spacing: UMCSpacing.value8) {
+                Image(systemName: "magnifyingglass").accessibilityHidden(true)
+                TextField("검색", text: $viewModel.searchText)
+                    .textFieldStyle(.plain)
+                    .accessibilityLabel("설정 검색")
+                if !viewModel.searchText.isEmpty {
+                    Button { viewModel.searchText = "" } label: {
+                        Image(systemName: "xmark.circle.fill")
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("검색어 지우기")
+                }
+            }
+            .umcTypography(.title4Regular)
+            .foregroundStyle(UMCColor.Semantic.textNeutralWeak500)
+            .padding(.horizontal, UMCSpacing.value16)
+            .frame(height: 48)
+            .background(UMCColor.Custom.backgroundSurfaceGreyWeak, in: .capsule)
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: UMCSpacing.value8) {
+                    ForEach(viewModel.visibleCategories) { category in
+                        Button { viewModel.navigate(to: category) } label: {
+                            HStack(spacing: UMCSpacing.value8) {
+                                Image(systemName: category.symbol)
+                                    .font(.system(size: 18))
+                                    .frame(width: 32, height: 32)
+                                Text(category.title).umcTypography(.title4Regular)
+                            }
+                            .frame(maxWidth: .infinity, minHeight: 48, alignment: .leading)
+                            .padding(.horizontal, UMCSpacing.value8)
+                            .contentShape(.rect)
+                            .background(viewModel.page == category ?
+                                UMCColor.Semantic.backgroundBrandWeak : .clear,
+                                in: .rect(cornerRadius: UMCRadius.value8))
+                        }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(viewModel.page == category ?
+                            UMCColor.Semantic.textBrandDefault :
+                            UMCColor.Semantic.textNeutralStrong800)
+                        .accessibilityAddTraits(viewModel.page == category ? .isSelected : [])
+                    }
+                    if viewModel.visibleCategories.isEmpty {
+                        Text("검색 결과를 찾을 수 없어요")
+                            .umcTypography(.title4Regular)
+                            .foregroundStyle(UMCColor.Semantic.textNeutralWeak500)
+                            .padding(.vertical, UMCSpacing.value16)
+                    }
+                }
+            }
+            .scrollIndicators(.hidden)
+            Spacer(minLength: 0)
+            Text("변경 사항은 바로 적용돼요")
+                .umcTypography(.headlineRegular)
+                .foregroundStyle(UMCColor.Semantic.textNeutralWeak500)
+        }
+        .padding(.horizontal, UMCSpacing.value20)
+        .padding(.vertical, UMCSpacing.value24)
+        .frame(width: Constants.sidebarWidth)
+        .background(UMCColor.Custom.backgroundSurfaceGreyWeaker)
+    }
+
+    @ViewBuilder
+    private var pageContent: some View {
+        if viewModel.page == .myPage {
+            SettingsProfileView(viewModel: viewModel)
+        } else {
+            ScrollView {
+                VStack(alignment: .leading, spacing: UMCSpacing.value40) {
+                    VStack(alignment: .leading, spacing: UMCSpacing.value8) {
+                        Text(viewModel.page.title)
+                            .umcTypography(.largeTitle2Bold)
+                            .accessibilityAddTraits(.isHeader)
+                        Text("이 Mac에서 사용하는 앱의 환경을 설정하세요.")
+                            .umcTypography(.title4Regular)
+                            .foregroundStyle(UMCColor.Semantic.textNeutralWeak500)
+                    }
+                    switch viewModel.page {
+                    case .general: SettingsGeneralView(viewModel: viewModel)
+                    case .appearance: SettingsAppearanceView(viewModel: viewModel)
+                    case .notifications: SettingsNotificationsView(viewModel: viewModel)
+                    case .privacy: SettingsPrivacyView(viewModel: viewModel)
+                    case .about: SettingsAboutView(viewModel: viewModel)
+                    case .myPage: EmptyView()
+                    }
+                }
+                .padding(UMCSpacing.value32)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .scrollBounceBehavior(.basedOnSize)
+        }
+    }
+
+    private func toastView(_ toast: SettingsToast) -> some View {
+        HStack(spacing: UMCSpacing.value12) {
+            Image(systemName: toast.isError ? "exclamationmark.circle" : "checkmark.circle")
+            Text(toast.message).umcTypography(.title4Regular)
+            Button { viewModel.toast = nil } label: { Image(systemName: "xmark") }
+                .buttonStyle(.plain)
+                .accessibilityLabel("안내 닫기")
+        }
+        .foregroundStyle(toast.isError ? UMCColor.Semantic.textError :
+            UMCColor.Semantic.textNeutralStrong800)
+        .padding(UMCSpacing.value16)
+        .background(UMCColor.Custom.backgroundSurfaceWhite,
+            in: .rect(cornerRadius: UMCRadius.value12))
+        .overlay {
+            RoundedRectangle(cornerRadius: UMCRadius.value12)
+                .strokeBorder(UMCColor.Semantic.borderNeutralWeak200)
+        }
+        .shadow(color: .black.opacity(0.08), radius: 8, y: 4)
+        .accessibilityElement(children: .contain)
+    }
+}

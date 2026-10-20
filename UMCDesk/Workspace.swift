@@ -17,6 +17,15 @@ let workspace = Workspace(
             buildAction: .buildAction(targets: [.project(path: ".", target: "UMCDesk")]),
             testAction: .targets([
                 .testableTarget(target: .project(path: ".", target: "UMCDeskTests")),
+                .testableTarget(target: .project(
+                    path: "Features/Settings", target: "SettingsDomainTests"
+                )),
+                .testableTarget(target: .project(
+                    path: "Features/Settings", target: "SettingsDataTests"
+                )),
+                .testableTarget(target: .project(
+                    path: "Features/Settings", target: "SettingsPresentationTests"
+                )),
                 .testableTarget(target: .project(path: "Core/DI", target: "CoreDITests")),
                 .testableTarget(target: .project(
                     path: "Core/DesignSystem", target: "CoreDesignSystemTests"

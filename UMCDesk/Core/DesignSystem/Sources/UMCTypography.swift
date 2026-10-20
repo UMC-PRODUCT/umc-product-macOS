@@ -63,6 +63,16 @@ public enum UMCTypography: String, CaseIterable, Sendable {
 
     fileprivate var textStyle: Font.TextStyle { metrics.textStyle }
 
+    fileprivate var scalesWithBodyPreference: Bool {
+        switch self {
+        case .title4Regular, .headlineRegular, .bodyRegular, .calloutRegular,
+             .subheadlineRegular, .footnoteRegular, .captionRegular:
+            true
+        default:
+            false
+        }
+    }
+
     private var metrics: (
         size: CGFloat,
         lineHeightMultiple: CGFloat,
@@ -100,6 +110,10 @@ public enum UMCTypography: String, CaseIterable, Sendable {
     }
 }
 
+public extension EnvironmentValues {
+    @Entry var umcBodyTextScale: CGFloat = 1
+}
+
 public extension View {
     /// Pretendard와 Figma의 줄높이·자간을 적용하며 사용자 글자 크기에 함께 맞춘다.
     func umcTypography(_ style: UMCTypography) -> some View {
@@ -110,6 +124,12 @@ public extension View {
 private struct UMCTypographyModifier: ViewModifier {
     let style: UMCTypography
     @ScaledMetric private var scale: CGFloat
+    @Environment(\.umcBodyTextScale) private var preferredBodyScale
+
+    private var bodyScale: CGFloat {
+        style.scalesWithBodyPreference && preferredBodyScale.isFinite && preferredBodyScale > 0
+            ? preferredBodyScale : 1
+    }
     #if DEBUG || UMC_PRERELEASE
     @Environment(\.umcTypographyPreview) private var preview
     #endif
@@ -122,16 +142,16 @@ private struct UMCTypographyModifier: ViewModifier {
     func body(content: Content) -> some View {
         #if DEBUG || UMC_PRERELEASE
         content
-            .font(preview.font(for: style))
+            .font(preview.font(for: style, bodyScale: bodyScale))
             .tracking((style.tracking * preview.appliedSizeScale
-                + preview.appliedTrackingAdjustment) * scale)
+                + preview.appliedTrackingAdjustment) * scale * bodyScale)
             .lineHeight(.exact(points: style.lineHeight * preview.appliedSizeScale
-                * preview.appliedLineHeightScale * scale))
+                * preview.appliedLineHeightScale * scale * bodyScale))
         #else
         content
-            .font(style.font)
-            .tracking(style.tracking * scale)
-            .lineHeight(.exact(points: style.lineHeight * scale))
+            .font(style.font(size: style.size * bodyScale, weight: style.weight))
+            .tracking(style.tracking * scale * bodyScale)
+            .lineHeight(.exact(points: style.lineHeight * scale * bodyScale))
         #endif
     }
 }
