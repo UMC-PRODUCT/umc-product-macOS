@@ -36,14 +36,14 @@ struct SettingsRow<Accessory: View>: View {
     @ViewBuilder let accessory: Accessory
 
     var body: some View {
-        HStack(spacing: UMCSpacing.value24) {
+        HStack(spacing: UMCSpacing.value16) {
             VStack(alignment: .leading, spacing: UMCSpacing.value4) {
                 Text(title)
-                    .umcTypography(.title2Bold)
+                    .umcTypography(.headlineRegular)
                     .foregroundStyle(UMCColor.Semantic.textNeutralStrong800)
                 if !description.isEmpty {
                     Text(description)
-                        .umcTypography(.title4Regular)
+                        .umcTypography(.bodyRegular)
                         .foregroundStyle(UMCColor.Semantic.textNeutralMedium600)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -51,7 +51,7 @@ struct SettingsRow<Accessory: View>: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             accessory
         }
-        .frame(minHeight: 52)
+        .frame(minHeight: 44)
     }
 }
 
@@ -60,9 +60,9 @@ struct SettingsSection<Content: View>: View {
     @ViewBuilder let content: Content
 
     var body: some View {
-        VStack(alignment: .leading, spacing: UMCSpacing.value16) {
+        VStack(alignment: .leading, spacing: UMCSpacing.value12) {
             Text(title)
-                .umcTypography(.title2Regular)
+                .umcTypography(.headlineBold)
                 .foregroundStyle(UMCColor.Semantic.textNeutralStrong800)
                 .accessibilityAddTraits(.isHeader)
             content
@@ -96,7 +96,7 @@ struct SettingsActionButton: View {
                 if let symbol { Image(systemName: symbol) }
                 Text(title)
             }
-            .umcTypography(.title4Regular)
+            .umcTypography(.headlineRegular)
             .padding(.horizontal, UMCSpacing.value16)
             .frame(minWidth: 64, maxWidth: fillsWidth ? .infinity : nil, minHeight: 40)
             .contentShape(.rect(cornerRadius: UMCRadius.value12))
@@ -147,7 +147,7 @@ struct SettingsStatusText: View {
 
     var body: some View {
         Text(text)
-            .umcTypography(.title4Regular)
+            .umcTypography(.headlineRegular)
             .foregroundStyle(UMCColor.Semantic.textBrandDefault)
             .fixedSize()
     }

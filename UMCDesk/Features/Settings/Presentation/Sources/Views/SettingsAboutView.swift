@@ -13,9 +13,9 @@ struct SettingsAboutView: View {
     @Environment(\.openURL) private var openURL
 
     var body: some View {
-        VStack(alignment: .leading, spacing: UMCSpacing.value40) {
+        VStack(alignment: .leading, spacing: UMCSpacing.value24) {
             SettingsCard {
-                VStack(alignment: .leading, spacing: UMCSpacing.value20) {
+                VStack(alignment: .leading, spacing: UMCSpacing.value12) {
                     HStack(spacing: UMCSpacing.value20) {
                         Image("settingsAppIcon", bundle: .module)
                             .resizable()
@@ -23,9 +23,9 @@ struct SettingsAboutView: View {
                             .frame(width: 64, height: 64)
                             .accessibilityHidden(true)
                         VStack(alignment: .leading, spacing: UMCSpacing.value4) {
-                            Text(appName).umcTypography(.title1Bold)
+                            Text(appName).umcTypography(.title3Bold)
                             Text("버전 \(version) | 빌드 \(build)")
-                                .umcTypography(.title4Regular)
+                                .umcTypography(.bodyRegular)
                                 .foregroundStyle(UMCColor.Semantic.textNeutralWeak500)
                         }
                     }
@@ -40,7 +40,7 @@ struct SettingsAboutView: View {
                     if let release = viewModel.release {
                         HStack {
                             Text("게시된 릴리스: \(release.tag)")
-                                .umcTypography(.title4Regular)
+                                .umcTypography(.bodyRegular)
                             Spacer()
                             SettingsActionButton(title: "릴리스 보기", symbol: "arrow.up.right") {
                                 openURL(release.url)
@@ -55,7 +55,7 @@ struct SettingsAboutView: View {
             }
             SettingsSection(title: "도움말 및 법적 정보") {
                 SettingsCard {
-                    VStack(spacing: UMCSpacing.value20) {
+                    VStack(spacing: UMCSpacing.value12) {
                         unavailableLink("이용약관", description: "서비스 이용에 필요한 약관을 확인해요.")
                         SettingsDivider()
                         unavailableLink("개인정보 처리방침", description: "개인정보 처리와 보관 기준을 확인해요.")

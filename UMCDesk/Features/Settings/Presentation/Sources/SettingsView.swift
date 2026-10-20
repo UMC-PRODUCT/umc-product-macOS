@@ -56,9 +56,12 @@ public struct SettingsView: View {
             }
         }
         .padding(.leading, UMCSpacing.value4)
-        .padding([.top, .bottom, .trailing], UMCSpacing.value12)
+        .padding([.bottom, .trailing], UMCSpacing.value12)
         .background(UMCColor.Custom.backgroundAppShell)
         .toolbar { navigationToolbar }
+        .toolbarBackground(UMCColor.Custom.backgroundAppShell, for: .windowToolbar)
+        .toolbarBackgroundVisibility(.visible, for: .windowToolbar)
+        .toolbarColorScheme(.dark, for: .windowToolbar)
         .foregroundStyle(UMCColor.Semantic.textNeutralDefault)
         .tint(UMCColor.Semantic.textBrandDefault)
         .sheet(item: $viewModel.dialog, onDismiss: viewModel.dismissDialog) { dialog in
@@ -182,15 +185,18 @@ public struct SettingsView: View {
     @ToolbarContentBuilder
     private var navigationToolbar: some ToolbarContent {
         ToolbarItemGroup(placement: .navigation) {
-            Button("뒤로", systemImage: "arrow.left", action: viewModel.goBack)
+            Button("뒤로", systemImage: "chevron.left", action: viewModel.goBack)
+                .buttonStyle(.plain)
                 .disabled(!viewModel.canGoBack)
                 .accessibilityLabel("뒤로")
                 .keyboardShortcut("[", modifiers: .command)
-            Button("앞으로", systemImage: "arrow.right", action: viewModel.goForward)
+            Button("앞으로", systemImage: "chevron.right", action: viewModel.goForward)
+                .buttonStyle(.plain)
                 .disabled(!viewModel.canGoForward)
                 .accessibilityLabel("앞으로")
                 .keyboardShortcut("]", modifiers: .command)
         }
+        .sharedBackgroundVisibility(.hidden)
         if viewModel.page == .myPage {
             ToolbarItem(placement: .primaryAction) {
                 Button("마이페이지 새로고침", systemImage: "arrow.clockwise") {
@@ -205,11 +211,11 @@ public struct SettingsView: View {
     }
 
     private var settingsSidebar: some View {
-        VStack(alignment: .leading, spacing: UMCSpacing.value24) {
+        VStack(alignment: .leading, spacing: UMCSpacing.value16) {
             VStack(alignment: .leading, spacing: UMCSpacing.value8) {
-                Text("설정").umcTypography(.title1Bold)
+                Text("설정").umcTypography(.title3Bold)
                 Text("UMC Desk")
-                    .umcTypography(.headlineRegular)
+                    .umcTypography(.bodyRegular)
                     .foregroundStyle(UMCColor.Semantic.textNeutralWeak500)
             }
             HStack(spacing: UMCSpacing.value8) {
@@ -225,23 +231,23 @@ public struct SettingsView: View {
                     .accessibilityLabel("검색어 지우기")
                 }
             }
-            .umcTypography(.title4Regular)
+            .umcTypography(.headlineRegular)
             .foregroundStyle(UMCColor.Semantic.textNeutralWeak500)
             .padding(.horizontal, UMCSpacing.value16)
-            .frame(height: 48)
+            .frame(minHeight: 36)
             .background(UMCColor.Custom.backgroundSurfaceGreyWeak, in: .capsule)
 
             ScrollView {
-                VStack(alignment: .leading, spacing: UMCSpacing.value8) {
+                VStack(alignment: .leading, spacing: UMCSpacing.value4) {
                     ForEach(viewModel.visibleCategories) { category in
                         Button { viewModel.navigate(to: category) } label: {
                             HStack(spacing: UMCSpacing.value8) {
                                 Image(systemName: category.symbol)
-                                    .font(.system(size: 18))
-                                    .frame(width: 32, height: 32)
-                                Text(category.title).umcTypography(.title4Regular)
+                                    .font(.system(size: 16))
+                                    .frame(width: 24, height: 24)
+                                Text(category.title).umcTypography(.headlineRegular)
                             }
-                            .frame(maxWidth: .infinity, minHeight: 48, alignment: .leading)
+                            .frame(maxWidth: .infinity, minHeight: 36, alignment: .leading)
                             .padding(.horizontal, UMCSpacing.value8)
                             .contentShape(.rect)
                             .background(viewModel.page == category ?
@@ -256,7 +262,7 @@ public struct SettingsView: View {
                     }
                     if viewModel.visibleCategories.isEmpty {
                         Text("검색 결과를 찾을 수 없어요")
-                            .umcTypography(.title4Regular)
+                            .umcTypography(.headlineRegular)
                             .foregroundStyle(UMCColor.Semantic.textNeutralWeak500)
                             .padding(.vertical, UMCSpacing.value16)
                     }
@@ -265,7 +271,7 @@ public struct SettingsView: View {
             .scrollIndicators(.hidden)
             Spacer(minLength: 0)
             Text("변경 사항은 바로 적용돼요")
-                .umcTypography(.headlineRegular)
+                .umcTypography(.bodyRegular)
                 .foregroundStyle(UMCColor.Semantic.textNeutralWeak500)
         }
         .padding(.horizontal, UMCSpacing.value20)
@@ -280,13 +286,13 @@ public struct SettingsView: View {
             SettingsProfileView(viewModel: viewModel)
         } else {
             ScrollView {
-                VStack(alignment: .leading, spacing: UMCSpacing.value40) {
-                    VStack(alignment: .leading, spacing: UMCSpacing.value8) {
+                VStack(alignment: .leading, spacing: UMCSpacing.value24) {
+                    VStack(alignment: .leading, spacing: UMCSpacing.value4) {
                         Text(viewModel.page.title)
-                            .umcTypography(.largeTitle2Bold)
+                            .umcTypography(.title1Bold)
                             .accessibilityAddTraits(.isHeader)
                         Text("이 Mac에서 사용하는 앱의 환경을 설정하세요.")
-                            .umcTypography(.title4Regular)
+                            .umcTypography(.bodyRegular)
                             .foregroundStyle(UMCColor.Semantic.textNeutralWeak500)
                     }
                     switch viewModel.page {

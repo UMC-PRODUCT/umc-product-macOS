@@ -14,10 +14,10 @@ struct SettingsGeneralView: View {
 
     var body: some View {
         @Bindable var preferences = viewModel.preferences
-        VStack(alignment: .leading, spacing: UMCSpacing.value32) {
+        VStack(alignment: .leading, spacing: UMCSpacing.value24) {
             SettingsSection(title: "시작과 창") {
                 SettingsCard {
-                    VStack(spacing: UMCSpacing.value20) {
+                    VStack(spacing: UMCSpacing.value12) {
                         SettingsRow(title: "앱을 열 때", description: "매번 사용할 첫 화면을 선택해요.") {
                             Picker("앱을 열 때", selection: $preferences.launchPage) {
                                 Text("로그인").tag(SettingsLaunchPage.login)
@@ -26,7 +26,7 @@ struct SettingsGeneralView: View {
                             }
                             .labelsHidden()
                             .pickerStyle(.menu)
-                            .controlSize(.large)
+                            .controlSize(.regular)
                             .frame(width: 200)
                         }
                         SettingsDivider()

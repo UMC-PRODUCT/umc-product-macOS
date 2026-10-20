@@ -14,7 +14,7 @@ struct SettingsNotificationsView: View {
 
     var body: some View {
         @Bindable var preferences = viewModel.preferences
-        VStack(alignment: .leading, spacing: UMCSpacing.value40) {
+        VStack(alignment: .leading, spacing: UMCSpacing.value24) {
             SettingsSection(title: "macOS 알림") {
                 SettingsCard {
                     SettingsRow(title: "알림 접근", description: notificationDescription) {
@@ -34,7 +34,7 @@ struct SettingsNotificationsView: View {
             }
             SettingsSection(title: "받을 알림") {
                 SettingsCard {
-                    VStack(spacing: UMCSpacing.value20) {
+                    VStack(spacing: UMCSpacing.value12) {
                         notificationToggle("출석 가능 시간", description: "출석 알림 연결 시 사용할 수신 설정이에요.",
                             value: $preferences.attendanceNotifications)
                         SettingsDivider()

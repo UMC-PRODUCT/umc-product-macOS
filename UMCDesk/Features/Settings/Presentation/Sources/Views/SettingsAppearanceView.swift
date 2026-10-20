@@ -14,11 +14,11 @@ struct SettingsAppearanceView: View {
 
     var body: some View {
         @Bindable var preferences = viewModel.preferences
-        VStack(alignment: .leading, spacing: UMCSpacing.value40) {
+        VStack(alignment: .leading, spacing: UMCSpacing.value24) {
             SettingsCard {
-                VStack(alignment: .leading, spacing: UMCSpacing.value20) {
+                VStack(alignment: .leading, spacing: UMCSpacing.value12) {
                     Text("테마")
-                        .umcTypography(.title2Bold)
+                        .umcTypography(.headlineBold)
                         .accessibilityAddTraits(.isHeader)
                     HStack(spacing: UMCSpacing.value16) {
                         themeButton(.system, title: "시스템", image: "settingsThemeSystem")
@@ -26,7 +26,7 @@ struct SettingsAppearanceView: View {
                         themeButton(.dark, title: "다크", image: "settingsThemeDark")
                     }
                     Text("시스템을 선택하면 macOS의 밝은 화면 · 어두운 화면 설정을 따를 수 있어요.")
-                        .umcTypography(.title4Regular)
+                        .umcTypography(.bodyRegular)
                         .foregroundStyle(UMCColor.Semantic.textNeutralMedium600)
                 }
             }
@@ -40,7 +40,7 @@ struct SettingsAppearanceView: View {
                         }
                         .labelsHidden()
                         .pickerStyle(.menu)
-                        .controlSize(.large)
+                        .controlSize(.regular)
                         .frame(width: 200)
                     }
                 }
@@ -68,7 +68,7 @@ struct SettingsAppearanceView: View {
                     .frame(maxWidth: 214)
                     .accessibilityHidden(true)
                 Text(title)
-                    .umcTypography(isSelected ? .title4Bold : .title4Regular)
+                    .umcTypography(.headlineRegular)
             }
             .padding(UMCSpacing.value16)
             .frame(maxWidth: .infinity)
