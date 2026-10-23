@@ -72,6 +72,10 @@ struct SettingsViewModelTests {
         await useCase.waitForHeldFetch()
         #expect(model.dialogMessage == nil)
         #expect(model.isRegistering)
+        model.dismissDialog()
+        #expect(model.dialog == .addPermission)
+        await model.submitChallengerCode()
+        #expect(await useCase.registeredCodes == ["a7B2c9"])
         await useCase.releaseFetch()
         await pending.value
         #expect(!model.isRegistering)

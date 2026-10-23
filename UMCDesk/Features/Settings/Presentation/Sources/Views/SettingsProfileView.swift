@@ -140,7 +140,7 @@ struct SettingsProfileView: View {
                                         .umcTypography(.bodyRegular)
                                         .lineLimit(1)
                                         .truncationMode(.middle)
-                                        .padding(.trailing, UMCSpacing.value8)
+                                        .padding(.horizontal, UMCSpacing.value8)
                                         .padding(.vertical, UMCSpacing.value4)
                                         .frame(minHeight: 32, alignment: .leading)
                                 }
@@ -159,6 +159,7 @@ struct SettingsProfileView: View {
                                 } label: {
                                     Text(isEmpty ? "추가하기" : "링크 수정")
                                         .umcTypography(.bodyRegular)
+                                        .padding(.horizontal, UMCSpacing.value8)
                                         .padding(.vertical, UMCSpacing.value4)
                                         .frame(minHeight: 32, alignment: .leading)
                                 }
