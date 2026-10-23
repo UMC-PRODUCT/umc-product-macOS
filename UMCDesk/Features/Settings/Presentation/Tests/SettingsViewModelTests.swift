@@ -28,10 +28,13 @@ struct SettingsViewModelTests {
         let useCase = ControlledSettingsUseCase()
         let model = makeModel(useCase: useCase)
         await model.refreshProfile()
-        model.editLinks()
+        model.editLinks(focusing: .blog)
+        #expect(model.linkEditorFocus == .blog)
+        #expect(model.dialog == .editLinks)
         model.linkDraft.github = "https://github.com/edited"
         model.dismissDialog()
         model.editLinks()
+        #expect(model.linkEditorFocus == .github)
         #expect(model.linkDraft.github == "https://github.com/original")
         model.linkDraft.github = "https://github.com/edited"
         await useCase.failNextSave()
@@ -63,7 +66,15 @@ struct SettingsViewModelTests {
         await useCase.failNextFetch()
         await model.submitChallengerCode()
         #expect(model.codeStep == .registeredNeedsRefresh)
-        await model.retryRegisteredProfile()
+        #expect(model.dialogMessage != nil)
+        await useCase.holdNextFetch()
+        let pending = Task { await model.retryRegisteredProfile() }
+        await useCase.waitForHeldFetch()
+        #expect(model.dialogMessage == nil)
+        #expect(model.isRegistering)
+        await useCase.releaseFetch()
+        await pending.value
+        #expect(!model.isRegistering)
         #expect(model.codeStep == .complete)
         #expect(await useCase.registeredCodes == ["a7B2c9"])
     }

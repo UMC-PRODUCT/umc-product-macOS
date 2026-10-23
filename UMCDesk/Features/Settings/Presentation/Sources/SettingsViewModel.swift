@@ -40,6 +40,7 @@ public final class SettingsViewModel {
     private(set) var visibleCategories = SettingsPage.categories
     var dialog: SettingsDialog?
     var dialogMessage: String?
+    private(set) var linkEditorFocus: SettingsLinkKind = .github
     var linkDraft = SettingsProfileLinks()
     var linkErrors: [SettingsLinkKind: String] = [:]
     var challengerCode = "" { didSet { if codeStep == .entry { dialogMessage = nil } } }
@@ -176,8 +177,9 @@ public final class SettingsViewModel {
         }
     }
 
-    func editLinks() {
+    func editLinks(focusing kind: SettingsLinkKind = .github) {
         guard let profile, !isAccountBusy else { return }
+        linkEditorFocus = kind
         linkDraft = profile.links
         linkErrors = [:]
         dialogMessage = nil
@@ -202,7 +204,8 @@ public final class SettingsViewModel {
             let value = linkDraft[kind].trimmingCharacters(in: .whitespacesAndNewlines)
             linkDraft[kind] = value
             if !value.isEmpty, DefaultSettingsUseCase.validatedWebURL(value) == nil {
-                linkErrors[kind] = "사용자 정보가 없는 올바른 HTTP(S) 주소를 입력해 주세요."
+                linkErrors[kind] = "https:// 또는 http://로 시작하는 링크를 입력해 주세요. "
+                    + "로그인 정보가 포함된 주소는 사용할 수 없어요."
             }
         }
         guard linkErrors.isEmpty else { return }
@@ -223,7 +226,7 @@ public final class SettingsViewModel {
         } catch {
             guard generation == accountGeneration, !Task.isCancelled else { return }
             if !(await handleAuthentication(error)) {
-                dialogMessage = "저장하지 못했어요. 다시 시도해 주세요."
+                dialogMessage = "저장하지 못했어요. 입력한 내용은 유지되니 다시 시도해 주세요."
             }
         }
     }
@@ -251,7 +254,8 @@ public final class SettingsViewModel {
             guard generation == accountGeneration else { return }
             codeStep = .registeredNeedsRefresh
             guard !Task.isCancelled else {
-                dialogMessage = "코드는 등록됐어요. 최신 정보를 다시 불러와 주세요."
+                dialogMessage = "코드는 등록됐어요. 활동 정보를 불러오지 못했어요. "
+                    + "코드를 다시 등록할 필요 없이 다시 불러와 주세요."
                 return
             }
             await fetchRegisteredProfile(generation: generation)
@@ -265,6 +269,7 @@ public final class SettingsViewModel {
 
     func retryRegisteredProfile() async {
         guard codeStep == .registeredNeedsRefresh, !isRegistering else { return }
+        dialogMessage = nil
         let generation = accountGeneration
         isRegistering = true
         defer { if generation == accountGeneration { isRegistering = false } }
@@ -378,7 +383,8 @@ public final class SettingsViewModel {
         } catch {
             guard generation == accountGeneration, !Task.isCancelled else { return }
             if !(await handleAuthentication(error)) {
-                dialogMessage = "코드는 등록됐어요. 최신 정보를 다시 불러와 주세요."
+                dialogMessage = "코드는 등록됐어요. 활동 정보를 불러오지 못했어요. "
+                    + "코드를 다시 등록할 필요 없이 다시 불러와 주세요."
             }
         }
     }

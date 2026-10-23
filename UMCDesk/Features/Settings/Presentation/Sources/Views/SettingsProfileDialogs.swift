@@ -54,7 +54,7 @@ struct SettingsDialogContent: View {
         .foregroundStyle(UMCColor.Semantic.textNeutralDefault)
         .background(UMCColor.Custom.backgroundDefault)
         .onAppear {
-            if dialog == .editLinks { focusedLink = .github }
+            if dialog == .editLinks { focusedLink = viewModel.linkEditorFocus }
             if dialog == .addPermission { focusesCode = true }
         }
     }
@@ -122,7 +122,7 @@ struct SettingsDialogContent: View {
     private var challengerForm: some View {
         if viewModel.codeStep == .complete {
             VStack(alignment: .leading, spacing: UMCSpacing.value24) {
-                Label("서버에서 최신 활동과 역할을 성공적으로 불러왔어요.",
+                Label("등록이 완료됐어요. 활동 정보를 확인해 주세요.",
                     systemImage: "checkmark.circle.fill")
                     .umcTypography(.title4Regular)
                     .foregroundStyle(UMCColor.Semantic.textBrandDefault)
@@ -130,7 +130,7 @@ struct SettingsDialogContent: View {
                     SettingsActivityRow(activity: activity)
                 }
                 HStack(spacing: UMCSpacing.value12) {
-                    SettingsActionButton(title: "다른 코드 추가", kind: .quiet,
+                    SettingsActionButton(title: "다른 코드 등록", kind: .quiet,
                         action: viewModel.addPermission)
                     Spacer()
                     SettingsActionButton(title: "마이페이지로 돌아가기", kind: .primary,
@@ -142,13 +142,13 @@ struct SettingsDialogContent: View {
         } else if viewModel.codeStep == .registeredNeedsRefresh {
             VStack(alignment: .leading, spacing: UMCSpacing.value24) {
                 SettingsInlineMessage(message: viewModel.dialogMessage ??
-                    "등록한 코드의 최신 활동과 역할을 불러오는 중이에요.",
+                    "등록한 활동 정보를 불러오는 중이에요.",
                     isError: viewModel.dialogMessage != nil)
                 HStack(spacing: UMCSpacing.value12) {
                     Spacer()
                     cancelButton(title: "닫기")
                     SettingsActionButton(title: viewModel.isRegistering ? "불러오는 중" :
-                        "최신 정보 다시 불러오기", kind: .primary) {
+                        "활동 정보 다시 불러오기", kind: .primary) {
                         Task { await viewModel.retryRegisteredProfile() }
                     }
                     .disabled(viewModel.isRegistering)
@@ -253,7 +253,12 @@ struct SettingsDialogContent: View {
     private var title: String {
         switch dialog {
         case .editLinks: "프로필 링크 편집"
-        case .addPermission: viewModel.codeStep == .complete ? "권한이 추가됐어요" : "권한 추가"
+        case .addPermission:
+            switch viewModel.codeStep {
+            case .entry: "활동 코드 등록"
+            case .registeredNeedsRefresh: "코드는 등록됐어요"
+            case .complete: "활동 코드를 등록했어요"
+            }
         case .logout: "로그아웃할까요?"
         case .clearCache: "임시 캐시를 삭제할까요?"
         case .licenses: "오픈소스 라이선스"

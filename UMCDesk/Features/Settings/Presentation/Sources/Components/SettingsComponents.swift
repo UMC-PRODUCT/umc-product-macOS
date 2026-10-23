@@ -172,6 +172,7 @@ struct SettingsPlainButtonStyle: ButtonStyle {
             .background(
                 isEnabled && (isHovered || isFocused || configuration.isPressed) ? highlight : .clear,
                 in: .rect(cornerRadius: cornerRadius))
+            .contentShape(.rect(cornerRadius: cornerRadius))
             .onHover { hovering in
                 withAnimation(reduceMotion ? nil : .easeOut(duration: 0.12)) {
                     isHovered = hovering
@@ -194,10 +195,11 @@ struct SettingsStatusText: View {
 struct SettingsInlineMessage: View {
     let message: String
     var isError = false
+    var typography: UMCTypography = .title4Regular
 
     var body: some View {
         Label(message, systemImage: isError ? "exclamationmark.circle" : "info.circle")
-            .umcTypography(.title4Regular)
+            .umcTypography(typography)
             .foregroundStyle(isError ? UMCColor.Semantic.textError :
                 UMCColor.Semantic.textNeutralMedium600)
             .fixedSize(horizontal: false, vertical: true)
