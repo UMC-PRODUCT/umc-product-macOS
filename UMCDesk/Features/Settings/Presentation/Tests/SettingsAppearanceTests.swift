@@ -22,7 +22,7 @@ struct SettingsAppearanceTests {
             "SettingsAppearanceTests.\(UUID().uuidString)")!)
         preferences.bodyTextSize = size.width == 1040 ? .extraLarge : .standard
         for id in ["757:12600", "807:13303", "903:3596", "903:14091", "903:14321", "906:3869",
-            "activity_roles"] {
+            "activity_roles", "776:17026"] {
             let model = try #require(SettingsDesignPreview.makeViewModel(id: id,
                 preferences: preferences))
             let controller = NSHostingController(rootView: SettingsView(viewModel: model)
