@@ -162,13 +162,15 @@ struct SettingsButtonStyle: ButtonStyle {
 struct SettingsPlainButtonStyle: ButtonStyle {
     var highlight = UMCColor.Semantic.fillNeutralWeakerHoverPressed
     var cornerRadius: CGFloat = UMCRadius.value8
+    var isFocused = false
     @Environment(\.isEnabled) private var isEnabled
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var isHovered = false
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .background(isEnabled && (isHovered || configuration.isPressed) ? highlight : .clear,
+            .background(
+                isEnabled && (isHovered || isFocused || configuration.isPressed) ? highlight : .clear,
                 in: .rect(cornerRadius: cornerRadius))
             .onHover { hovering in
                 withAnimation(reduceMotion ? nil : .easeOut(duration: 0.12)) {
