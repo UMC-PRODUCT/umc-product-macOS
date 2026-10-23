@@ -14,6 +14,7 @@ public struct SettingsView: View {
 
     @State private var viewModel: SettingsViewModel
     @State private var showsProfileMenu = false
+    @State private var hoveredProfileMenuItem: ProfileMenuFocus?
     @FocusState private var profileMenuFocus: ProfileMenuFocus?
     @AccessibilityFocusState private var accessibleProfileMenuFocus: ProfileMenuFocus?
 
@@ -162,55 +163,63 @@ public struct SettingsView: View {
     }
 
     private var profileMenu: some View {
-        VStack(alignment: .leading, spacing: UMCSpacing.value16) {
+        VStack(alignment: .leading, spacing: UMCSpacing.value4) {
             if let profile = viewModel.profile {
-                HStack(spacing: UMCSpacing.value12) {
-                    SettingsAvatar(url: profile.profileImageURL, size: 48,
+                HStack(spacing: UMCSpacing.value8) {
+                    SettingsAvatar(url: profile.profileImageURL, size: 24,
                         usesDesignImage: viewModel.isDesignPreview)
                     VStack(alignment: .leading, spacing: UMCSpacing.value4) {
-                        HStack(spacing: UMCSpacing.value8) {
-                            Text("\(profile.nickname) / \(profile.name)")
-                                .umcTypography(.title3Bold)
-                            if let activity = profile.activities.first {
-                                SettingsPartTag(part: activity.part, minimumHeight: 22)
-                            }
-                        }
+                        Text("\(profile.nickname) / \(profile.name)")
+                            .umcTypography(.headlineBold)
+                            .lineLimit(1)
+                            .truncationMode(.tail)
                         Text(profileMenuSummary(profile))
-                            .umcTypography(.headlineRegular)
+                            .umcTypography(.subheadlineRegular)
                             .foregroundStyle(UMCColor.Semantic.textNeutralWeak500)
+                            .lineLimit(1)
+                            .truncationMode(.tail)
                     }
-                    .fixedSize(horizontal: false, vertical: true)
                 }
-                .padding(UMCSpacing.value8)
+                .padding(.horizontal, UMCSpacing.value8)
+                .padding(.vertical, UMCSpacing.value4)
                 SettingsDivider()
             }
             VStack(spacing: UMCSpacing.value4) {
-                profileMenuButton("마이페이지", focus: .myPage) { viewModel.showProfile() }
-                profileMenuButton("설정", focus: .settings) { viewModel.showSettings() }
+                profileMenuButton("마이페이지", symbol: "person.crop.circle", focus: .myPage) {
+                    viewModel.showProfile()
+                }
+                profileMenuButton("설정", symbol: "gearshape", focus: .settings) {
+                    viewModel.showSettings()
+                }
             }
             if viewModel.profile != nil {
                 SettingsDivider()
-                profileMenuButton("로그아웃", focus: .logout) {
+                profileMenuButton("로그아웃", symbol: "rectangle.portrait.and.arrow.right",
+                    focus: .logout) {
                     viewModel.dialogMessage = nil
                     viewModel.dialog = .logout
                 }
             }
         }
-        .padding(UMCSpacing.value12)
-        .frame(width: 304)
+        .padding(UMCSpacing.value8)
+        .frame(width: 240)
         .foregroundStyle(UMCColor.Semantic.textNeutralStrong800)
         .background(UMCColor.Custom.backgroundDefault,
-            in: .rect(cornerRadius: UMCRadius.value16))
+            in: .rect(cornerRadius: UMCRadius.value12))
         .overlay {
-            RoundedRectangle(cornerRadius: UMCRadius.value16)
+            RoundedRectangle(cornerRadius: UMCRadius.value12)
                 .strokeBorder(UMCColor.Semantic.borderNeutralWeak200)
         }
         .shadow(color: .black.opacity(0.16), radius: 16, y: 4)
         .accessibilityElement(children: .contain)
         .accessibilityLabel("프로필 메뉴")
+        .onChange(of: profileMenuFocus) { _, _ in
+            hoveredProfileMenuItem = nil
+        }
     }
 
     private func dismissProfileMenu() {
+        hoveredProfileMenuItem = nil
         showsProfileMenu = false
     }
 
@@ -223,21 +232,37 @@ public struct SettingsView: View {
     }
 
     private func profileMenuButton(
-        _ title: String, focus: ProfileMenuFocus, action: @escaping () -> Void
+        _ title: String, symbol: String, focus: ProfileMenuFocus, action: @escaping () -> Void
     ) -> some View {
         Button {
             dismissProfileMenu()
             action()
         } label: {
-            Text(title)
-                .umcTypography(.title4Regular)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(UMCSpacing.value8)
-                .contentShape(.rect)
+            HStack(spacing: UMCSpacing.value8) {
+                Image(systemName: symbol)
+                    .font(.system(size: 14))
+                    .frame(width: 16, height: 16)
+                    .accessibilityHidden(true)
+                Text(title)
+                    .umcTypography(.headlineRegular)
+            }
+            .padding(.horizontal, UMCSpacing.value8)
+            .padding(.vertical, UMCSpacing.value4)
+            .frame(maxWidth: .infinity, minHeight: 28, alignment: .leading)
+            .contentShape(.rect)
         }
         .buttonStyle(SettingsPlainButtonStyle(
-            highlight: UMCColor.Semantic.fillPrimaryWeakerHoverPressed,
-            isFocused: profileMenuFocus == focus))
+            highlight: hoveredProfileMenuItem != nil || profileMenuFocus == focus ?
+                UMCColor.Semantic.fillNeutralWeakerHoverPressed : .clear,
+            cornerRadius: UMCRadius.value6,
+            isFocused: hoveredProfileMenuItem == nil && profileMenuFocus == focus))
+        .onHover { hovering in
+            if hovering {
+                hoveredProfileMenuItem = focus
+            } else if hoveredProfileMenuItem == focus {
+                hoveredProfileMenuItem = nil
+            }
+        }
         .focusable()
         .focused($profileMenuFocus, equals: focus)
         .focusEffectDisabled()

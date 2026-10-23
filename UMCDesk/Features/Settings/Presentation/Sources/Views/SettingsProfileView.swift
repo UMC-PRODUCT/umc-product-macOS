@@ -16,20 +16,22 @@ struct SettingsProfileView: View {
     var body: some View {
         ScrollView {
             if let profile = viewModel.profile {
-                VStack(alignment: .leading, spacing: UMCSpacing.value24) {
+                VStack(alignment: .leading, spacing: UMCSpacing.value20) {
                     profileSummary(profile)
                     ViewThatFits(in: .horizontal) {
-                        HStack(alignment: .top, spacing: UMCSpacing.value24) {
+                        HStack(alignment: .top, spacing: UMCSpacing.value20) {
                             profileLinks(profile).frame(minWidth: 340)
                             activities(profile).frame(minWidth: 340)
                         }
-                        VStack(spacing: UMCSpacing.value24) {
+                        VStack(spacing: UMCSpacing.value20) {
                             profileLinks(profile)
                             activities(profile)
                         }
                     }
                     HStack(spacing: UMCSpacing.value16) {
-                        SettingsInlineMessage(message: "이름, 학교, 활동 정보가 다르면 운영진에게 문의해 주세요.")
+                        SettingsInlineMessage(
+                            message: "이름, 학교, 활동 정보가 다르면 운영진에게 문의해 주세요.",
+                            typography: .bodyRegular)
                         Spacer(minLength: 0)
                         SettingsActionButton(title: "문의하기") {
                             viewModel.navigate(to: .about)
@@ -37,7 +39,7 @@ struct SettingsProfileView: View {
                     }
                     .padding(.horizontal, UMCSpacing.value16)
                 }
-                .frame(maxWidth: 960)
+                .frame(maxWidth: 880)
                 .frame(maxWidth: .infinity)
                 .padding(UMCSpacing.value32)
             } else {
@@ -52,49 +54,58 @@ struct SettingsProfileView: View {
     private func profileSummary(_ profile: SettingsProfile) -> some View {
         SettingsCard(isSubtle: true) {
             HStack(spacing: UMCSpacing.value20) {
-                SettingsAvatar(url: profile.profileImageURL,
+                SettingsAvatar(url: profile.profileImageURL, size: 48,
                     usesDesignImage: viewModel.isDesignPreview)
                 VStack(alignment: .leading, spacing: UMCSpacing.value4) {
                     HStack(spacing: UMCSpacing.value8) {
                         Text("\(profile.nickname) / \(profile.name)")
-                            .umcTypography(.title1Bold)
+                            .umcTypography(.title2Bold)
                         if let activity = profile.activities.last {
                             SettingsPartTag(part: activity.part)
                         }
                     }
                     Text(profile.schoolName ?? "학교 정보 없음")
-                        .umcTypography(.title4Regular)
+                        .umcTypography(.headlineRegular)
                         .foregroundStyle(UMCColor.Semantic.textNeutralWeak500)
                     Text(profile.email ?? "이메일 정보 없음")
-                        .umcTypography(.title4Regular)
+                        .umcTypography(.headlineRegular)
                         .foregroundStyle(UMCColor.Semantic.textNeutralWeak500)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 Button {
                     Task { await viewModel.refreshProfile() }
                 } label: {
-                    Image(systemName: "arrow.clockwise")
-                        .frame(width: 32, height: 32)
-                        .contentShape(.rect)
+                    ZStack {
+                        if viewModel.isRefreshing {
+                            ProgressView().controlSize(.small)
+                        } else {
+                            Image(systemName: "arrow.clockwise")
+                        }
+                    }
+                    .frame(width: 32, height: 32)
+                    .contentShape(.rect)
                 }
                 .buttonStyle(SettingsPlainButtonStyle())
                 .disabled(viewModel.isRefreshing || viewModel.isAccountBusy)
-                .accessibilityLabel("마이페이지 새로고침")
-                .help("프로필과 활동 정보를 다시 불러오기")
+                .accessibilityLabel(viewModel.isRefreshing ? "마이페이지 새로고침 중" : "마이페이지 새로고침")
+                .help(viewModel.isRefreshing ?
+                    "프로필과 활동 정보를 불러오는 중" : "프로필과 활동 정보를 다시 불러오기")
                 .keyboardShortcut("r", modifiers: .command)
             }
         }
     }
 
     private func profileLinks(_ profile: SettingsProfile) -> some View {
-        SettingsCard(isSubtle: true, minimumHeight: 352) {
+        SettingsCard(isSubtle: true, minimumHeight: 324) {
             VStack(alignment: .leading, spacing: UMCSpacing.value16) {
                 HStack(alignment: .top) {
                     profileCardHeading("프로필 링크", description: "UMC 계정에 등록한 링크예요.")
                     Spacer(minLength: UMCSpacing.value8)
-                    Button(action: viewModel.editLinks) {
+                    Button { viewModel.editLinks() } label: {
                         Label("편집", systemImage: "pencil")
-                            .umcTypography(.headlineRegular)
+                            .umcTypography(.bodyRegular)
+                            .padding(.horizontal, UMCSpacing.value8)
+                            .frame(minHeight: 32)
                     }
                     .buttonStyle(SettingsPlainButtonStyle())
                     .padding(.top, UMCSpacing.value4)
@@ -102,7 +113,7 @@ struct SettingsProfileView: View {
                     .accessibilityLabel("프로필 링크 편집")
                 }
                 SettingsDivider()
-                VStack(alignment: .leading, spacing: UMCSpacing.value16) {
+                VStack(alignment: .leading, spacing: UMCSpacing.value12) {
                     ForEach(SettingsLinkKind.allCases) { kind in
                         HStack(alignment: .firstTextBaseline, spacing: UMCSpacing.value12) {
                             HStack(spacing: UMCSpacing.value8) {
@@ -110,32 +121,47 @@ struct SettingsProfileView: View {
                                     .resizable()
                                     .scaledToFit()
                                     .foregroundStyle(profileLinkIconStyle(kind))
-                                    .frame(width: UMCSpacing.value20, height: UMCSpacing.value20)
+                                    .frame(width: UMCSpacing.value16, height: UMCSpacing.value16)
                                     .accessibilityHidden(true)
                                 Text(kind.title)
-                                    .umcTypography(.title4Bold)
+                                    .umcTypography(.headlineBold)
                             }
-                            .frame(width: 108, alignment: .leading)
+                            .frame(width: 96, alignment: .leading)
                             if let url = DefaultSettingsUseCase.validatedWebURL(
                                 profile.links[kind]
                             ) {
                                 Button { openURL(url) } label: {
                                     Text(displayLink(profile.links[kind]))
-                                        .umcTypography(.headlineRegular)
+                                        .umcTypography(.bodyRegular)
                                         .lineLimit(1)
                                         .truncationMode(.middle)
                                         .padding(.trailing, UMCSpacing.value8)
                                         .padding(.vertical, UMCSpacing.value4)
+                                        .frame(minHeight: 32, alignment: .leading)
                                 }
                                 .buttonStyle(SettingsPlainButtonStyle())
                                 .frame(maxWidth: .infinity, alignment: .leading)
                                 .foregroundStyle(UMCColor.Semantic.textBrandDefault)
                                 .help(profile.links[kind])
+                                .accessibilityLabel("\(kind.title) 링크 열기")
+                                .accessibilityValue(url.absoluteString)
+                                .accessibilityHint("기본 브라우저에서 열립니다.")
                             } else {
-                                Text("미등록")
-                                    .umcTypography(.headlineRegular)
-                                    .foregroundStyle(UMCColor.Semantic.textNeutralWeak500)
-                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                let isEmpty = profile.links[kind]
+                                    .trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                                Button {
+                                    viewModel.editLinks(focusing: kind)
+                                } label: {
+                                    Text(isEmpty ? "추가하기" : "링크 수정")
+                                        .umcTypography(.bodyRegular)
+                                        .padding(.vertical, UMCSpacing.value4)
+                                        .frame(minHeight: 32, alignment: .leading)
+                                }
+                                .buttonStyle(SettingsPlainButtonStyle())
+                                .foregroundStyle(UMCColor.Semantic.textBrandDefault)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .disabled(viewModel.isAccountBusy)
+                                .accessibilityLabel("\(kind.title) 링크 \(isEmpty ? "추가" : "수정")")
                             }
                         }
                         .frame(minHeight: 30)
@@ -177,15 +203,15 @@ struct SettingsProfileView: View {
     }
 
     private func activities(_ profile: SettingsProfile) -> some View {
-        SettingsCard(isSubtle: true, minimumHeight: 352) {
+        SettingsCard(isSubtle: true, minimumHeight: 324) {
             VStack(alignment: .leading, spacing: UMCSpacing.value16) {
-                profileCardHeading("내 활동과 권한", description: "운영진에게 받은 코드로 활동과 역할을 추가하세요.")
+                profileCardHeading("내 활동", description: "참여한 기수와 파트, 맡은 역할을 확인하세요.")
                 SettingsDivider()
                 if profile.activities.isEmpty {
                     VStack(alignment: .leading, spacing: UMCSpacing.value8) {
-                        Text("아직 등록된 활동이 없어요.").umcTypography(.title4Bold)
-                        Text("활동 기록이 없어도 권한을 추가할 수 있어요.")
-                            .umcTypography(.headlineRegular)
+                        Text("아직 등록된 활동이 없어요.").umcTypography(.headlineBold)
+                        Text("운영진에게 받은 챌린저 코드로 활동을 등록해 주세요.")
+                            .umcTypography(.bodyRegular)
                             .foregroundStyle(UMCColor.Semantic.textNeutralWeak500)
                     }
                     .padding(.vertical, UMCSpacing.value16)
@@ -196,7 +222,7 @@ struct SettingsProfileView: View {
                         }
                     }
                 }
-                SettingsActionButton(title: "권한 추가", symbol: "plus", kind: .primary,
+                SettingsActionButton(title: "활동 코드 등록", symbol: "plus", kind: .primary,
                     fillsWidth: true, action: viewModel.addPermission)
                     .environment(\.colorScheme, .light)
                     .disabled(viewModel.isAccountBusy)
@@ -206,9 +232,9 @@ struct SettingsProfileView: View {
 
     private func profileCardHeading(_ title: String, description: String) -> some View {
         VStack(alignment: .leading, spacing: UMCSpacing.value4) {
-            Text(title).umcTypography(.title3Bold).accessibilityAddTraits(.isHeader)
+            Text(title).umcTypography(.title4Bold).accessibilityAddTraits(.isHeader)
             Text(description)
-                .umcTypography(.headlineRegular)
+                .umcTypography(.bodyRegular)
                 .foregroundStyle(UMCColor.Semantic.textNeutralWeak500)
                 .fixedSize(horizontal: false, vertical: true)
         }
@@ -277,20 +303,20 @@ struct SettingsActivityRow: View {
     var body: some View {
         HStack(spacing: UMCSpacing.value12) {
             Text(activity.generation.isEmpty ? "기수 미정" : "\(activity.generation)기")
-                .umcTypography(.headlineRegular)
+                .umcTypography(.bodyRegular)
                 .padding(.horizontal, 6)
-                .frame(minHeight: 26)
+                .frame(minHeight: 24)
                 .foregroundStyle(UMCColor.Semantic.textBrandDefault)
                 .background(UMCColor.Semantic.fillPrimaryWeak75,
                     in: .rect(cornerRadius: UMCRadius.value6))
-            Text(partTitle(activity.part)).umcTypography(.headlineBold)
+            Text(partTitle(activity.part)).umcTypography(.bodyRegular)
             Spacer(minLength: UMCSpacing.value8)
             ViewThatFits(in: .horizontal) {
                 HStack(spacing: UMCSpacing.value8) { roleTags }
                 VStack(alignment: .trailing, spacing: UMCSpacing.value4) { roleTags }
             }
         }
-        .frame(minHeight: 38)
+        .frame(minHeight: 32)
     }
 
     private var roleTags: some View {
@@ -298,7 +324,7 @@ struct SettingsActivityRow: View {
             Text(roleTitle(role))
                 .umcTypography(.bodyRegular)
                 .padding(.horizontal, 6)
-                .frame(minHeight: 26)
+                .frame(minHeight: 24)
                 .foregroundStyle(roleColors(role).foreground)
                 .background(roleColors(role).background,
                     in: .rect(cornerRadius: UMCRadius.value6))
@@ -308,11 +334,11 @@ struct SettingsActivityRow: View {
 
 struct SettingsPartTag: View {
     let part: String
-    var minimumHeight: CGFloat = 26
+    var minimumHeight: CGFloat = 24
 
     var body: some View {
         Text(part == "PLAN" ? "PM" : partTitle(part))
-            .umcTypography(.headlineRegular)
+            .umcTypography(.bodyRegular)
             .foregroundStyle(colors.foreground)
             .padding(.horizontal, 6)
             .frame(minHeight: minimumHeight)
