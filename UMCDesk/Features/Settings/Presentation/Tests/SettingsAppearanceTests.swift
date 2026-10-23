@@ -46,7 +46,8 @@ struct SettingsAppearanceTests {
                 let frame = host.convert(scroll.bounds, from: scroll)
                 return host.isFlipped ? frame.minY : host.bounds.height - frame.maxY
             }
-            #expect(topInsets.contains { $0 >= 12 && $0 <= 40 })
+            // Native window chrome owns the top spacing; page content starts at the host's top.
+            #expect(topInsets.contains { abs($0) < 0.5 }, "Scroll top insets: \(topInsets)")
             #expect(!descendants(in: host, type: NSScrollView.self).isEmpty)
             let fields = descendants(in: host, type: NSTextField.self).filter(\.isEditable)
             for field in fields {
