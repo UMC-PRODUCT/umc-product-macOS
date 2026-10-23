@@ -36,14 +36,14 @@ struct SettingsRow<Accessory: View>: View {
     @ViewBuilder let accessory: Accessory
 
     var body: some View {
-        HStack(spacing: UMCSpacing.value24) {
+        HStack(spacing: UMCSpacing.value16) {
             VStack(alignment: .leading, spacing: UMCSpacing.value4) {
                 Text(title)
-                    .umcTypography(.title2Bold)
+                    .umcTypography(.headlineRegular)
                     .foregroundStyle(UMCColor.Semantic.textNeutralStrong800)
                 if !description.isEmpty {
                     Text(description)
-                        .umcTypography(.title4Regular)
+                        .umcTypography(.bodyRegular)
                         .foregroundStyle(UMCColor.Semantic.textNeutralMedium600)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -51,7 +51,7 @@ struct SettingsRow<Accessory: View>: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             accessory
         }
-        .frame(minHeight: 52)
+        .frame(minHeight: 44)
     }
 }
 
@@ -60,9 +60,9 @@ struct SettingsSection<Content: View>: View {
     @ViewBuilder let content: Content
 
     var body: some View {
-        VStack(alignment: .leading, spacing: UMCSpacing.value16) {
+        VStack(alignment: .leading, spacing: UMCSpacing.value12) {
             Text(title)
-                .umcTypography(.title2Regular)
+                .umcTypography(.headlineBold)
                 .foregroundStyle(UMCColor.Semantic.textNeutralStrong800)
                 .accessibilityAddTraits(.isHeader)
             content
@@ -96,7 +96,7 @@ struct SettingsActionButton: View {
                 if let symbol { Image(systemName: symbol) }
                 Text(title)
             }
-            .umcTypography(.title4Regular)
+            .umcTypography(.headlineRegular)
             .padding(.horizontal, UMCSpacing.value16)
             .frame(minWidth: 64, maxWidth: fillsWidth ? .infinity : nil, minHeight: 40)
             .contentShape(.rect(cornerRadius: UMCRadius.value12))
@@ -108,11 +108,14 @@ struct SettingsActionButton: View {
 struct SettingsButtonStyle: ButtonStyle {
     let kind: SettingsButtonKind
     @Environment(\.isEnabled) private var isEnabled
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var isHovered = false
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .foregroundStyle(foreground)
-            .background(background.opacity(configuration.isPressed ? 0.75 : 1),
+            .background(isEnabled && (isHovered || configuration.isPressed) ?
+                activeBackground : background,
                 in: .rect(cornerRadius: UMCRadius.value12))
             .overlay {
                 RoundedRectangle(cornerRadius: UMCRadius.value12)
@@ -120,6 +123,20 @@ struct SettingsButtonStyle: ButtonStyle {
                         UMCColor.Semantic.borderNeutralWeak200 : .clear, lineWidth: 1)
             }
             .opacity(isEnabled ? 1 : 0.45)
+            .onHover { hovering in
+                withAnimation(reduceMotion ? nil : .easeOut(duration: 0.12)) {
+                    isHovered = hovering
+                }
+            }
+    }
+
+    private var activeBackground: Color {
+        switch kind {
+        case .primary: UMCColor.Semantic.fillPrimaryInverseStrongHoverPressed
+        case .brand: UMCColor.Semantic.fillPrimaryWeakHoverPressed
+        case .secondary, .quiet: UMCColor.Semantic.fillNeutralWeakerHoverPressed
+        case .destructive: UMCColor.Semantic.fillErrorWeakHoverPressed
+        }
     }
 
     private var foreground: Color {
@@ -142,12 +159,31 @@ struct SettingsButtonStyle: ButtonStyle {
     }
 }
 
+struct SettingsPlainButtonStyle: ButtonStyle {
+    var highlight = UMCColor.Semantic.fillNeutralWeakerHoverPressed
+    var cornerRadius: CGFloat = UMCRadius.value8
+    @Environment(\.isEnabled) private var isEnabled
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var isHovered = false
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .background(isEnabled && (isHovered || configuration.isPressed) ? highlight : .clear,
+                in: .rect(cornerRadius: cornerRadius))
+            .onHover { hovering in
+                withAnimation(reduceMotion ? nil : .easeOut(duration: 0.12)) {
+                    isHovered = hovering
+                }
+            }
+    }
+}
+
 struct SettingsStatusText: View {
     let text: String
 
     var body: some View {
         Text(text)
-            .umcTypography(.title4Regular)
+            .umcTypography(.headlineRegular)
             .foregroundStyle(UMCColor.Semantic.textBrandDefault)
             .fixedSize()
     }

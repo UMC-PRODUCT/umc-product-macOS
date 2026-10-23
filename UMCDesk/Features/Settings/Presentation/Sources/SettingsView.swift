@@ -14,6 +14,12 @@ public struct SettingsView: View {
 
     @State private var viewModel: SettingsViewModel
     @State private var showsProfileMenu = false
+    @FocusState private var profileMenuFocus: ProfileMenuFocus?
+    @AccessibilityFocusState private var accessibleProfileMenuFocus: ProfileMenuFocus?
+
+    private enum ProfileMenuFocus: Hashable {
+        case trigger, myPage, settings, logout
+    }
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -47,18 +53,52 @@ public struct SettingsView: View {
             .background(UMCColor.Custom.backgroundDefault)
             .clipShape(.rect(cornerRadius: UMCRadius.value16))
             .overlay(alignment: .bottom) {
-                if let toast = viewModel.toast {
-                    toastView(toast)
-                        .padding(UMCSpacing.value24)
-                        .transition(reduceMotion ? .opacity : .move(edge: .bottom).combined(
-                            with: .opacity))
+                ZStack {
+                    if let toast = viewModel.toast {
+                        toastView(toast)
+                            .padding(UMCSpacing.value24)
+                            .id(toast.id)
+                            .transition(reduceMotion ? .opacity : .offset(y: 8).combined(
+                                with: .opacity))
+                    }
                 }
+                .animation(reduceMotion ? nil : .easeOut(duration: 0.22),
+                    value: viewModel.toast?.id)
             }
         }
         .padding(.leading, UMCSpacing.value4)
-        .padding([.top, .bottom, .trailing], UMCSpacing.value12)
+        .padding([.bottom, .trailing], UMCSpacing.value12)
         .background(UMCColor.Custom.backgroundAppShell)
+        .disabled(showsProfileMenu)
+        .accessibilityHidden(showsProfileMenu)
+        .overlay(alignment: .bottomLeading) {
+            if showsProfileMenu {
+                ZStack(alignment: .bottomLeading) {
+                    Color.clear
+                        .contentShape(.rect)
+                        .onTapGesture { dismissProfileMenu() }
+                        .accessibilityHidden(true)
+                    profileMenu
+                        .padding(.leading, Constants.railWidth + UMCSpacing.value12)
+                        .padding(.bottom, UMCSpacing.value12 + UMCSpacing.value16)
+                        .onAppear {
+                            profileMenuFocus = .myPage
+                            accessibleProfileMenuFocus = .myPage
+                        }
+                }
+            }
+        }
+        .onExitCommand(perform: dismissProfileMenu)
+        .onChange(of: showsProfileMenu) { _, isPresented in
+            if !isPresented {
+                profileMenuFocus = .trigger
+                accessibleProfileMenuFocus = .trigger
+            }
+        }
         .toolbar { navigationToolbar }
+        .toolbarBackground(UMCColor.Custom.backgroundAppShell, for: .windowToolbar)
+        .toolbarBackgroundVisibility(.visible, for: .windowToolbar)
+        .toolbarColorScheme(.dark, for: .windowToolbar)
         .foregroundStyle(UMCColor.Semantic.textNeutralDefault)
         .tint(UMCColor.Semantic.textBrandDefault)
         .sheet(item: $viewModel.dialog, onDismiss: viewModel.dismissDialog) { dialog in
@@ -97,12 +137,13 @@ public struct SettingsView: View {
                     .frame(width: 44, height: 44)
                     .contentShape(.rect)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(SettingsPlainButtonStyle(highlight: .white.opacity(0.1),
+                cornerRadius: UMCRadius.value12))
             .accessibilityLabel("프로필 메뉴")
             .help("마이페이지, 설정 및 계정 메뉴")
-            .popover(isPresented: $showsProfileMenu, arrowEdge: .trailing) {
-                profileMenu
-            }
+            .focusable()
+            .focused($profileMenuFocus, equals: .trigger)
+            .accessibilityFocused($accessibleProfileMenuFocus, equals: .trigger)
             .padding(.bottom, UMCSpacing.value16)
         }
     }
@@ -140,12 +181,12 @@ public struct SettingsView: View {
                 SettingsDivider()
             }
             VStack(spacing: UMCSpacing.value4) {
-                profileMenuButton("마이페이지") { viewModel.showProfile() }
-                profileMenuButton("설정") { viewModel.showSettings() }
+                profileMenuButton("마이페이지", focus: .myPage) { viewModel.showProfile() }
+                profileMenuButton("설정", focus: .settings) { viewModel.showSettings() }
             }
             if viewModel.profile != nil {
                 SettingsDivider()
-                profileMenuButton("로그아웃") {
+                profileMenuButton("로그아웃", focus: .logout) {
                     viewModel.dialogMessage = nil
                     viewModel.dialog = .logout
                 }
@@ -154,7 +195,19 @@ public struct SettingsView: View {
         .padding(UMCSpacing.value12)
         .frame(width: 304)
         .foregroundStyle(UMCColor.Semantic.textNeutralStrong800)
-        .background(UMCColor.Custom.backgroundDefault)
+        .background(UMCColor.Custom.backgroundDefault,
+            in: .rect(cornerRadius: UMCRadius.value16))
+        .overlay {
+            RoundedRectangle(cornerRadius: UMCRadius.value16)
+                .strokeBorder(UMCColor.Semantic.borderNeutralWeak200)
+        }
+        .shadow(color: .black.opacity(0.16), radius: 16, y: 4)
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("프로필 메뉴")
+    }
+
+    private func dismissProfileMenu() {
+        showsProfileMenu = false
     }
 
     private func profileMenuSummary(_ profile: SettingsProfile) -> String {
@@ -165,9 +218,11 @@ public struct SettingsView: View {
         return values.joined(separator: " · ")
     }
 
-    private func profileMenuButton(_ title: String, action: @escaping () -> Void) -> some View {
+    private func profileMenuButton(
+        _ title: String, focus: ProfileMenuFocus, action: @escaping () -> Void
+    ) -> some View {
         Button {
-            showsProfileMenu = false
+            dismissProfileMenu()
             action()
         } label: {
             Text(title)
@@ -176,40 +231,35 @@ public struct SettingsView: View {
                 .padding(UMCSpacing.value8)
                 .contentShape(.rect)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(SettingsPlainButtonStyle())
+        .focusable()
+        .focused($profileMenuFocus, equals: focus)
+        .accessibilityFocused($accessibleProfileMenuFocus, equals: focus)
     }
 
     @ToolbarContentBuilder
     private var navigationToolbar: some ToolbarContent {
         ToolbarItemGroup(placement: .navigation) {
-            Button("뒤로", systemImage: "arrow.left", action: viewModel.goBack)
-                .disabled(!viewModel.canGoBack)
+            Button("뒤로", systemImage: "chevron.left", action: viewModel.goBack)
+                .buttonStyle(.plain)
+                .disabled(showsProfileMenu || !viewModel.canGoBack)
                 .accessibilityLabel("뒤로")
                 .keyboardShortcut("[", modifiers: .command)
-            Button("앞으로", systemImage: "arrow.right", action: viewModel.goForward)
-                .disabled(!viewModel.canGoForward)
+            Button("앞으로", systemImage: "chevron.right", action: viewModel.goForward)
+                .buttonStyle(.plain)
+                .disabled(showsProfileMenu || !viewModel.canGoForward)
                 .accessibilityLabel("앞으로")
                 .keyboardShortcut("]", modifiers: .command)
         }
-        if viewModel.page == .myPage {
-            ToolbarItem(placement: .primaryAction) {
-                Button("마이페이지 새로고침", systemImage: "arrow.clockwise") {
-                    Task { await viewModel.refreshProfile() }
-                }
-                .disabled(viewModel.isRefreshing || viewModel.isAccountBusy)
-                .accessibilityLabel("마이페이지 새로고침")
-                .help("프로필과 활동 정보를 다시 불러오기")
-                .keyboardShortcut("r", modifiers: .command)
-            }
-        }
+        .sharedBackgroundVisibility(.hidden)
     }
 
     private var settingsSidebar: some View {
-        VStack(alignment: .leading, spacing: UMCSpacing.value24) {
+        VStack(alignment: .leading, spacing: UMCSpacing.value16) {
             VStack(alignment: .leading, spacing: UMCSpacing.value8) {
-                Text("설정").umcTypography(.title1Bold)
+                Text("설정").umcTypography(.title3Bold)
                 Text("UMC Desk")
-                    .umcTypography(.headlineRegular)
+                    .umcTypography(.bodyRegular)
                     .foregroundStyle(UMCColor.Semantic.textNeutralWeak500)
             }
             HStack(spacing: UMCSpacing.value8) {
@@ -221,34 +271,34 @@ public struct SettingsView: View {
                     Button { viewModel.searchText = "" } label: {
                         Image(systemName: "xmark.circle.fill")
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(SettingsPlainButtonStyle())
                     .accessibilityLabel("검색어 지우기")
                 }
             }
-            .umcTypography(.title4Regular)
+            .umcTypography(.headlineRegular)
             .foregroundStyle(UMCColor.Semantic.textNeutralWeak500)
             .padding(.horizontal, UMCSpacing.value16)
-            .frame(height: 48)
+            .frame(minHeight: 36)
             .background(UMCColor.Custom.backgroundSurfaceGreyWeak, in: .capsule)
 
             ScrollView {
-                VStack(alignment: .leading, spacing: UMCSpacing.value8) {
+                VStack(alignment: .leading, spacing: UMCSpacing.value4) {
                     ForEach(viewModel.visibleCategories) { category in
                         Button { viewModel.navigate(to: category) } label: {
                             HStack(spacing: UMCSpacing.value8) {
                                 Image(systemName: category.symbol)
-                                    .font(.system(size: 18))
-                                    .frame(width: 32, height: 32)
-                                Text(category.title).umcTypography(.title4Regular)
+                                    .font(.system(size: 16))
+                                    .frame(width: 24, height: 24)
+                                Text(category.title).umcTypography(.headlineRegular)
                             }
-                            .frame(maxWidth: .infinity, minHeight: 48, alignment: .leading)
+                            .frame(maxWidth: .infinity, minHeight: 36, alignment: .leading)
                             .padding(.horizontal, UMCSpacing.value8)
                             .contentShape(.rect)
                             .background(viewModel.page == category ?
                                 UMCColor.Semantic.backgroundBrandWeak : .clear,
                                 in: .rect(cornerRadius: UMCRadius.value8))
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(SettingsPlainButtonStyle())
                         .foregroundStyle(viewModel.page == category ?
                             UMCColor.Semantic.textBrandDefault :
                             UMCColor.Semantic.textNeutralStrong800)
@@ -256,7 +306,7 @@ public struct SettingsView: View {
                     }
                     if viewModel.visibleCategories.isEmpty {
                         Text("검색 결과를 찾을 수 없어요")
-                            .umcTypography(.title4Regular)
+                            .umcTypography(.headlineRegular)
                             .foregroundStyle(UMCColor.Semantic.textNeutralWeak500)
                             .padding(.vertical, UMCSpacing.value16)
                     }
@@ -265,7 +315,7 @@ public struct SettingsView: View {
             .scrollIndicators(.hidden)
             Spacer(minLength: 0)
             Text("변경 사항은 바로 적용돼요")
-                .umcTypography(.headlineRegular)
+                .umcTypography(.bodyRegular)
                 .foregroundStyle(UMCColor.Semantic.textNeutralWeak500)
         }
         .padding(.horizontal, UMCSpacing.value20)
@@ -280,13 +330,13 @@ public struct SettingsView: View {
             SettingsProfileView(viewModel: viewModel)
         } else {
             ScrollView {
-                VStack(alignment: .leading, spacing: UMCSpacing.value40) {
-                    VStack(alignment: .leading, spacing: UMCSpacing.value8) {
+                VStack(alignment: .leading, spacing: UMCSpacing.value24) {
+                    VStack(alignment: .leading, spacing: UMCSpacing.value4) {
                         Text(viewModel.page.title)
-                            .umcTypography(.largeTitle2Bold)
+                            .umcTypography(.title1Bold)
                             .accessibilityAddTraits(.isHeader)
                         Text("이 Mac에서 사용하는 앱의 환경을 설정하세요.")
-                            .umcTypography(.title4Regular)
+                            .umcTypography(.bodyRegular)
                             .foregroundStyle(UMCColor.Semantic.textNeutralWeak500)
                     }
                     switch viewModel.page {
@@ -310,7 +360,7 @@ public struct SettingsView: View {
             Image(systemName: toast.isError ? "exclamationmark.circle" : "checkmark.circle")
             Text(toast.message).umcTypography(.title4Regular)
             Button { viewModel.toast = nil } label: { Image(systemName: "xmark") }
-                .buttonStyle(.plain)
+                .buttonStyle(SettingsPlainButtonStyle())
                 .accessibilityLabel("안내 닫기")
         }
         .foregroundStyle(toast.isError ? UMCColor.Semantic.textError :

@@ -11,14 +11,16 @@ import SwiftUI
 
 struct SettingsAppearanceView: View {
     @Bindable var viewModel: SettingsViewModel
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var hoveredTheme: SettingsTheme?
 
     var body: some View {
         @Bindable var preferences = viewModel.preferences
-        VStack(alignment: .leading, spacing: UMCSpacing.value40) {
+        VStack(alignment: .leading, spacing: UMCSpacing.value24) {
             SettingsCard {
-                VStack(alignment: .leading, spacing: UMCSpacing.value20) {
+                VStack(alignment: .leading, spacing: UMCSpacing.value12) {
                     Text("테마")
-                        .umcTypography(.title2Bold)
+                        .umcTypography(.headlineBold)
                         .accessibilityAddTraits(.isHeader)
                     HStack(spacing: UMCSpacing.value16) {
                         themeButton(.system, title: "시스템", image: "settingsThemeSystem")
@@ -26,7 +28,7 @@ struct SettingsAppearanceView: View {
                         themeButton(.dark, title: "다크", image: "settingsThemeDark")
                     }
                     Text("시스템을 선택하면 macOS의 밝은 화면 · 어두운 화면 설정을 따를 수 있어요.")
-                        .umcTypography(.title4Regular)
+                        .umcTypography(.bodyRegular)
                         .foregroundStyle(UMCColor.Semantic.textNeutralMedium600)
                 }
             }
@@ -40,7 +42,7 @@ struct SettingsAppearanceView: View {
                         }
                         .labelsHidden()
                         .pickerStyle(.menu)
-                        .controlSize(.large)
+                        .controlSize(.regular)
                         .frame(width: 200)
                     }
                 }
@@ -60,6 +62,7 @@ struct SettingsAppearanceView: View {
 
     private func themeButton(_ theme: SettingsTheme, title: String, image: String) -> some View {
         let isSelected = viewModel.preferences.theme == theme
+        let isHovered = hoveredTheme == theme
         return Button { viewModel.preferences.theme = theme } label: {
             VStack(spacing: UMCSpacing.value12) {
                 Image(image, bundle: .module)
@@ -68,20 +71,27 @@ struct SettingsAppearanceView: View {
                     .frame(maxWidth: 214)
                     .accessibilityHidden(true)
                 Text(title)
-                    .umcTypography(isSelected ? .title4Bold : .title4Regular)
+                    .umcTypography(.headlineRegular)
             }
             .padding(UMCSpacing.value16)
             .frame(maxWidth: .infinity)
             .background(isSelected ? UMCColor.Semantic.fillPrimaryWeak75 :
-                UMCColor.Custom.backgroundSurfaceWhite,
+                (isHovered ? UMCColor.Semantic.fillNeutralWeakerHoverPressed :
+                    UMCColor.Custom.backgroundSurfaceWhite),
                 in: .rect(cornerRadius: UMCRadius.value16))
             .overlay {
                 RoundedRectangle(cornerRadius: UMCRadius.value16)
-                    .strokeBorder(isSelected ? UMCColor.Semantic.borderPrimaryStrong500 :
+                    .strokeBorder(isSelected || isHovered ?
+                        UMCColor.Semantic.borderPrimaryStrong500 :
                         UMCColor.Semantic.borderNeutralWeak200, lineWidth: 1)
             }
         }
         .buttonStyle(.plain)
+        .onHover { hovering in
+            withAnimation(reduceMotion ? nil : .easeOut(duration: 0.12)) {
+                hoveredTheme = hovering ? theme : nil
+            }
+        }
         .foregroundStyle(isSelected ? UMCColor.Semantic.textBrandDefault :
             UMCColor.Semantic.textNeutralStrong800)
         .accessibilityLabel("\(title) 테마")
