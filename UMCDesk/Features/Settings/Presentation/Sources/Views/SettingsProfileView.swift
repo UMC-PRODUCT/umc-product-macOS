@@ -105,9 +105,17 @@ struct SettingsProfileView: View {
                 VStack(alignment: .leading, spacing: UMCSpacing.value16) {
                     ForEach(SettingsLinkKind.allCases) { kind in
                         HStack(alignment: .firstTextBaseline, spacing: UMCSpacing.value12) {
-                            Text(kind.title)
-                                .umcTypography(.title4Bold)
-                                .frame(width: 80, alignment: .leading)
+                            HStack(spacing: UMCSpacing.value8) {
+                                profileLinkIcon(kind)
+                                    .resizable()
+                                    .scaledToFit()
+                                    .foregroundStyle(profileLinkIconStyle(kind))
+                                    .frame(width: UMCSpacing.value20, height: UMCSpacing.value20)
+                                    .accessibilityHidden(true)
+                                Text(kind.title)
+                                    .umcTypography(.title4Bold)
+                            }
+                            .frame(width: 108, alignment: .leading)
                             if let url = DefaultSettingsUseCase.validatedWebURL(
                                 profile.links[kind]
                             ) {
@@ -116,7 +124,7 @@ struct SettingsProfileView: View {
                                         .umcTypography(.headlineRegular)
                                         .lineLimit(1)
                                         .truncationMode(.middle)
-                                        .padding(.horizontal, UMCSpacing.value8)
+                                        .padding(.trailing, UMCSpacing.value8)
                                         .padding(.vertical, UMCSpacing.value4)
                                 }
                                 .buttonStyle(SettingsPlainButtonStyle())
@@ -134,6 +142,37 @@ struct SettingsProfileView: View {
                     }
                 }
             }
+        }
+    }
+
+    private func profileLinkIcon(_ kind: SettingsLinkKind) -> Image {
+        switch kind {
+        case .github: Image("settingsLinkGitHub", bundle: .module)
+        case .linkedIn: Image("settingsLinkLinkedIn", bundle: .module)
+        case .instagram: Image("settingsLinkInstagram", bundle: .module)
+        case .blog: Image(systemName: "globe")
+        case .personal: Image(systemName: "link")
+        }
+    }
+
+    private func profileLinkIconStyle(_ kind: SettingsLinkKind) -> AnyShapeStyle {
+        switch kind {
+        case .github:
+            AnyShapeStyle(UMCColor.Semantic.textNeutralDefault)
+        case .linkedIn:
+            AnyShapeStyle(Color(red: 10 / 255, green: 102 / 255, blue: 194 / 255))
+        case .instagram:
+            AnyShapeStyle(LinearGradient(
+                colors: [
+                    Color(red: 131 / 255, green: 58 / 255, blue: 180 / 255),
+                    Color(red: 225 / 255, green: 48 / 255, blue: 108 / 255),
+                    Color(red: 252 / 255, green: 175 / 255, blue: 69 / 255)
+                ],
+                startPoint: .topTrailing,
+                endPoint: .bottomLeading
+            ))
+        case .blog, .personal:
+            AnyShapeStyle(UMCColor.Semantic.iconBrandStrong600)
         }
     }
 

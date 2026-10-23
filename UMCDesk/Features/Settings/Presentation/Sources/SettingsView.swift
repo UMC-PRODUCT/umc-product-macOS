@@ -39,6 +39,7 @@ public struct SettingsView: View {
             appRail
                 .frame(width: Constants.railWidth)
                 .environment(\.colorScheme, .light)
+                .zIndex(1)
             HStack(spacing: 0) {
                 if viewModel.page != .myPage {
                     settingsSidebar
@@ -135,15 +136,16 @@ public struct SettingsView: View {
                 SettingsAvatar(url: viewModel.profile?.profileImageURL, size: 32,
                     usesDesignImage: viewModel.isDesignPreview)
                     .frame(width: 44, height: 44)
-                    .contentShape(.rect)
+                    .contentShape(.rect(cornerRadius: UMCRadius.value12))
             }
-            .buttonStyle(SettingsPlainButtonStyle(highlight: .white.opacity(0.1),
+            .buttonStyle(SettingsPlainButtonStyle(
+                highlight: UMCColor.Custom.backgroundTextWhite.opacity(0.1),
                 cornerRadius: UMCRadius.value12))
             .accessibilityLabel("프로필 메뉴")
-            .help("마이페이지, 설정 및 계정 메뉴")
-            .focusable()
+            .accessibilityHint("마이페이지, 설정 및 계정 메뉴")
             .focused($profileMenuFocus, equals: .trigger)
             .accessibilityFocused($accessibleProfileMenuFocus, equals: .trigger)
+            .modifier(RailTooltip(title: "프로필 메뉴", isSuppressed: showsProfileMenu))
             .padding(.bottom, UMCSpacing.value16)
         }
     }
@@ -153,8 +155,10 @@ public struct SettingsView: View {
             .font(.system(size: 16, weight: .medium))
             .foregroundStyle(UMCColor.Custom.backgroundTextWhite.opacity(0.75))
             .frame(width: 44, height: 44)
+            .contentShape(.rect)
             .accessibilityLabel("\(title), 준비 중")
-            .help("\(title) 화면은 아직 제공하지 않아요.")
+            .accessibilityHint("\(title) 화면은 아직 제공하지 않아요.")
+            .modifier(RailTooltip(title: title, isSuppressed: showsProfileMenu))
     }
 
     private var profileMenu: some View {
@@ -231,9 +235,12 @@ public struct SettingsView: View {
                 .padding(UMCSpacing.value8)
                 .contentShape(.rect)
         }
-        .buttonStyle(SettingsPlainButtonStyle())
+        .buttonStyle(SettingsPlainButtonStyle(
+            highlight: UMCColor.Semantic.fillPrimaryWeakerHoverPressed,
+            isFocused: profileMenuFocus == focus))
         .focusable()
         .focused($profileMenuFocus, equals: focus)
+        .focusEffectDisabled()
         .accessibilityFocused($accessibleProfileMenuFocus, equals: focus)
     }
 
@@ -374,5 +381,32 @@ public struct SettingsView: View {
         }
         .shadow(color: .black.opacity(0.08), radius: 8, y: 4)
         .accessibilityElement(children: .contain)
+    }
+}
+
+private struct RailTooltip: ViewModifier {
+    let title: String
+    let isSuppressed: Bool
+
+    @State private var isHovered = false
+
+    func body(content: Content) -> some View {
+        content
+            .onHover { isHovered = $0 }
+            .overlay(alignment: .leading) {
+                if isHovered && !isSuppressed {
+                    Text(title)
+                        .umcTypography(.bodyRegular)
+                        .foregroundStyle(UMCColor.Semantic.textInverse)
+                        .padding(.horizontal, UMCSpacing.value12)
+                        .padding(.vertical, UMCSpacing.value8)
+                        .background(UMCColor.Semantic.textNeutralDefault,
+                            in: .rect(cornerRadius: UMCRadius.value8))
+                        .fixedSize()
+                        .offset(x: SettingsView.Constants.railWidth + UMCSpacing.value8)
+                        .allowsHitTesting(false)
+                        .accessibilityHidden(true)
+                }
+            }
     }
 }
