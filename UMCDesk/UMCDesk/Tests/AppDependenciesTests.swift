@@ -49,6 +49,42 @@ struct AppDependenciesTests {
         }
     }
 
+    @Test("Menu previews isolate account state and restore their sample on re-entry")
+    func menuPreviewIsIsolated() async throws {
+        let dependencies = AppDependencies()
+        let live = dependencies.settingsViewModel
+        let preview = dependencies.previewSettingsViewModel
+        let livePage = live.page
+        let liveProfile = live.profile
+        let liveTheme = live.preferences.theme
+        let originalTheme = UserDefaults.standard.string(forKey: "settings.theme")
+        let sample = try #require(preview.profile)
+        #expect(preview !== live)
+        #expect(preview.preferences !== dependencies.settingsPreferences)
+        #expect(preview.onOpenLogin == nil)
+        #expect(preview.onLogout == nil)
+        #expect(sample.activities.count == 12)
+        #expect(Set(sample.activities.map(\.part)).count == 10)
+        preview.preferences.theme = liveTheme == .dark ? .light : .dark
+        preview.editLinks()
+        #expect(preview.dialog != nil)
+        SettingsDesignPreview.prepareViewModel(preview, page: .general)
+        #expect(preview.page == .general)
+        #expect(preview.dialog == nil)
+        SettingsDesignPreview.prepareViewModel(preview, page: .myPage)
+        #expect(preview.page == .myPage)
+        await preview.logout()
+        #expect(preview.profile == nil)
+        SettingsDesignPreview.prepareViewModel(preview, page: .myPage)
+        #expect(preview.profile == sample)
+        #expect(preview.toast == nil)
+        SettingsDesignPreview.prepareViewModel(live, page: .myPage)
+        #expect(live.page == livePage)
+        #expect(live.profile == liveProfile)
+        #expect(live.preferences.theme == liveTheme)
+        #expect(UserDefaults.standard.string(forKey: "settings.theme") == originalTheme)
+    }
+
     @Test("Settings previews isolate preferences from the real app")
     func previewPreferencesAreIsolated() {
         let originalTheme = UserDefaults.standard.string(forKey: "settings.theme")

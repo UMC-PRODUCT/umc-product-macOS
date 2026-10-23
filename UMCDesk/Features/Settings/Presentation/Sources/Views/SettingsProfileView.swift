@@ -430,7 +430,7 @@ private struct SettingsUsageCard: View {
     let isDesignPreview: Bool
 
     private var statistics: [String] {
-        #if DEBUG
+        #if DEBUG || UMC_PRERELEASE
         if isDesignPreview {
             return [SettingsUsagePreview.totalDuration,
                 "\(SettingsUsagePreview.activeDays)일", "\(SettingsUsagePreview.currentStreak)일"]
@@ -446,7 +446,7 @@ private struct SettingsUsageCard: View {
                     Text("앱 사용 기록")
                         .umcTypography(.title4Bold)
                         .accessibilityAddTraits(.isHeader)
-                    #if DEBUG
+                    #if DEBUG || UMC_PRERELEASE
                     if isDesignPreview {
                         Text("미리보기 데이터")
                             .umcTypography(.captionRegular)
@@ -467,7 +467,7 @@ private struct SettingsUsageCard: View {
                     }
                 }
                 SettingsDivider()
-                #if DEBUG
+                #if DEBUG || UMC_PRERELEASE
                 if isDesignPreview {
                     SettingsUsageHeatmap()
                 } else {
@@ -509,7 +509,7 @@ private struct SettingsUsagePlaceholder: View {
     }
 }
 
-#if DEBUG
+#if DEBUG || UMC_PRERELEASE
 /// 디자인 프리뷰 전용 데이터이며 사용 기록을 수집하거나 저장하지 않습니다.
 enum SettingsUsagePreview {
     struct Day: Identifiable {

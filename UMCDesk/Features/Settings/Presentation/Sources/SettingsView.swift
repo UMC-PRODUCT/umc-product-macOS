@@ -118,7 +118,7 @@ public struct SettingsView: View {
         .onChange(of: scenePhase) { _, phase in
             if phase == .active { Task { await viewModel.refreshSystemStatus() } }
         }
-        #if DEBUG
+        #if DEBUG || UMC_PRERELEASE
         .onAppear { showsProfileMenu = viewModel.previewShowsProfileMenu }
         #endif
     }
