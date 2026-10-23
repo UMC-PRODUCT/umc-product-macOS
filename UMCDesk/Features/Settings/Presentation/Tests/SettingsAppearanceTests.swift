@@ -20,7 +20,9 @@ struct SettingsAppearanceTests {
     func settingsWindowLayout(size: CGSize, scheme: ColorScheme) throws {
         let preferences = SettingsPreferences(defaults: UserDefaults(suiteName:
             "SettingsAppearanceTests.\(UUID().uuidString)")!)
-        for id in ["757:12600", "807:13303", "903:3596", "903:14091", "903:14321", "906:3869"] {
+        preferences.bodyTextSize = size.width == 1040 ? .extraLarge : .standard
+        for id in ["757:12600", "807:13303", "903:3596", "903:14091", "903:14321", "906:3869",
+            "activity_roles"] {
             let model = try #require(SettingsDesignPreview.makeViewModel(id: id,
                 preferences: preferences))
             let controller = NSHostingController(rootView: SettingsView(viewModel: model)
@@ -58,11 +60,52 @@ struct SettingsAppearanceTests {
         }
     }
 
+    @Test("The role preview includes every supported activity badge without changing the default")
+    func activityRolesPreview() throws {
+        let preferences = SettingsPreferences(defaults: UserDefaults(suiteName:
+            "SettingsRolePreviewTests.\(UUID().uuidString)")!)
+        let model = try #require(SettingsDesignPreview.makeViewModel(id: "activity_roles",
+            preferences: preferences))
+        let activities = try #require(model.profile).activities
+        let roles = activities.flatMap(\.roles)
+        #expect(activities.count == 12)
+        #expect(Set(activities.map(\.part)) == Set([
+            "PLAN", "DESIGN", "WEB", "ANDROID", "IOS", "NODEJS", "SPRINGBOOT", "ADMIN",
+            "WEB_PRODUCT_ENGINEER", "MOBILE_PRODUCT_ENGINEER",
+        ]))
+        #expect(Set(roles) == Set([
+            "SCHOOL_PRESIDENT", "SCHOOL_VICE_PRESIDENT", "SCHOOL_PART_LEADER", "SCHOOL_ETC_ADMIN",
+            "CENTRAL_PRESIDENT", "CENTRAL_VICE_PRESIDENT", "CENTRAL_OPERATING_TEAM_MEMBER",
+            "CENTRAL_EDUCATION_TEAM_MEMBER", "CHAPTER_PRESIDENT", "SUPER_ADMIN", "PRODUCT",
+            "CHALLENGER",
+        ]))
+        let original = try #require(SettingsDesignPreview.makeViewModel(id: "757:12600",
+            preferences: preferences))
+        #expect(original.profile?.activities.map(\.part) == ["PLAN", "PLAN"])
+        #expect(original.profile?.activities.flatMap(\.roles) == [
+            "SCHOOL_PRESIDENT", "SUPER_ADMIN", "PRODUCT",
+        ])
+    }
+
+    @Test("Usage preview statistics and heatmap describe the same twelve weeks")
+    func usagePreviewIsConsistent() {
+        let days = SettingsUsagePreview.days
+        #expect(days.count == 84)
+        #expect(Set(days.map(\.date)).count == 84)
+        #expect(SettingsUsagePreview.weeks.count == 12)
+        #expect(SettingsUsagePreview.weeks.allSatisfy { $0.days.count == 7 })
+        #expect(SettingsUsagePreview.calendar.component(.weekday, from: days[0].date) == 2)
+        #expect(SettingsUsagePreview.totalMinutes == 3615)
+        #expect(SettingsUsagePreview.totalDuration == "60시간 15분")
+        #expect(SettingsUsagePreview.activeDays == 63)
+        #expect(SettingsUsagePreview.currentStreak == 1)
+    }
+
     @Test("Every Figma state has an isolated preview with the expected dialog")
     func designStatesAreReachable() throws {
         let preferences = SettingsPreferences(defaults: UserDefaults(suiteName:
             "SettingsPreviewTests.\(UUID().uuidString)")!)
-        #expect(SettingsDesignPreview.ids.count == 20)
+        #expect(SettingsDesignPreview.ids.count == 21)
         for id in SettingsDesignPreview.ids {
             let model = try #require(SettingsDesignPreview.makeViewModel(id: id,
                 preferences: preferences))
