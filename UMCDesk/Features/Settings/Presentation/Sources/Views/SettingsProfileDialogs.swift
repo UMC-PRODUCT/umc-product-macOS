@@ -20,24 +20,26 @@ struct SettingsDialogContent: View {
             HStack(alignment: .top, spacing: UMCSpacing.value16) {
                 VStack(alignment: .leading, spacing: UMCSpacing.value8) {
                     Text(title)
-                        .umcTypography(.largeTitle3Bold)
+                        .umcTypography(isCompactForm ? .title2Bold : .largeTitle3Bold)
                         .accessibilityAddTraits(.isHeader)
                     if !subtitle.isEmpty {
                         Text(subtitle)
-                            .umcTypography(.title4Regular)
+                            .umcTypography(isCompactForm ? .headlineRegular : .title4Regular)
                             .foregroundStyle(UMCColor.Semantic.textNeutralMedium600)
                             .fixedSize(horizontal: false, vertical: true)
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                Button(action: viewModel.dismissDialog) {
-                    Image(systemName: "xmark")
-                        .font(.system(size: 18))
-                        .frame(width: 32, height: 32)
+                if !isCompactForm {
+                    Button(action: viewModel.dismissDialog) {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 18))
+                            .frame(width: 32, height: 32)
+                    }
+                    .buttonStyle(SettingsPlainButtonStyle())
+                    .disabled(isBusy)
+                    .accessibilityLabel("닫기")
                 }
-                .buttonStyle(SettingsPlainButtonStyle())
-                .disabled(isBusy)
-                .accessibilityLabel("닫기")
             }
             switch dialog {
             case .editLinks: linkEditor
@@ -49,10 +51,11 @@ struct SettingsDialogContent: View {
                 HStack { Spacer(); cancelButton(title: "닫기") }
             }
         }
-        .padding(UMCSpacing.value32)
-        .frame(width: 640)
+        .padding(isCompactForm ? UMCSpacing.value24 : UMCSpacing.value32)
+        .frame(width: dialog == .addPermission ? 440 : dialog == .editLinks ? 560 : 640)
         .foregroundStyle(UMCColor.Semantic.textNeutralDefault)
         .background(UMCColor.Custom.backgroundDefault)
+        .onExitCommand(perform: viewModel.dismissDialog)
         .onAppear {
             if dialog == .editLinks { focusedLink = viewModel.linkEditorFocus }
             if dialog == .addPermission { focusesCode = true }
@@ -60,6 +63,31 @@ struct SettingsDialogContent: View {
     }
 
     private var linkEditor: some View {
+        VStack(alignment: .leading, spacing: UMCSpacing.value24) {
+            ScrollView { linkFields }
+                .scrollBounceBehavior(.basedOnSize)
+                .frame(idealHeight: 320, maxHeight: 420)
+            HStack(spacing: UMCSpacing.value8) {
+                Spacer()
+                cancelButton()
+                SettingsActionButton(title: viewModel.isSaving ? "저장 중" : "저장", kind: .primary) {
+                    Task {
+                        await viewModel.saveLinks()
+                        if let firstError = SettingsLinkKind.allCases.first(where: {
+                            viewModel.linkErrors[$0] != nil
+                        }) {
+                            focusedLink = firstError
+                        }
+                    }
+                }
+                .keyboardShortcut(.defaultAction)
+                .disabled(viewModel.isAccountBusy)
+                .environment(\.colorScheme, .light)
+            }
+        }
+    }
+
+    private var linkFields: some View {
         VStack(alignment: .leading, spacing: UMCSpacing.value16) {
             ForEach(SettingsLinkKind.allCases) { kind in
                 HStack(alignment: .firstTextBaseline, spacing: UMCSpacing.value12) {
@@ -75,13 +103,14 @@ struct SettingsDialogContent: View {
                             }
                         ))
                         .textFieldStyle(.plain)
-                        .umcTypography(.title3Regular)
-                        .padding(.horizontal, UMCSpacing.value16)
-                        .frame(height: 50)
+                        .umcTypography(.headlineRegular)
+                        .padding(.horizontal, UMCSpacing.value12)
+                        .padding(.vertical, UMCSpacing.value8)
+                        .frame(minHeight: 40)
                         .background(UMCColor.Custom.backgroundSurfaceWhite,
-                            in: .rect(cornerRadius: UMCRadius.value12))
+                            in: .rect(cornerRadius: UMCRadius.value8))
                         .overlay {
-                            RoundedRectangle(cornerRadius: UMCRadius.value12)
+                            RoundedRectangle(cornerRadius: UMCRadius.value8)
                                 .strokeBorder(viewModel.linkErrors[kind] != nil ?
                                     UMCColor.Semantic.borderErrorStrong500 :
                                     focusedLink == kind ?
@@ -90,11 +119,13 @@ struct SettingsDialogContent: View {
                         }
                         .focused($focusedLink, equals: kind)
                         .accessibilityLabel(kind.title)
+                        .accessibilityHint(viewModel.linkErrors[kind] ?? "프로필 링크 주소")
                         .disabled(viewModel.isSaving)
                         if let error = viewModel.linkErrors[kind] {
                             Text(error)
                                 .umcTypography(.headlineRegular)
                                 .foregroundStyle(UMCColor.Semantic.textError)
+                                .fixedSize(horizontal: false, vertical: true)
                         }
                     }
                 }
@@ -102,19 +133,8 @@ struct SettingsDialogContent: View {
             Text("저장하면 같은 UMC 계정의 프로필에 반영돼요.")
                 .umcTypography(.headlineRegular)
                 .foregroundStyle(UMCColor.Semantic.textNeutralMedium600)
+                .fixedSize(horizontal: false, vertical: true)
             dialogError
-            HStack(spacing: UMCSpacing.value12) {
-                Spacer()
-                cancelButton()
-                SettingsActionButton(title: viewModel.isSaving ? "저장 중" : "저장", kind: .primary) {
-                    Task { await viewModel.saveLinks() }
-                }
-                .frame(width: 110)
-                .keyboardShortcut(.defaultAction)
-                .disabled(viewModel.isAccountBusy)
-                .environment(\.colorScheme, .light)
-            }
-            .padding(.top, UMCSpacing.value8)
         }
     }
 
@@ -126,13 +146,19 @@ struct SettingsDialogContent: View {
                     systemImage: "checkmark.circle.fill")
                     .umcTypography(.title4Regular)
                     .foregroundStyle(UMCColor.Semantic.textBrandDefault)
-                ForEach(viewModel.registeredActivities) { activity in
-                    SettingsActivityRow(activity: activity)
+                ScrollView {
+                    VStack(spacing: UMCSpacing.value8) {
+                        ForEach(viewModel.registeredActivities) { activity in
+                            SettingsActivityRow(activity: activity)
+                        }
+                    }
                 }
-                HStack(spacing: UMCSpacing.value12) {
+                .scrollBounceBehavior(.basedOnSize)
+                .frame(idealHeight: 80, maxHeight: 240)
+                HStack(spacing: UMCSpacing.value8) {
+                    Spacer()
                     SettingsActionButton(title: "다른 코드 등록", kind: .quiet,
                         action: viewModel.addPermission)
-                    Spacer()
                     SettingsActionButton(title: "마이페이지로 돌아가기", kind: .primary,
                         action: viewModel.dismissDialog)
                         .keyboardShortcut(.defaultAction)
@@ -143,8 +169,8 @@ struct SettingsDialogContent: View {
             VStack(alignment: .leading, spacing: UMCSpacing.value24) {
                 SettingsInlineMessage(message: viewModel.dialogMessage ??
                     "등록한 활동 정보를 불러오는 중이에요.",
-                    isError: viewModel.dialogMessage != nil)
-                HStack(spacing: UMCSpacing.value12) {
+                    isError: viewModel.dialogMessage != nil, typography: .headlineRegular)
+                HStack(spacing: UMCSpacing.value8) {
                     Spacer()
                     cancelButton(title: "닫기")
                     SettingsActionButton(title: viewModel.isRegistering ? "불러오는 중" :
@@ -159,29 +185,28 @@ struct SettingsDialogContent: View {
         } else {
             VStack(alignment: .leading, spacing: UMCSpacing.value16) {
                 VStack(alignment: .leading, spacing: UMCSpacing.value4) {
-                    Text("챌린저 코드").umcTypography(.title3Regular)
-                    TextField("6자리 코드를 입력해 주세요.", text: $viewModel.challengerCode)
+                    Text("활동 코드").umcTypography(.headlineBold)
+                    TextField("6자리 코드", text: $viewModel.challengerCode)
                         .textFieldStyle(.plain)
-                        .umcTypography(.title3Regular)
-                        .padding(.horizontal, UMCSpacing.value16)
-                        .frame(height: 50)
+                        .umcTypography(.headlineRegular)
+                        .padding(.horizontal, UMCSpacing.value12)
+                        .padding(.vertical, UMCSpacing.value8)
+                        .frame(minHeight: 40)
                         .background(UMCColor.Custom.backgroundSurfaceWhite,
-                            in: .rect(cornerRadius: UMCRadius.value12))
+                            in: .rect(cornerRadius: UMCRadius.value8))
                         .overlay {
-                            RoundedRectangle(cornerRadius: UMCRadius.value12)
+                            RoundedRectangle(cornerRadius: UMCRadius.value8)
                                 .strokeBorder(viewModel.dialogMessage != nil ?
                                     UMCColor.Semantic.borderErrorStrong500 :
-                                    UMCColor.Semantic.borderNeutralMedium300)
+                                    focusesCode ? UMCColor.Semantic.borderPrimaryStrong500 :
+                                        UMCColor.Semantic.borderNeutralMedium300)
                         }
                         .focused($focusesCode)
-                        .accessibilityLabel("챌린저 코드")
+                        .accessibilityLabel("활동 코드")
+                        .accessibilityHint(viewModel.dialogMessage ?? "6자리 활동 코드")
                         .disabled(viewModel.isRegistering)
                 }
-                if viewModel.dialogMessage == nil {
-                    Text("6자리 코드를 그대로 입력하거나 붙여넣으세요.")
-                        .umcTypography(.headlineRegular)
-                        .foregroundStyle(UMCColor.Semantic.textNeutralMedium600)
-                } else {
+                if viewModel.dialogMessage != nil {
                     dialogError
                     Button("담당 운영진에게 문의") {
                         viewModel.dismissDialog()
@@ -191,12 +216,11 @@ struct SettingsDialogContent: View {
                     .foregroundStyle(UMCColor.Semantic.textBrandDefault)
                     .umcTypography(.headlineRegular)
                 }
-                HStack(spacing: UMCSpacing.value12) {
+                HStack(spacing: UMCSpacing.value8) {
                     Spacer()
                     cancelButton()
                     SettingsActionButton(title: viewModel.isRegistering ? "등록 중" : "등록",
                         kind: .primary) { Task { await viewModel.submitChallengerCode() } }
-                        .frame(width: 110)
                         .disabled(!viewModel.canSubmitCode)
                         .keyboardShortcut(.defaultAction)
                         .environment(\.colorScheme, .light)
@@ -237,16 +261,19 @@ struct SettingsDialogContent: View {
     @ViewBuilder
     private var dialogError: some View {
         if let message = viewModel.dialogMessage {
-            SettingsInlineMessage(message: message, isError: true)
+            SettingsInlineMessage(message: message, isError: true,
+                typography: isCompactForm ? .headlineRegular : .title4Regular)
         }
     }
 
     private func cancelButton(title: String = "취소") -> some View {
         SettingsActionButton(title: title, kind: .quiet, action: viewModel.dismissDialog)
-            .frame(width: 110)
+            .frame(width: isCompactForm ? nil : 110)
             .keyboardShortcut(.cancelAction)
             .disabled(isBusy)
     }
+
+    private var isCompactForm: Bool { dialog == .editLinks || dialog == .addPermission }
 
     private var isBusy: Bool { viewModel.isAccountBusy || viewModel.isClearingCache }
 
@@ -268,10 +295,10 @@ struct SettingsDialogContent: View {
     private var subtitle: String {
         switch dialog {
         case .editLinks:
-            "UMC 프로필에 저장할 링크를 입력하세요. 비워 둔 링크는 프로필에서 삭제돼요."
+            "비워 둔 링크는 저장할 때 삭제돼요."
         case .addPermission:
             viewModel.codeStep == .entry ?
-                "운영진에게 받은 6자리 코드를 입력하세요.\n등록하면 이 계정에 활동과 역할이 추가돼요." : ""
+                "운영진에게 받은 6자리 코드로 활동과 역할을 추가해요." : ""
         case .logout:
             "이 Mac의 계정 정보와 앱 알림을 정리해요.\n앱 환경 설정은 유지돼요."
         case .clearCache:

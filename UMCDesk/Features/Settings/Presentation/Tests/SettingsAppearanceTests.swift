@@ -7,6 +7,7 @@
 
 #if DEBUG
 import AppKit
+import CoreDesignSystem
 import SettingsDomain
 import SwiftUI
 import Testing
@@ -52,6 +53,44 @@ struct SettingsAppearanceTests {
             #expect(topInsets.contains { abs($0) < 0.5 }, "Scroll top insets: \(topInsets)")
             #expect(!descendants(in: host, type: NSScrollView.self).isEmpty)
             let fields = descendants(in: host, type: NSTextField.self).filter(\.isEditable)
+            for field in fields {
+                let frame = host.convert(field.bounds, from: field)
+                #expect(frame.minX >= 0 && frame.maxX <= size.width + 1)
+            }
+            window.contentView = nil
+        }
+    }
+
+    @Test("Compact profile forms fit their widths with large text and validation errors",
+        arguments: [ColorScheme.light, .dark], [false, true])
+    func compactProfileForms(scheme: ColorScheme, largeText: Bool) throws {
+        let preferences = SettingsPreferences(defaults: UserDefaults(suiteName:
+            "SettingsDialogTests.\(UUID().uuidString)")!)
+        for id in ["766:2895", "770:14893", "771:15714", "771:15995"] {
+            let model = try #require(SettingsDesignPreview.makeViewModel(id: id,
+                preferences: preferences))
+            let dialog = try #require(model.dialog)
+            if largeText && dialog == .editLinks {
+                for kind in SettingsLinkKind.allCases {
+                    model.linkDraft[kind] = "https://example.com/a/very/long/profile/address"
+                    model.linkErrors[kind] = "올바른 웹 주소를 입력해 주세요. "
+                        + "로그인 정보가 포함된 주소는 사용할 수 없어요."
+                }
+            }
+            let controller = NSHostingController(rootView:
+                SettingsDialogContent(dialog: dialog, viewModel: model)
+                    .environment(\.colorScheme, scheme)
+                    .environment(\.umcBodyTextScale, largeText ? 1.32 : 1))
+            let window = NSWindow(contentViewController: controller)
+            let host = controller.view
+            let size = host.fittingSize
+            window.setContentSize(size)
+            host.layoutSubtreeIfNeeded()
+            window.displayIfNeeded()
+            #expect(size.width == (dialog == .editLinks ? 560 : 440))
+            #expect(size.height <= 680)
+            let fields = descendants(in: host, type: NSTextField.self).filter(\.isEditable)
+            #expect(fields.count == (dialog == .editLinks ? 5 : model.codeStep == .complete ? 0 : 1))
             for field in fields {
                 let frame = host.convert(field.bounds, from: field)
                 #expect(frame.minX >= 0 && frame.maxX <= size.width + 1)
