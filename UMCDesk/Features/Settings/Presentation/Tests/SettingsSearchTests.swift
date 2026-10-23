@@ -11,13 +11,28 @@ import Testing
 @testable import SettingsPresentation
 
 struct SettingsSearchTests {
-    @Test("Settings search trims whitespace and matches descriptions")
-    func searchFindsDescription() {
-        #expect(SettingsPage.search("  위치  ") == [.privacy])
-        #expect(SettingsPage.search("\n  ").count == 5)
-        #expect(SettingsPage.search("gItHuB") == [.about])
+    @Test("Search previews matching setting items and their options")
+    func searchFindsItems() {
+        #expect(SettingsPage.search("  위치  ").map(\.title) == ["위치 접근"])
+        #expect(SettingsPage.search("gItHuB").map(\.title) == ["업데이트"])
+        #expect(SettingsPage.search("기본 브라우저").map(\.title) == ["외부 링크"])
+        #expect(SettingsPage.search("다크").map(\.title) == ["테마"])
+        #expect(SettingsPage.search("더 크게").map(\.title) == ["본문 크기"])
+        #expect(SettingsPage.search("\n  ").isEmpty)
         #expect(SettingsPage.search("없는 검색 결과").isEmpty)
     }
+
+    @Test("Search returns multiple individual matches with stable unique identities")
+    func multipleMatches() {
+        let results = SettingsPage.search("알림")
+        #expect(results.count == 5)
+        #expect(results.allSatisfy { $0.page == .notifications })
+        #expect(Set(results.map(\.id)).count == results.count)
+        #expect(results.map(\.id) == SettingsPage.search(" 알림 ").map(\.id))
+        #expect(Set(SettingsSearchResult.items.map(\.id)).count ==
+            SettingsSearchResult.items.count)
+    }
+
 }
 
 struct SettingsActivityRoleTests {

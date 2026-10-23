@@ -162,7 +162,7 @@ struct SettingsAppearanceTests {
         #expect(empty.profile?.activities.isEmpty == true)
         let noResults = try #require(SettingsDesignPreview.makeViewModel(id: "907:16571",
             preferences: preferences))
-        #expect(noResults.visibleCategories.isEmpty)
+        #expect(noResults.searchResults.isEmpty)
     }
 
     private func descendants<Content: NSView>(in view: NSView, type: Content.Type) -> [Content] {

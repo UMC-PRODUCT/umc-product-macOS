@@ -36,8 +36,11 @@ public final class SettingsViewModel {
     public private(set) var page: SettingsPage = .general
     public private(set) var profile: SettingsProfile?
     var profileState: Loadable<SettingsProfile> = .idle
-    var searchText = "" { didSet { visibleCategories = SettingsPage.search(searchText) } }
-    private(set) var visibleCategories = SettingsPage.categories
+    var searchText = "" { didSet { searchResults = SettingsPage.search(searchText) } }
+    private(set) var searchResults: [SettingsSearchResult] = []
+    var isSearching: Bool {
+        !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
     var dialog: SettingsDialog?
     var dialogMessage: String?
     private(set) var linkEditorFocus: SettingsLinkKind = .github
