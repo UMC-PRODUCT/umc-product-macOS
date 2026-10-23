@@ -12,6 +12,35 @@ import Testing
 
 @MainActor
 struct SettingsViewModelTests {
+    @Test("Search updates immediately and preserves navigation history and query")
+    func liveSearchNavigation() throws {
+        let model = makeModel(useCase: ControlledSettingsUseCase())
+        model.showSettings()
+        #expect(!model.isSearching)
+        model.searchText = "다크"
+        #expect(model.isSearching)
+        let result = try #require(model.searchResults.first)
+        #expect(result.title == "테마")
+        model.navigate(to: result.page)
+        #expect(model.page == .appearance)
+        #expect(model.searchText == "다크")
+        model.goBack()
+        #expect(model.page == .general)
+        model.goForward()
+        #expect(model.page == .appearance)
+        model.searchText = "위치"
+        #expect(model.searchResults.map(\.title) == ["위치 접근"])
+        model.searchText = "없는 검색 결과"
+        #expect(model.isSearching)
+        #expect(model.searchResults.isEmpty)
+        model.searchText = "  \n"
+        #expect(!model.isSearching)
+        #expect(model.searchResults.isEmpty)
+        model.searchText = ""
+        #expect(!model.isSearching)
+        #expect(model.page == .appearance)
+    }
+
     @Test("Refresh failure preserves the last profile")
     func refreshPreservesProfile() async {
         let useCase = ControlledSettingsUseCase()

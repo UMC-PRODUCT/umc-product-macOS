@@ -298,12 +298,7 @@ public struct SettingsView: View {
 
     private var settingsSidebar: some View {
         VStack(alignment: .leading, spacing: UMCSpacing.value16) {
-            VStack(alignment: .leading, spacing: UMCSpacing.value8) {
-                Text("설정").umcTypography(.title3Bold)
-                Text("UMC Desk")
-                    .umcTypography(.bodyRegular)
-                    .foregroundStyle(UMCColor.Semantic.textNeutralWeak500)
-            }
+            Text("설정").umcTypography(.title3Bold)
             HStack(spacing: UMCSpacing.value8) {
                 Image(systemName: "magnifyingglass").accessibilityHidden(true)
                 TextField("검색", text: $viewModel.searchText)
@@ -325,28 +320,34 @@ public struct SettingsView: View {
 
             ScrollView {
                 VStack(alignment: .leading, spacing: UMCSpacing.value4) {
-                    ForEach(viewModel.visibleCategories) { category in
-                        Button { viewModel.navigate(to: category) } label: {
-                            HStack(spacing: UMCSpacing.value8) {
-                                Image(systemName: category.symbol)
-                                    .font(.system(size: 16))
-                                    .frame(width: 24, height: 24)
-                                Text(category.title).umcTypography(.headlineRegular)
-                            }
-                            .frame(maxWidth: .infinity, minHeight: 36, alignment: .leading)
-                            .padding(.horizontal, UMCSpacing.value8)
-                            .contentShape(.rect)
-                            .background(viewModel.page == category ?
-                                UMCColor.Semantic.backgroundBrandWeak : .clear,
-                                in: .rect(cornerRadius: UMCRadius.value8))
+                    if viewModel.isSearching {
+                        ForEach(viewModel.searchResults) { result in
+                            searchResultButton(result)
                         }
-                        .buttonStyle(SettingsPlainButtonStyle())
-                        .foregroundStyle(viewModel.page == category ?
-                            UMCColor.Semantic.textBrandDefault :
-                            UMCColor.Semantic.textNeutralStrong800)
-                        .accessibilityAddTraits(viewModel.page == category ? .isSelected : [])
+                    } else {
+                        ForEach(SettingsPage.categories) { category in
+                            Button { viewModel.navigate(to: category) } label: {
+                                HStack(spacing: UMCSpacing.value8) {
+                                    Image(systemName: category.symbol)
+                                        .font(.system(size: 16))
+                                        .frame(width: 24, height: 24)
+                                    Text(category.title).umcTypography(.headlineRegular)
+                                }
+                                .frame(maxWidth: .infinity, minHeight: 36, alignment: .leading)
+                                .padding(.horizontal, UMCSpacing.value8)
+                                .contentShape(.rect)
+                                .background(viewModel.page == category ?
+                                    UMCColor.Semantic.backgroundBrandWeak : .clear,
+                                    in: .rect(cornerRadius: UMCRadius.value8))
+                            }
+                            .buttonStyle(SettingsPlainButtonStyle())
+                            .foregroundStyle(viewModel.page == category ?
+                                UMCColor.Semantic.textBrandDefault :
+                                UMCColor.Semantic.textNeutralStrong800)
+                            .accessibilityAddTraits(viewModel.page == category ? .isSelected : [])
+                        }
                     }
-                    if viewModel.visibleCategories.isEmpty {
+                    if viewModel.isSearching && viewModel.searchResults.isEmpty {
                         Text("검색 결과를 찾을 수 없어요")
                             .umcTypography(.headlineRegular)
                             .foregroundStyle(UMCColor.Semantic.textNeutralWeak500)
@@ -364,6 +365,29 @@ public struct SettingsView: View {
         .padding(.vertical, UMCSpacing.value24)
         .frame(width: Constants.sidebarWidth)
         .background(UMCColor.Custom.backgroundSurfaceGreyWeaker)
+    }
+
+    private func searchResultButton(_ result: SettingsSearchResult) -> some View {
+        Button { viewModel.navigate(to: result.page) } label: {
+            VStack(alignment: .leading, spacing: UMCSpacing.value4) {
+                Text(result.title)
+                    .umcTypography(.headlineBold)
+                    .foregroundStyle(UMCColor.Semantic.textNeutralStrong800)
+                Text(result.summary)
+                    .umcTypography(.bodyRegular)
+                    .foregroundStyle(UMCColor.Semantic.textNeutralMedium600)
+                Text(result.page.title)
+                    .umcTypography(.captionRegular)
+                    .foregroundStyle(UMCColor.Semantic.textNeutralWeak500)
+            }
+            .fixedSize(horizontal: false, vertical: true)
+            .multilineTextAlignment(.leading)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(UMCSpacing.value8)
+            .contentShape(.rect)
+        }
+        .buttonStyle(SettingsPlainButtonStyle())
+        .accessibilityElement(children: .combine)
     }
 
     @ViewBuilder
