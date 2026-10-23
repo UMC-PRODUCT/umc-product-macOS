@@ -15,6 +15,7 @@ public struct SettingsView: View {
     @State private var viewModel: SettingsViewModel
     @State private var showsProfileMenu = false
     @State private var hoveredProfileMenuItem: ProfileMenuFocus?
+    @State private var showsProfileKeyboardFocus = false
     @FocusState private var profileMenuFocus: ProfileMenuFocus?
     @AccessibilityFocusState private var accessibleProfileMenuFocus: ProfileMenuFocus?
 
@@ -84,6 +85,7 @@ public struct SettingsView: View {
                         .padding(.leading, Constants.railWidth + UMCSpacing.value12)
                         .padding(.bottom, UMCSpacing.value12 + UMCSpacing.value16)
                         .onAppear {
+                            showsProfileKeyboardFocus = false
                             profileMenuFocus = .myPage
                             accessibleProfileMenuFocus = .myPage
                         }
@@ -204,17 +206,21 @@ public struct SettingsView: View {
         .padding(UMCSpacing.value8)
         .frame(width: 240)
         .foregroundStyle(UMCColor.Semantic.textNeutralStrong800)
-        .background(UMCColor.Custom.backgroundDefault,
-            in: .rect(cornerRadius: UMCRadius.value12))
+        .background {
+            RoundedRectangle(cornerRadius: UMCRadius.value12)
+                .fill(UMCColor.Custom.backgroundDefault)
+                .shadow(color: .black.opacity(0.16), radius: 16, y: 4)
+        }
         .overlay {
             RoundedRectangle(cornerRadius: UMCRadius.value12)
                 .strokeBorder(UMCColor.Semantic.borderNeutralWeak200)
         }
-        .shadow(color: .black.opacity(0.16), radius: 16, y: 4)
         .accessibilityElement(children: .contain)
         .accessibilityLabel("프로필 메뉴")
-        .onChange(of: profileMenuFocus) { _, _ in
+        .onKeyPress(keys: [.tab, .upArrow, .downArrow]) { _ in
+            showsProfileKeyboardFocus = true
             hoveredProfileMenuItem = nil
+            return .ignored
         }
     }
 
@@ -253,10 +259,14 @@ public struct SettingsView: View {
         }
         .buttonStyle(SettingsPlainButtonStyle(
             highlight: hoveredProfileMenuItem != nil || profileMenuFocus == focus ?
-                UMCColor.Semantic.fillNeutralWeakerHoverPressed : .clear,
+                UMCColor.Semantic.fillPrimaryWeakHoverPressed : .clear,
             cornerRadius: UMCRadius.value6,
-            isFocused: hoveredProfileMenuItem == nil && profileMenuFocus == focus))
+            isFocused: profileMenuShowsKeyboardHighlight(
+                keyboardNavigation: showsProfileKeyboardFocus,
+                hasHoveredItem: hoveredProfileMenuItem != nil,
+                isFocused: profileMenuFocus == focus)))
         .onHover { hovering in
+            showsProfileKeyboardFocus = false
             if hovering {
                 hoveredProfileMenuItem = focus
             } else if hoveredProfileMenuItem == focus {
@@ -434,4 +444,10 @@ private struct RailTooltip: ViewModifier {
                 }
             }
     }
+}
+
+func profileMenuShowsKeyboardHighlight(
+    keyboardNavigation: Bool, hasHoveredItem: Bool, isFocused: Bool
+) -> Bool {
+    keyboardNavigation && !hasHoveredItem && isFocused
 }

@@ -20,15 +20,19 @@ struct SettingsProfileView: View {
                     profileSummary(profile)
                     ViewThatFits(in: .horizontal) {
                         HStack(alignment: .top, spacing: UMCSpacing.value20) {
-                            profileLinks(profile).frame(minWidth: 340)
+                            VStack(spacing: UMCSpacing.value20) {
+                                profileLinks(profile)
+                                SettingsUsageCard(isDesignPreview: viewModel.isDesignPreview)
+                            }
+                            .frame(minWidth: 340)
                             activities(profile).frame(minWidth: 340)
                         }
                         VStack(spacing: UMCSpacing.value20) {
                             profileLinks(profile)
                             activities(profile)
+                            SettingsUsageCard(isDesignPreview: viewModel.isDesignPreview)
                         }
                     }
-                    SettingsUsageCard(isDesignPreview: viewModel.isDesignPreview)
                     HStack(spacing: UMCSpacing.value16) {
                         SettingsInlineMessage(
                             message: "이름, 학교, 활동 정보가 다르면 운영진에게 문의해 주세요.",

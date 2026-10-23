@@ -101,7 +101,7 @@ final class AppDependencies {
     ) -> SettingsViewModel? {
         guard let index = arguments.firstIndex(of: "--settings-preview") else { return nil }
         let requested = arguments.indices.contains(index + 1) ? arguments[index + 1] : ""
-        let identifier = SettingsDesignPreview.ids.contains(requested) ? requested : "757:12600"
+        let identifier = SettingsDesignPreview.ids.contains(requested) ? requested : "activity_roles"
         guard let preview = SettingsDesignPreview.makeViewModel(
             id: identifier, preferences: preferences
         ) else { preconditionFailure("The default settings preview must exist") }

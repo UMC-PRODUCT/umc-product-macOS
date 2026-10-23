@@ -61,3 +61,27 @@ struct SettingsActivityRoleTests {
         }
     }
 }
+
+struct SettingsProfileMenuFocusTests {
+    @Test("Automatic focus stays visually idle until keyboard navigation begins")
+    func pointerAndKeyboardHighlightSequence() {
+        // Opening by pointer still assigns real focus to My Page for accessibility.
+        #expect(!profileMenuShowsKeyboardHighlight(
+            keyboardNavigation: false, hasHoveredItem: false, isFocused: true))
+        // Entering and leaving another row must not resurrect that automatic highlight.
+        #expect(!profileMenuShowsKeyboardHighlight(
+            keyboardNavigation: false, hasHoveredItem: true, isFocused: true))
+        #expect(!profileMenuShowsKeyboardHighlight(
+            keyboardNavigation: false, hasHoveredItem: false, isFocused: true))
+        // Tab or an arrow key reveals the currently focused row, then follows focus.
+        #expect(profileMenuShowsKeyboardHighlight(
+            keyboardNavigation: true, hasHoveredItem: false, isFocused: true))
+        #expect(!profileMenuShowsKeyboardHighlight(
+            keyboardNavigation: true, hasHoveredItem: false, isFocused: false))
+        // Pointer re-entry owns highlighting, even before the keyboard flag resets.
+        #expect(!profileMenuShowsKeyboardHighlight(
+            keyboardNavigation: true, hasHoveredItem: true, isFocused: true))
+        #expect(!profileMenuShowsKeyboardHighlight(
+            keyboardNavigation: false, hasHoveredItem: true, isFocused: true))
+    }
+}

@@ -30,7 +30,7 @@ struct AppDependenciesTests {
         #expect(preferences.showsMenuBar)
     }
 
-    @Test("Invalid preview arguments never fall back to a live account")
+    @Test("Missing or invalid preview arguments show all parts and roles in isolation")
     func invalidPreviewIsIsolated() throws {
         for arguments in [
             ["--settings-preview", "typo"],
@@ -42,7 +42,10 @@ struct AppDependenciesTests {
                 arguments: arguments, preferences: preferences
             ))
             #expect(preview.isDesignPreview)
-            #expect(preview.profile != nil)
+            let profile = try #require(preview.profile)
+            #expect(profile.activities.count == 12)
+            #expect(Set(profile.activities.map(\.part)).count == 10)
+            #expect(Set(profile.activities.flatMap(\.roles)).count == 12)
         }
     }
 
