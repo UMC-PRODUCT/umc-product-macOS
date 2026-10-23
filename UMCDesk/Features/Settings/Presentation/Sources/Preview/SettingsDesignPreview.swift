@@ -15,7 +15,7 @@ public enum SettingsDesignPreview {
         "757:12600", "766:2895", "770:4216", "770:14893", "771:15573", "771:15714",
         "771:15995", "776:16447", "776:16803", "765:15045", "776:17026", "911:19103",
         "807:13303", "903:3596", "903:14091", "903:14321", "903:14750", "906:3869",
-        "906:16367", "907:16571",
+        "906:16367", "907:16571", "activity_roles",
     ]
 
     public static func makeViewModel(
@@ -23,7 +23,8 @@ public enum SettingsDesignPreview {
     ) -> SettingsViewModel? {
         let normalized = id.replacingOccurrences(of: "-", with: ":")
         guard ids.contains(normalized) else { return nil }
-        let profile = makeProfile(isEmpty: normalized == "765:15045")
+        let profile = makeProfile(isEmpty: normalized == "765:15045",
+            showsAllRoles: normalized == "activity_roles")
         let model = SettingsViewModel(useCase: PreviewSettingsUseCase(profile: profile),
             preferences: preferences, systemActions: PreviewSettingsSystemActions())
         model.seedDesignProfile(profile)
@@ -65,13 +66,27 @@ public enum SettingsDesignPreview {
         return model
     }
 
-    private static func makeProfile(isEmpty: Bool) -> SettingsProfile {
-        SettingsProfile(id: "preview-member", name: "김유엠", nickname: "유엠",
+    private static func makeProfile(isEmpty: Bool, showsAllRoles: Bool) -> SettingsProfile {
+        let roles = [
+            "SCHOOL_PRESIDENT", "SCHOOL_VICE_PRESIDENT", "SCHOOL_PART_LEADER", "SCHOOL_ETC_ADMIN",
+            "CENTRAL_PRESIDENT", "CENTRAL_VICE_PRESIDENT", "CENTRAL_OPERATING_TEAM_MEMBER",
+            "CENTRAL_EDUCATION_TEAM_MEMBER", "CHAPTER_PRESIDENT", "SUPER_ADMIN", "PRODUCT",
+            "CHALLENGER",
+        ]
+        let parts = [
+            "PLAN", "DESIGN", "WEB", "ANDROID", "IOS", "NODEJS", "SPRINGBOOT", "ADMIN",
+            "WEB_PRODUCT_ENGINEER", "MOBILE_PRODUCT_ENGINEER",
+        ]
+        let roleActivities = roles.enumerated().map { index, role in
+            SettingsActivity(id: role, generation: "11", part: parts[index % parts.count],
+                roles: [role])
+        }
+        return SettingsProfile(id: "preview-member", name: "김유엠", nickname: "유엠",
             email: "umc@example.com", schoolName: "00대학교",
             links: isEmpty ? .init() : .init(github: "https://github.com/umc-member",
                 linkedIn: "https://linkedin.com/in/umc-member",
                 blog: "https://umc-member.example.com"),
-            activities: isEmpty ? [] : [
+            activities: isEmpty ? [] : showsAllRoles ? roleActivities : [
                 .init(id: "10", generation: "10", part: "PLAN", roles: ["SCHOOL_PRESIDENT"]),
                 .init(id: "11", generation: "11", part: "PLAN", roles: ["SUPER_ADMIN", "PRODUCT"]),
             ])

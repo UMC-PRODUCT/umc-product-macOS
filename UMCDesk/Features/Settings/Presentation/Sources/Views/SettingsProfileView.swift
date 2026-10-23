@@ -28,6 +28,7 @@ struct SettingsProfileView: View {
                             activities(profile)
                         }
                     }
+                    SettingsUsageCard(isDesignPreview: viewModel.isDesignPreview)
                     HStack(spacing: UMCSpacing.value16) {
                         SettingsInlineMessage(
                             message: "이름, 학교, 활동 정보가 다르면 운영진에게 문의해 주세요.",
@@ -309,7 +310,7 @@ struct SettingsActivityRow: View {
                 .foregroundStyle(UMCColor.Semantic.textBrandDefault)
                 .background(UMCColor.Semantic.fillPrimaryWeak75,
                     in: .rect(cornerRadius: UMCRadius.value6))
-            Text(partTitle(activity.part)).umcTypography(.bodyRegular)
+            SettingsPartTag(part: activity.part)
             Spacer(minLength: UMCSpacing.value8)
             ViewThatFits(in: .horizontal) {
                 HStack(spacing: UMCSpacing.value8) { roleTags }
@@ -321,13 +322,18 @@ struct SettingsActivityRow: View {
 
     private var roleTags: some View {
         ForEach(activity.roles, id: \.self) { role in
-            Text(roleTitle(role))
-                .umcTypography(.bodyRegular)
-                .padding(.horizontal, 6)
-                .frame(minHeight: 24)
-                .foregroundStyle(roleColors(role).foreground)
-                .background(roleColors(role).background,
-                    in: .rect(cornerRadius: UMCRadius.value6))
+            HStack(spacing: UMCSpacing.value4) {
+                if role == "PRODUCT" {
+                    Image(systemName: "gearshape.fill").accessibilityHidden(true)
+                }
+                Text(roleTitle(role))
+            }
+            .umcTypography(.bodyRegular)
+            .padding(.horizontal, 6)
+            .frame(minHeight: 24)
+            .foregroundStyle(roleColors(role).foreground)
+            .background(roleColors(role).background,
+                in: .rect(cornerRadius: UMCRadius.value6))
         }
     }
 }
@@ -391,24 +397,223 @@ func roleTitle(_ role: String) -> String {
     case "CENTRAL_EDUCATION_TEAM_MEMBER": "중앙 교육국원"
     case "CHAPTER_PRESIDENT": "지부장"
     case "SUPER_ADMIN": "Admin"
-    case "PRODUCT": "⚙ Product"
+    case "PRODUCT": "Product"
     case "CHALLENGER": "챌린저"
     default: role
     }
 }
 
-private func roleColors(_ role: String) -> (foreground: Color, background: Color) {
-    if role.hasPrefix("CENTRAL_") {
-        return (UMCColor.Semantic.tagRoleCentralStrong, UMCColor.Semantic.tagRoleCentralWeaker)
+func roleColors(_ role: String) -> (foreground: Color, background: Color) {
+    switch role {
+    case "CENTRAL_PRESIDENT", "CENTRAL_VICE_PRESIDENT",
+        "CENTRAL_OPERATING_TEAM_MEMBER", "CENTRAL_EDUCATION_TEAM_MEMBER":
+        (UMCColor.Semantic.tagRoleCentralStrong, UMCColor.Semantic.tagRoleCentralWeak)
+    case "CHAPTER_PRESIDENT":
+        (UMCColor.Semantic.tagRoleChapterStrong, UMCColor.Semantic.tagRoleChapterWeak)
+    case "SCHOOL_PRESIDENT", "SCHOOL_VICE_PRESIDENT", "SCHOOL_PART_LEADER", "SCHOOL_ETC_ADMIN":
+        (UMCColor.Semantic.tagRoleCampusStrong, UMCColor.Semantic.tagRoleCampusWeak)
+    case "SUPER_ADMIN", "CHALLENGER":
+        (UMCColor.Semantic.tagRoleChallengerSuperAdminStrong,
+            UMCColor.Semantic.tagRoleChallengerSuperAdminWeak)
+    case "PRODUCT":
+        (UMCColor.Semantic.tagRoleProductStrong, UMCColor.Custom.backgroundTagGrey)
+    default:
+        (UMCColor.Semantic.textNeutralStrong800, UMCColor.Custom.backgroundTagGrey)
     }
-    if role.hasPrefix("CHAPTER_") {
-        return (UMCColor.Semantic.tagRoleChapterStrong, UMCColor.Semantic.tagRoleChapterWeaker)
-    }
-    if role.hasPrefix("SCHOOL_") {
-        return (UMCColor.Semantic.tagRoleCampusStrong, UMCColor.Semantic.tagRoleCampusWeaker)
-    }
-    if role == "PRODUCT" {
-        return (UMCColor.Semantic.tagRoleProductStrong, UMCColor.Custom.backgroundTagGrey)
-    }
-    return (UMCColor.Semantic.textBrandDefault, UMCColor.Semantic.fillPrimaryWeak75)
 }
+
+private struct SettingsUsageCard: View {
+    let isDesignPreview: Bool
+
+    private var statistics: [String] {
+        #if DEBUG
+        if isDesignPreview {
+            return [SettingsUsagePreview.totalDuration,
+                "\(SettingsUsagePreview.activeDays)일", "\(SettingsUsagePreview.currentStreak)일"]
+        }
+        #endif
+        return ["—", "—", "—"]
+    }
+
+    var body: some View {
+        SettingsCard(isSubtle: true) {
+            VStack(alignment: .leading, spacing: UMCSpacing.value24) {
+                HStack(spacing: UMCSpacing.value8) {
+                    Text("앱 사용 기록")
+                        .umcTypography(.title4Bold)
+                        .accessibilityAddTraits(.isHeader)
+                    #if DEBUG
+                    if isDesignPreview {
+                        Text("미리보기 데이터")
+                            .umcTypography(.captionRegular)
+                            .foregroundStyle(UMCColor.Semantic.textNeutralMedium600)
+                            .padding(.horizontal, UMCSpacing.value8)
+                            .padding(.vertical, UMCSpacing.value4)
+                            .background(UMCColor.Semantic.surfaceNeutralMedium,
+                                in: .rect(cornerRadius: UMCRadius.value4))
+                    }
+                    #endif
+                }
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: UMCSpacing.value24) {
+                        SettingsUsageStatistics(values: statistics)
+                    }
+                    VStack(alignment: .leading, spacing: UMCSpacing.value24) {
+                        SettingsUsageStatistics(values: statistics)
+                    }
+                }
+                SettingsDivider()
+                #if DEBUG
+                if isDesignPreview {
+                    SettingsUsageHeatmap()
+                } else {
+                    SettingsUsagePlaceholder()
+                }
+                #else
+                SettingsUsagePlaceholder()
+                #endif
+            }
+        }
+    }
+}
+
+private struct SettingsUsageStatistics: View {
+    let values: [String]
+
+    var body: some View {
+        ForEach(Array(zip(["누적 사용 시간", "사용 일수", "현재 연속일"], values)), id: \.0) {
+            title, value in
+            VStack(alignment: .leading, spacing: UMCSpacing.value8) {
+                Text(title)
+                    .umcTypography(.bodyRegular)
+                    .foregroundStyle(UMCColor.Semantic.textNeutralWeak500)
+                Text(value).umcTypography(.title2Bold)
+            }
+            .fixedSize(horizontal: true, vertical: true)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .accessibilityElement(children: .combine)
+        }
+    }
+}
+
+private struct SettingsUsagePlaceholder: View {
+    var body: some View {
+        Text("사용 기록 기능을 준비하고 있어요.")
+            .umcTypography(.bodyRegular)
+            .foregroundStyle(UMCColor.Semantic.textNeutralWeak500)
+            .frame(maxWidth: .infinity, minHeight: 140)
+    }
+}
+
+#if DEBUG
+/// 디자인 프리뷰 전용 데이터이며 사용 기록을 수집하거나 저장하지 않습니다.
+enum SettingsUsagePreview {
+    struct Day: Identifiable {
+        let date: Date
+        let minutes: Int
+        var id: Date { date }
+        var label: String {
+            let dateText = date.formatted(Date.FormatStyle(date: .complete, time: .omitted,
+                locale: Locale(identifier: "ko_KR"), calendar: SettingsUsagePreview.calendar,
+                timeZone: .gmt))
+            return "\(dateText), \(minutes == 0 ? "사용 기록 없음" : "\(minutes)분 사용")"
+        }
+    }
+
+    struct Week: Identifiable {
+        let days: [Day]
+        let month: String
+        var id: Date { days[0].date }
+    }
+
+    static let calendar: Calendar = {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = .gmt
+        return calendar
+    }()
+    static let days: [Day] = {
+        let start = calendar.date(from: DateComponents(year: 2026, month: 7, day: 27))!
+        return (0..<84).map { offset in
+            let minutes = offset % 9 == 0 || offset % 7 == 5 ?
+                0 : [15, 35, 65, 110][offset % 4]
+            return Day(date: calendar.date(byAdding: .day, value: offset, to: start)!,
+                minutes: minutes)
+        }
+    }()
+    static let weeks: [Week] = stride(from: 0, to: days.count, by: 7).map { start in
+        let month = calendar.component(.month, from: days[start].date)
+        let previousMonth = start == 0 ?
+            0 : calendar.component(.month, from: days[start - 7].date)
+        return Week(days: Array(days[start..<(start + 7)]),
+            month: month == previousMonth ? "" : "\(month)월")
+    }
+    static let totalMinutes = days.reduce(0) { $0 + $1.minutes }
+    static let totalDuration = "\(totalMinutes / 60)시간 \(totalMinutes % 60)분"
+    static let activeDays = days.filter { $0.minutes > 0 }.count
+    static let currentStreak = days.reversed().prefix { $0.minutes > 0 }.count
+
+    static func color(minutes: Int) -> Color {
+        switch minutes {
+        case 0: UMCColor.Semantic.surfaceNeutralMedium
+        case 1..<30: UMCColor.Semantic.fillPrimaryMedium100
+        case 30..<60: UMCColor.Semantic.fillPrimaryStrong200
+        case 60..<90: UMCColor.Semantic.fillPrimaryStronger300
+        default: UMCColor.Semantic.fillPrimaryInverseStrong500
+        }
+    }
+}
+
+private struct SettingsUsageHeatmap: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: UMCSpacing.value12) {
+            Text("최근 12주 · 2026. 7. 27. – 10. 18.")
+                .umcTypography(.bodyRegular)
+                .foregroundStyle(UMCColor.Semantic.textNeutralWeak500)
+            HStack(alignment: .top, spacing: UMCSpacing.value4) {
+                VStack(spacing: UMCSpacing.value4) {
+                    Text(" ").frame(height: 16)
+                    ForEach(["월", "화", "수", "목", "금", "토", "일"], id: \.self) { day in
+                        Text(day).frame(height: 16)
+                    }
+                }
+                .umcTypography(.captionRegular)
+                .foregroundStyle(UMCColor.Semantic.textNeutralWeak500)
+                .padding(.trailing, UMCSpacing.value4)
+                .accessibilityHidden(true)
+                ForEach(SettingsUsagePreview.weeks) { week in
+                    VStack(spacing: UMCSpacing.value4) {
+                        Text(week.month)
+                            .umcTypography(.captionRegular)
+                            .foregroundStyle(UMCColor.Semantic.textNeutralWeak500)
+                            .frame(height: 16)
+                            .accessibilityHidden(true)
+                        ForEach(week.days) { day in
+                            RoundedRectangle(cornerRadius: UMCRadius.value4)
+                                .fill(SettingsUsagePreview.color(minutes: day.minutes))
+                                .frame(height: 16)
+                                .help(day.label)
+                                .accessibilityElement(children: .ignore)
+                                .accessibilityLabel(day.label)
+                        }
+                    }
+                    .frame(maxWidth: .infinity)
+                }
+            }
+            HStack(spacing: UMCSpacing.value4) {
+                Spacer(minLength: 0)
+                Text("적음")
+                ForEach([0, 15, 35, 65, 110], id: \.self) { minutes in
+                    RoundedRectangle(cornerRadius: UMCRadius.value4)
+                        .fill(SettingsUsagePreview.color(minutes: minutes))
+                        .frame(width: 16, height: 16)
+                }
+                Text("많음")
+            }
+            .umcTypography(.captionRegular)
+            .foregroundStyle(UMCColor.Semantic.textNeutralWeak500)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("사용 시간 색상: 기록 없음, 30분 미만, 1시간 미만, 1시간 30분 미만, 그 이상")
+        }
+    }
+}
+#endif
