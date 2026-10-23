@@ -214,7 +214,7 @@ struct SettingsAvatar: View {
 
     var body: some View {
         Group {
-            #if DEBUG
+            #if DEBUG || UMC_PRERELEASE
             if usesDesignImage {
                 Image("settingsProfileFixture", bundle: .module)
                     .resizable()

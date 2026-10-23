@@ -22,6 +22,9 @@ final class AppDependencies {
     let settingsPreferences: SettingsPreferences
     let settingsViewModel: SettingsViewModel
     let navigation: AppNavigation
+    #if DEBUG || UMC_PRERELEASE
+    let previewSettingsViewModel: SettingsViewModel
+    #endif
 
     var isSettingsPreview: Bool {
         #if DEBUG
@@ -80,6 +83,16 @@ final class AppDependencies {
         }
         #else
         self.settingsViewModel = liveSettings
+        #endif
+        #if DEBUG || UMC_PRERELEASE
+        let previewSuite = "com.umc.product.macos.settings-design-preview"
+        let previewDefaults = UserDefaults(suiteName: previewSuite)!
+        previewDefaults.removePersistentDomain(forName: previewSuite)
+        let previewPreferences = SettingsPreferences(defaults: previewDefaults)
+        guard let preview = SettingsDesignPreview.makeViewModel(
+            id: "activity_roles", preferences: previewPreferences
+        ) else { preconditionFailure("The settings design preview must exist") }
+        self.previewSettingsViewModel = preview
         #endif
         resetRelay.settingsViewModel = settingsViewModel
         if !isSettingsPreview, preferences.launchPage == .myPage {

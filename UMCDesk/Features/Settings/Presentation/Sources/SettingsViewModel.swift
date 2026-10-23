@@ -65,7 +65,7 @@ public final class SettingsViewModel {
     private(set) var historyIndex = 0
     @ObservationIgnored private var accountGeneration = 0
     @ObservationIgnored private var hasLoaded = false
-    #if DEBUG
+    #if DEBUG || UMC_PRERELEASE
     var isDesignPreview = false
     var previewShowsProfileMenu = false
     #else
@@ -82,7 +82,7 @@ public final class SettingsViewModel {
         self.systemActions = systemActions
     }
 
-    #if DEBUG
+    #if DEBUG || UMC_PRERELEASE
     func seedDesignProfile(_ value: SettingsProfile) {
         profile = value
         profileState = .loaded(value)

@@ -5,7 +5,7 @@
 //  Created by euijjang97 on 10/20/26.
 //
 
-#if DEBUG
+#if DEBUG || UMC_PRERELEASE
 import Foundation
 import SettingsDomain
 
@@ -64,6 +64,16 @@ public enum SettingsDesignPreview {
         default: break
         }
         return model
+    }
+
+    public static func prepareViewModel(_ model: SettingsViewModel, page: SettingsPage) {
+        guard model.isDesignPreview, !model.isAccountBusy, !model.isClearingCache else { return }
+        model.dismissDialog()
+        model.toast = nil
+        if model.profile == nil {
+            model.seedDesignProfile(makeProfile(isEmpty: false, showsAllRoles: true))
+        }
+        model.navigate(to: page)
     }
 
     private static func makeProfile(isEmpty: Bool, showsAllRoles: Bool) -> SettingsProfile {

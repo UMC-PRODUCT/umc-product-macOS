@@ -23,6 +23,9 @@ struct UMCDeskApp: App {
 
     var body: some Scene {
         @Bindable var preferences = dependencies.settingsPreferences
+        #if DEBUG || UMC_PRERELEASE
+        @Bindable var previewPreferences = dependencies.previewSettingsViewModel.preferences
+        #endif
 
         WindowGroup("UMC Desk", id: "main") {
             AppRootView(dependencies: dependencies)
@@ -60,6 +63,18 @@ struct UMCDeskApp: App {
         .windowToolbarStyle(.unifiedCompact(showsTitle: false))
 
         #if DEBUG || UMC_PRERELEASE
+        Window("마이페이지·설정 프리뷰", id: "settings-design-preview") {
+            SettingsView(viewModel: dependencies.previewSettingsViewModel)
+                .toggleStyle(UMCCheckboxStyle())
+                .preferredColorScheme(previewPreferences.theme.colorScheme)
+                .environment(\.umcBodyTextScale, previewPreferences.bodyTextSize.scale)
+                .environment(\.umcTypographyPreview, typographyPreview)
+                .frame(minWidth: 1040, minHeight: 720)
+        }
+        .defaultSize(width: 1440, height: 960)
+        .windowStyle(.titleBar)
+        .windowToolbarStyle(.unifiedCompact(showsTitle: false))
+
         Window("타이포그래피 조절", id: "typography-preview") {
             AppTypographyPreviewControls(settings: $typographyPreview)
         }
@@ -178,6 +193,19 @@ private struct AppSettingsCommands: Commands {
         }
         #if DEBUG || UMC_PRERELEASE
         CommandGroup(after: .sidebar) {
+            Button("마이페이지 프리뷰…") {
+                SettingsDesignPreview.prepareViewModel(
+                    dependencies.previewSettingsViewModel, page: .myPage
+                )
+                openWindow(id: "settings-design-preview")
+            }
+            Button("설정 프리뷰…") {
+                SettingsDesignPreview.prepareViewModel(
+                    dependencies.previewSettingsViewModel, page: .general
+                )
+                openWindow(id: "settings-design-preview")
+            }
+            Divider()
             Picker("화면 모드", selection: $preferences.theme) {
                 Text("시스템 설정").tag(SettingsTheme.system)
                 Text("라이트").tag(SettingsTheme.light)
