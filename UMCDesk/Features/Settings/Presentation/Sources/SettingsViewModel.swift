@@ -38,6 +38,7 @@ public final class SettingsViewModel {
     var profileState: Loadable<SettingsProfile> = .idle
     var searchText = "" { didSet { searchResults = SettingsPage.search(searchText) } }
     private(set) var searchResults: [SettingsSearchResult] = []
+    private(set) var recentSearchItems: [SettingsSearchResult] = []
     var isSearching: Bool {
         !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
@@ -119,6 +120,13 @@ public final class SettingsViewModel {
         guard !isLoggingOut else { return }
         clearAccount()
         await systemActions.clearAccountNotifications()
+    }
+
+    func selectSearchResult(_ result: SettingsSearchResult) {
+        recentSearchItems.removeAll { $0.id == result.id }
+        recentSearchItems.insert(result, at: 0)
+        recentSearchItems = Array(recentSearchItems.prefix(5))
+        navigate(to: result.page)
     }
 
     public func navigate(to destination: SettingsPage) {

@@ -21,7 +21,7 @@ struct SettingsViewModelTests {
         #expect(model.isSearching)
         let result = try #require(model.searchResults.first)
         #expect(result.title == "테마")
-        model.navigate(to: result.page)
+        model.selectSearchResult(result)
         #expect(model.page == .appearance)
         #expect(model.searchText == "다크")
         model.goBack()
@@ -39,6 +39,27 @@ struct SettingsViewModelTests {
         model.searchText = ""
         #expect(!model.isSearching)
         #expect(model.page == .appearance)
+    }
+
+    @Test("Recent search items record actual selections, deduplicate and keep five newest")
+    func recentSearchSelections() throws {
+        let model = makeModel(useCase: ControlledSettingsUseCase())
+        #expect(model.recentSearchItems.isEmpty)
+        let items = Array(SettingsSearchResult.items.prefix(6))
+        for item in items { model.selectSearchResult(item) }
+        #expect(model.recentSearchItems.map(\.id) == items.suffix(5).reversed().map(\.id))
+        let samePage = try #require(SettingsSearchResult.items.first { $0.id == "bodyTextSize" })
+        model.selectSearchResult(samePage)
+        #expect(model.page == .appearance)
+        #expect(model.recentSearchItems.first?.id == samePage.id)
+        model.selectSearchResult(items[5])
+        #expect(model.recentSearchItems.prefix(2).map(\.id) == [items[5].id, samePage.id])
+        #expect(model.recentSearchItems.count == 5)
+        #expect(Set(model.recentSearchItems.map(\.id)).count == 5)
+        model.searchText = "  \n"
+        #expect(!model.isSearching)
+        #expect(model.recentSearchItems.count == 5)
+        #expect(makeModel(useCase: ControlledSettingsUseCase()).recentSearchItems.isEmpty)
     }
 
     @Test("Refresh failure preserves the last profile")
