@@ -222,7 +222,7 @@ final class AppLifecycleDelegate: NSObject, NSApplicationDelegate {
     var preferences: SettingsPreferences?
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
-        !(preferences?.showsMenuBar ?? true)
+        preferences?.windowCloseBehavior == .quit
     }
 }
 

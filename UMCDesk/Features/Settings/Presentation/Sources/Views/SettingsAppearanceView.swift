@@ -34,17 +34,32 @@ struct SettingsAppearanceView: View {
             }
             SettingsSection(title: "읽기 편하게") {
                 SettingsCard {
-                    SettingsRow(title: "본문 크기", description: "앱 본문과 설명의 크기예요.") {
-                        Picker("본문 크기", selection: $preferences.bodyTextSize) {
-                            Text("기본").tag(SettingsBodyTextSize.standard)
-                            Text("크게").tag(SettingsBodyTextSize.large)
-                            Text("더 크게").tag(SettingsBodyTextSize.extraLarge)
+                    VStack(alignment: .leading, spacing: UMCSpacing.value16) {
+                        SettingsRow(title: "본문 크기", description: "앱 본문과 설명의 크기예요.") {
+                            Picker("본문 크기", selection: $preferences.bodyTextSize) {
+                                Text("기본").tag(SettingsBodyTextSize.standard)
+                                Text("크게").tag(SettingsBodyTextSize.large)
+                                Text("더 크게").tag(SettingsBodyTextSize.extraLarge)
+                            }
+                            .labelsHidden()
+                            .pickerStyle(.menu)
+                            .frame(width: 160, alignment: .trailing)
                         }
-                        .labelsHidden()
-                        .pickerStyle(.menu)
-                        .controlSize(.regular)
-                        .frame(width: 200)
+                        SettingsDivider()
+                        VStack(alignment: .leading, spacing: UMCSpacing.value4) {
+                            Text("본문 크기 미리보기").umcTypography(.headlineRegular)
+                            Text("공지와 활동 안내를 편하게 읽어 보세요.")
+                                .umcTypography(.bodyRegular)
+                                .foregroundStyle(UMCColor.Semantic.textNeutralMedium600)
+                        }
                     }
+                }
+            }
+            SettingsCard {
+                SettingsRow(title: "모양 기본값으로 복원",
+                    description: "테마는 시스템, 본문 크기는 기본으로 되돌려요.") {
+                    SettingsActionButton(title: "복원") { viewModel.resetAppearance() }
+                        .disabled(viewModel.isDefaultAppearance)
                 }
             }
             SettingsSection(title: "시스템 접근성") {
@@ -70,8 +85,12 @@ struct SettingsAppearanceView: View {
                     .scaledToFit()
                     .frame(maxWidth: 214)
                     .accessibilityHidden(true)
-                Text(title)
-                    .umcTypography(.headlineRegular)
+                HStack(spacing: UMCSpacing.value8) {
+                    Text(title).umcTypography(.headlineRegular)
+                    Image(systemName: "checkmark.circle.fill")
+                        .opacity(isSelected ? 1 : 0)
+                        .accessibilityHidden(true)
+                }
             }
             .padding(UMCSpacing.value16)
             .frame(maxWidth: .infinity)

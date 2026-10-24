@@ -25,11 +25,15 @@ struct SettingsAboutView: View {
                         VStack(alignment: .leading, spacing: UMCSpacing.value4) {
                             Text(appName).umcTypography(.title3Bold)
                             Text("버전 \(version) | 빌드 \(build)")
+                                .textSelection(.enabled)
                                 .umcTypography(.bodyRegular)
                                 .foregroundStyle(UMCColor.Semantic.textNeutralWeak500)
                         }
                     }
                     SettingsDivider()
+                    Text("게시된 릴리스를 조회하며, 업데이트를 자동으로 설치하지 않아요.")
+                        .umcTypography(.bodyRegular)
+                        .foregroundStyle(UMCColor.Semantic.textNeutralMedium600)
                     SettingsRow(title: "업데이트", description: releaseDescription) {
                         SettingsActionButton(title: viewModel.isCheckingRelease ? "확인 중" :
                             "업데이트 확인", kind: .brand) {
@@ -61,21 +65,13 @@ struct SettingsAboutView: View {
                         unavailableLink("개인정보 처리방침", description: "개인정보 처리와 보관 기준을 확인해요.")
                         SettingsDivider()
                         SettingsRow(title: "오픈소스 라이선스", description: "앱에 사용한 오픈소스 정보를 확인해요.") {
-                            SettingsActionButton(title: "열기", symbol: "arrow.up.right") {
+                            SettingsActionButton(title: "열기") {
                                 viewModel.dialog = .licenses
                             }
                         }
                         SettingsDivider()
                         SettingsRow(title: "문의하기(카카오톡)", description: "도움이 필요하거나 의견이 있나요?") {
-                            Text("주소 확인 중")
-                                .umcTypography(.headlineRegular)
-                                .foregroundStyle(UMCColor.Semantic.textNeutralWeak500)
-                            Image("settingsContactKakao", bundle: .module)
-                                .resizable()
-                                .scaledToFit()
-                                .frame(width: 40, height: 40)
-                                .accessibilityLabel("카카오톡 문의 주소 확인 중")
-                                .help("운영 문의 주소를 확인 중이에요.")
+                            SettingsStatusText(text: "준비 중")
                         }
                     }
                 }
@@ -85,7 +81,7 @@ struct SettingsAboutView: View {
 
     private func unavailableLink(_ title: String, description: String) -> some View {
         SettingsRow(title: title, description: description) {
-            SettingsStatusText(text: "주소 확인 중")
+            SettingsStatusText(text: "준비 중")
         }
     }
 

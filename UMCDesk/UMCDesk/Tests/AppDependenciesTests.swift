@@ -113,17 +113,21 @@ struct AppDependenciesTests {
         ))
     }
 
-    @Test("Last-window behavior follows the current menu bar preference")
-    func closingWindowReadsCurrentPreference() throws {
+    @Test("마지막 창을 닫을 때 메뉴 막대 표시와 무관하게 창 닫기 설정을 따른다", arguments:
+        [true, false], SettingsWindowCloseBehavior.allCases)
+    func closingWindowReadsCurrentPreference(
+        showsMenuBar: Bool, behavior: SettingsWindowCloseBehavior
+    ) throws {
         let name = "settings.lifecycle.\(UUID().uuidString)"
         let defaults = try #require(UserDefaults(suiteName: name))
         defer { defaults.removePersistentDomain(forName: name) }
         let preferences = SettingsPreferences(defaults: defaults)
         let lifecycle = AppLifecycleDelegate()
         lifecycle.preferences = preferences
-        #expect(!lifecycle.applicationShouldTerminateAfterLastWindowClosed(.shared))
-        preferences.showsMenuBar = false
-        #expect(lifecycle.applicationShouldTerminateAfterLastWindowClosed(.shared))
+        preferences.showsMenuBar = showsMenuBar
+        preferences.windowCloseBehavior = behavior
+        #expect(lifecycle.applicationShouldTerminateAfterLastWindowClosed(.shared) ==
+            (behavior == .quit))
         #expect(AppNavigation(launchPage: .login).showsSettings == false)
         #expect(AppNavigation(launchPage: .myPage).showsSettings)
     }

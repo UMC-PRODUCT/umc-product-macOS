@@ -27,7 +27,8 @@ struct SettingsAppearanceTests {
             let model = try #require(SettingsDesignPreview.makeViewModel(id: id,
                 preferences: preferences))
             let controller = NSHostingController(rootView: SettingsView(viewModel: model)
-                .environment(\.colorScheme, scheme))
+                .environment(\.colorScheme, scheme)
+                .environment(\.umcBodyTextScale, preferences.bodyTextSize.scale))
             let window = NSWindow(contentViewController: controller)
             window.styleMask = [.titled, .closable, .miniaturizable, .resizable]
             window.toolbarStyle = .unifiedCompact
@@ -59,6 +60,29 @@ struct SettingsAppearanceTests {
             }
             window.contentView = nil
         }
+    }
+
+    @Test("준비 중인 알림 화면을 표시해도 저장된 켜짐과 꺼짐 설정이 보존된다",
+        arguments: [true, false])
+    func pendingNotificationsPreservePreferences(savedValue: Bool) throws {
+        let suiteName = "SettingsPendingNotificationsTests.\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let preferences = SettingsPreferences(defaults: defaults)
+        preferences.attendanceNotifications = savedValue
+        preferences.noticeNotifications = !savedValue
+        preferences.threadNotifications = savedValue
+        preferences.showsNotificationContent = !savedValue
+        let saved = defaults.dictionaryRepresentation() as NSDictionary
+        let model = try #require(SettingsDesignPreview.makeViewModel(id: "903:14091",
+            preferences: preferences))
+        let controller = NSHostingController(rootView: SettingsNotificationsView(viewModel: model))
+        let window = NSWindow(contentViewController: controller)
+        defer { window.contentView = nil }
+        window.setContentSize(CGSize(width: 800, height: 800))
+        controller.view.layoutSubtreeIfNeeded()
+        window.displayIfNeeded()
+        #expect(defaults.dictionaryRepresentation() as NSDictionary == saved)
     }
 
     @Test("Compact profile forms fit their widths with large text and validation errors",

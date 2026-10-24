@@ -74,6 +74,7 @@ public final class MacSettingsSystemActions: SettingsSystemActions {
         }
         let address: String = switch destination {
         case .loginItems: "x-apple.systempreferences:com.apple.LoginItems-Settings.extension"
+        case .defaultBrowser: "x-apple.systempreferences:"
         case .notifications: "x-apple.systempreferences:com.apple.Notifications-Settings.extension"
         case .location:
             "x-apple.systempreferences:com.apple.preference.security?Privacy_LocationServices"

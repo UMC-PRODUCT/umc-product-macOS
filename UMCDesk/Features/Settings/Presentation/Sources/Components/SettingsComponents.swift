@@ -52,6 +52,7 @@ struct SettingsRow<Accessory: View>: View {
             accessory
         }
         .frame(minHeight: 44)
+        .controlSize(.large)
     }
 }
 
@@ -187,7 +188,7 @@ struct SettingsStatusText: View {
     var body: some View {
         Text(text)
             .umcTypography(.headlineRegular)
-            .foregroundStyle(UMCColor.Semantic.textBrandDefault)
+            .foregroundStyle(UMCColor.Semantic.textNeutralMedium600)
             .fixedSize()
     }
 }

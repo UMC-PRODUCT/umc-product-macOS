@@ -25,11 +25,28 @@ struct SettingsSearchTests {
     func searchFindsItems() {
         #expect(SettingsPage.search("  위치  ").map(\.title) == ["위치 접근"])
         #expect(SettingsPage.search("gItHuB").map(\.title) == ["업데이트"])
-        #expect(SettingsPage.search("기본 브라우저").map(\.title) == ["외부 링크"])
+        #expect(SettingsPage.search("기본 브라우저").map(\.title) == ["기본 웹 브라우저"])
+        #expect(SettingsPage.search("시작 화면").map(\.id) == ["launchPage"])
+        #expect(SettingsPage.search("자동 실행").map(\.id) == ["launchAtLogin"])
+        #expect(SettingsPage.search("계속 실행").map(\.id) == ["windowClose"])
+        #expect(SettingsPage.search("데스크탑").map(\.id) == ["externalLinks"])
         #expect(SettingsPage.search("다크").map(\.title) == ["테마"])
         #expect(SettingsPage.search("더 크게").map(\.title) == ["본문 크기"])
         #expect(SettingsPage.search("\n  ").isEmpty)
         #expect(SettingsPage.search("없는 검색 결과").isEmpty)
+    }
+
+    @Test("설정 검색은 사용 가능한 동작과 준비 중 상태를 반환한다")
+    func updatedSettingsActions() {
+        #expect(SettingsPage.search("복원").map(\.id) == ["resetAppearance"])
+        #expect(SettingsPage.search("미리보기").map(\.id) == ["bodyTextSize"])
+        #expect(SettingsPage.search("다시 확인").map(\.id) == ["cache"])
+        #expect(SettingsPage.search("개인 프로젝트").isEmpty)
+        #expect(SettingsPage.search("자동으로 설치").map(\.id) == ["updates"])
+        for identifier in ["attendanceNotifications", "noticeNotifications",
+            "threadNotifications", "notificationContent", "terms", "privacyPolicy", "contact"] {
+            #expect(SettingsPage.search("준비 중").contains { $0.id == identifier })
+        }
     }
 
     @Test("Search returns multiple individual matches with stable unique identities")

@@ -10,11 +10,15 @@ import SettingsDomain
 import SwiftUI
 
 struct SettingsNotificationsView: View {
-    @Bindable var viewModel: SettingsViewModel
+    let viewModel: SettingsViewModel
 
     var body: some View {
-        @Bindable var preferences = viewModel.preferences
         VStack(alignment: .leading, spacing: UMCSpacing.value24) {
+            SettingsCard(isSubtle: true) {
+                SettingsInlineMessage(message: "알림 기능을 준비하고 있어요. "
+                    + "기존 설정은 보존되며, 기능 제공 후 변경할 수 있어요.",
+                    typography: .headlineRegular)
+            }
             SettingsSection(title: "macOS 알림") {
                 SettingsCard {
                     SettingsRow(title: "알림 접근", description: notificationDescription) {
@@ -35,23 +39,19 @@ struct SettingsNotificationsView: View {
             SettingsSection(title: "받을 알림") {
                 SettingsCard {
                     VStack(spacing: UMCSpacing.value12) {
-                        notificationToggle("출석 가능 시간", description: "출석 알림 연결 시 사용할 수신 설정이에요.",
-                            value: $preferences.attendanceNotifications)
+                        pendingNotification("출석 가능 시간", description: "출석 알림 연결 시 사용할 수신 설정이에요.")
                         SettingsDivider()
-                        notificationToggle("새 공지", description: "공지 알림 연결 시 사용할 수신 설정이에요.",
-                            value: $preferences.noticeNotifications)
+                        pendingNotification("새 공지", description: "공지 알림 연결 시 사용할 수신 설정이에요.")
                         SettingsDivider()
-                        notificationToggle("스레드 메시지", description: "메시지 알림 연결 시 사용할 수신 설정이에요.",
-                            value: $preferences.threadNotifications)
+                        pendingNotification("스레드 메시지", description: "메시지 알림 연결 시 사용할 수신 설정이에요.")
                         SettingsDivider()
-                        notificationToggle("알림 내용 표시",
-                            description: "알림 연결 시 이름 · 제목 · 본문 표시 여부예요.",
-                            value: $preferences.showsNotificationContent)
+                        pendingNotification("알림 내용 표시",
+                            description: "알림 연결 시 이름 · 제목 · 본문 표시 여부예요.")
                     }
                 }
             }
             Text("""
-                출석 · 공지 · 메시지 알림은 아직 연결되지 않았어요. 선택한 수신 설정은 이 Mac에 저장돼요.
+                macOS에서 권한을 허용해도 출석 · 공지 · 메시지 알림은 아직 오지 않아요.
                 앱이 종료된 동안 받는 원격 푸시는 제공하지 않아요.
                 """)
                 .umcTypography(.headlineRegular)
@@ -60,13 +60,11 @@ struct SettingsNotificationsView: View {
         }
     }
 
-    private func notificationToggle(
-        _ title: String, description: String, value: Binding<Bool>
+    private func pendingNotification(
+        _ title: String, description: String
     ) -> some View {
         SettingsRow(title: title, description: description) {
-            Toggle(title, isOn: value)
-                .labelsHidden()
-                .toggleStyle(.switch)
+            SettingsStatusText(text: "준비 중")
         }
     }
 
