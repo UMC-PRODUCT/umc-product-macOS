@@ -189,6 +189,34 @@ struct SettingsAppearanceTests {
         #expect(noResults.searchResults.isEmpty)
     }
 
+    @Test("Toolbar tooltips appear below the anchor without taking pointer input")
+    func toolbarTooltipPanel() throws {
+        let window = NSWindow(contentRect: NSRect(x: 100, y: 100, width: 400, height: 300),
+            styleMask: [.titled], backing: .buffered, defer: false)
+        let anchor = ToolbarTooltipAnchor.AnchorView(frame:
+            NSRect(x: 40, y: 200, width: 40, height: 40))
+        window.contentView?.addSubview(anchor)
+        anchor.title = "뒤로"
+        anchor.isPresented = true
+        anchor.updateTooltip()
+        defer {
+            anchor.hideTooltip()
+            window.contentView = nil
+        }
+        let panel = try #require(window.childWindows?.first as? NSPanel)
+        let anchorFrame = window.convertToScreen(anchor.convert(anchor.bounds, to: nil))
+        #expect(panel.frame.maxY < anchorFrame.minY)
+        #expect(abs(panel.frame.midX - anchorFrame.midX) <= 0.5,
+            "Panel: \(panel.frame), anchor: \(anchorFrame)")
+        #expect(panel.ignoresMouseEvents)
+        #expect(!panel.canBecomeKey)
+        #expect(anchor.hitTest(.zero) == nil)
+        anchor.isPresented = false
+        anchor.updateTooltip()
+        #expect(window.childWindows?.isEmpty != false)
+        #expect(!panel.isVisible)
+    }
+
     private func descendants<Content: NSView>(in view: NSView, type: Content.Type) -> [Content] {
         view.subviews.flatMap { child in
             ((child as? Content).map { [$0] } ?? []) + descendants(in: child, type: type)

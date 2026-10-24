@@ -5,6 +5,7 @@
 //  Created by euijjang97 on 10/20/26.
 //
 
+import AppKit
 import CoreDesignSystem
 import SettingsDomain
 import SwiftUI
@@ -171,7 +172,7 @@ public struct SettingsView: View {
             .accessibilityHint("마이페이지, 설정 및 계정 메뉴")
             .focused($profileMenuFocus, equals: .trigger)
             .accessibilityFocused($accessibleProfileMenuFocus, equals: .trigger)
-            .modifier(RailTooltip(title: "프로필 메뉴", isSuppressed: showsProfileMenu))
+            .modifier(SettingsTooltip(title: "프로필 메뉴", isSuppressed: showsProfileMenu))
             .padding(.bottom, UMCSpacing.value16)
         }
     }
@@ -184,7 +185,7 @@ public struct SettingsView: View {
             .contentShape(.rect)
             .accessibilityLabel("\(title), 준비 중")
             .accessibilityHint("\(title) 화면은 아직 제공하지 않아요.")
-            .modifier(RailTooltip(title: title, isSuppressed: showsProfileMenu))
+            .modifier(SettingsTooltip(title: title, isSuppressed: showsProfileMenu))
     }
 
     private var profileMenu: some View {
@@ -304,23 +305,38 @@ public struct SettingsView: View {
 
     @ToolbarContentBuilder
     private var navigationToolbar: some ToolbarContent {
-        ToolbarItemGroup(placement: .navigation) {
-            Button("뒤로", systemImage: "chevron.left") {
-                dismissSearchSuggestions()
-                viewModel.goBack()
-            }
-                .disabled(showsProfileMenu || !viewModel.canGoBack)
-                .accessibilityLabel("뒤로")
-                .help("뒤로")
-            Button("앞으로", systemImage: "chevron.right") {
-                dismissSearchSuggestions()
-                viewModel.goForward()
-            }
-                .disabled(showsProfileMenu || !viewModel.canGoForward)
-                .accessibilityLabel("앞으로")
-                .help("앞으로")
+        ToolbarItem(placement: .navigation) {
+            SettingsToolbarHost(content: HStack(spacing: UMCSpacing.value4) {
+                navigationButton("뒤로", symbol: "chevron.left", isEnabled: viewModel.canGoBack) {
+                    viewModel.goBack()
+                }
+                navigationButton("앞으로", symbol: "chevron.right", isEnabled: viewModel.canGoForward) {
+                    viewModel.goForward()
+                }
+            })
+            .frame(width: UMCSpacing.value32 * 2 + UMCSpacing.value4,
+                height: UMCSpacing.value40)
         }
         .sharedBackgroundVisibility(.hidden)
+    }
+
+    private func navigationButton(
+        _ title: String, symbol: String, isEnabled: Bool, action: @escaping () -> Void
+    ) -> some View {
+        Button {
+            dismissSearchSuggestions()
+            action()
+        } label: {
+            Image(systemName: symbol)
+                .font(.system(size: 16, weight: .medium))
+                .foregroundStyle(UMCColor.Custom.backgroundTextWhite.opacity(isEnabled ? 0.75 : 0.3))
+                .frame(width: UMCSpacing.value32, height: UMCSpacing.value32)
+        }
+        .buttonStyle(SettingsPlainButtonStyle(
+            highlight: UMCColor.Custom.backgroundTextWhite.opacity(0.1)))
+        .disabled(showsProfileMenu || !isEnabled)
+        .accessibilityLabel(title)
+        .modifier(SettingsTooltip(title: title, isSuppressed: showsProfileMenu, isBelow: true))
     }
 
     private var settingsSidebar: some View {
@@ -630,25 +646,24 @@ public struct SettingsView: View {
     }
 }
 
-private struct RailTooltip: ViewModifier {
+private struct SettingsTooltip: ViewModifier {
     let title: String
     let isSuppressed: Bool
+    var isBelow = false
 
     @State private var isHovered = false
 
     func body(content: Content) -> some View {
         content
             .onHover { isHovered = $0 }
+            .background {
+                if isBelow {
+                    ToolbarTooltipAnchor(title: title, isPresented: isHovered && !isSuppressed)
+                }
+            }
             .overlay(alignment: .leading) {
-                if isHovered && !isSuppressed {
-                    Text(title)
-                        .umcTypography(.bodyRegular)
-                        .foregroundStyle(UMCColor.Semantic.textInverse)
-                        .padding(.horizontal, UMCSpacing.value12)
-                        .padding(.vertical, UMCSpacing.value8)
-                        .background(UMCColor.Semantic.textNeutralDefault,
-                            in: .rect(cornerRadius: UMCRadius.value8))
-                        .fixedSize()
+                if isHovered && !isSuppressed && !isBelow {
+                    SettingsTooltipLabel(title: title)
                         .offset(x: SettingsView.Constants.railWidth + UMCSpacing.value8)
                         .allowsHitTesting(false)
                         .accessibilityHidden(true)
@@ -657,8 +672,105 @@ private struct RailTooltip: ViewModifier {
     }
 }
 
+private struct SettingsTooltipLabel: View {
+    let title: String
+
+    var body: some View {
+        Text(title)
+            .umcTypography(.bodyRegular)
+            .foregroundStyle(UMCColor.Semantic.textInverse)
+            .padding(.horizontal, UMCSpacing.value12)
+            .padding(.vertical, UMCSpacing.value8)
+            .background(UMCColor.Semantic.textNeutralDefault,
+                in: .rect(cornerRadius: UMCRadius.value8))
+            .fixedSize()
+    }
+}
+
+// The native toolbar clips overlays, so its tooltip needs a non-interactive child panel.
+struct ToolbarTooltipAnchor: NSViewRepresentable {
+    let title: String
+    let isPresented: Bool
+
+    func makeNSView(context: Context) -> AnchorView { AnchorView() }
+
+    func updateNSView(_ view: AnchorView, context: Context) {
+        view.title = title
+        view.isPresented = isPresented
+        view.updateTooltip()
+    }
+
+    static func dismantleNSView(_ view: AnchorView, coordinator: ()) {
+        view.hideTooltip()
+    }
+
+    final class AnchorView: NSView {
+        var title = ""
+        var isPresented = false
+        private var panel: NSPanel?
+
+        override func hitTest(_ point: NSPoint) -> NSView? { nil }
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            updateTooltip()
+        }
+
+        func updateTooltip() {
+            guard isPresented, let window else {
+                hideTooltip()
+                return
+            }
+            let panel = panel ?? makePanel()
+            let host = NSHostingView(rootView: SettingsTooltipLabel(title: title)
+                .environment(\.colorScheme, .light))
+            panel.contentView = host
+            let size = host.fittingSize
+            let anchor = window.convertToScreen(convert(bounds, to: nil))
+            panel.setFrame(NSRect(x: anchor.midX - size.width / 2,
+                y: anchor.minY - size.height - UMCSpacing.value8,
+                width: size.width, height: size.height), display: true)
+            if panel.parent !== window { window.addChildWindow(panel, ordered: .above) }
+            panel.orderFront(nil)
+        }
+
+        func hideTooltip() {
+            guard let panel else { return }
+            panel.parent?.removeChildWindow(panel)
+            panel.orderOut(nil)
+        }
+
+        private func makePanel() -> NSPanel {
+            let panel = NSPanel(contentRect: .zero,
+                styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
+            panel.isOpaque = false
+            panel.backgroundColor = .clear
+            panel.hasShadow = false
+            panel.ignoresMouseEvents = true
+            panel.hidesOnDeactivate = true
+            panel.setAccessibilityElement(false)
+            self.panel = panel
+            return panel
+        }
+    }
+}
+
 func profileMenuShowsKeyboardHighlight(
     keyboardNavigation: Bool, hasHoveredItem: Bool, isFocused: Bool
 ) -> Bool {
     keyboardNavigation && !hasHoveredItem && isFocused
+}
+
+private struct SettingsToolbarHost<Content: View>: NSViewRepresentable {
+    let content: Content
+
+    func makeNSView(context: Context) -> NSHostingView<Content> {
+        let view = NSHostingView(rootView: content)
+        view.clipsToBounds = false
+        return view
+    }
+
+    func updateNSView(_ view: NSHostingView<Content>, context: Context) {
+        view.rootView = content
+    }
 }
