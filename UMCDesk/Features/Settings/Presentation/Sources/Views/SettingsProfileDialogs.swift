@@ -10,6 +10,7 @@ import SettingsDomain
 import SwiftUI
 
 struct SettingsDialogContent: View {
+    @Environment(\.settingsAppearancePalette) private var palette
     let dialog: SettingsDialog
     @Bindable var viewModel: SettingsViewModel
     @FocusState private var focusedLink: SettingsLinkKind?
@@ -25,7 +26,7 @@ struct SettingsDialogContent: View {
                     if !subtitle.isEmpty {
                         Text(subtitle)
                             .umcTypography(isCompactForm ? .headlineRegular : .title4Regular)
-                            .foregroundStyle(UMCColor.Semantic.textNeutralMedium600)
+                            .foregroundStyle(palette.textNeutralMedium600)
                             .fixedSize(horizontal: false, vertical: true)
                     }
                 }
@@ -53,8 +54,8 @@ struct SettingsDialogContent: View {
         }
         .padding(isCompactForm ? UMCSpacing.value24 : UMCSpacing.value32)
         .frame(width: dialog == .addPermission ? 440 : dialog == .editLinks ? 560 : 640)
-        .foregroundStyle(UMCColor.Semantic.textNeutralDefault)
-        .background(UMCColor.Custom.backgroundDefault)
+        .foregroundStyle(palette.textNeutralDefault)
+        .background(palette.backgroundDefault)
         .onExitCommand(perform: viewModel.dismissDialog)
         .onAppear {
             if dialog == .editLinks { focusedLink = viewModel.linkEditorFocus }
@@ -107,15 +108,15 @@ struct SettingsDialogContent: View {
                         .padding(.horizontal, UMCSpacing.value12)
                         .padding(.vertical, UMCSpacing.value8)
                         .frame(minHeight: 40)
-                        .background(UMCColor.Custom.backgroundSurfaceWhite,
+                        .background(palette.backgroundSurfaceWhite,
                             in: .rect(cornerRadius: UMCRadius.value8))
                         .overlay {
                             RoundedRectangle(cornerRadius: UMCRadius.value8)
                                 .strokeBorder(viewModel.linkErrors[kind] != nil ?
                                     UMCColor.Semantic.borderErrorStrong500 :
                                     focusedLink == kind ?
-                                        UMCColor.Semantic.borderPrimaryStrong500 :
-                                        UMCColor.Semantic.borderNeutralMedium300)
+                                        palette.borderPrimaryStrong500 :
+                                        palette.borderNeutralMedium300)
                         }
                         .focused($focusedLink, equals: kind)
                         .accessibilityLabel(kind.title)
@@ -132,7 +133,7 @@ struct SettingsDialogContent: View {
             }
             Text("저장하면 같은 UMC 계정의 프로필에 반영돼요.")
                 .umcTypography(.headlineRegular)
-                .foregroundStyle(UMCColor.Semantic.textNeutralMedium600)
+                .foregroundStyle(palette.textNeutralMedium600)
                 .fixedSize(horizontal: false, vertical: true)
             dialogError
         }
@@ -145,7 +146,7 @@ struct SettingsDialogContent: View {
                 Label("등록이 완료됐어요. 활동 정보를 확인해 주세요.",
                     systemImage: "checkmark.circle.fill")
                     .umcTypography(.title4Regular)
-                    .foregroundStyle(UMCColor.Semantic.textBrandDefault)
+                    .foregroundStyle(palette.textBrandDefault)
                 ScrollView {
                     VStack(spacing: UMCSpacing.value8) {
                         ForEach(viewModel.registeredActivities) { activity in
@@ -192,14 +193,14 @@ struct SettingsDialogContent: View {
                         .padding(.horizontal, UMCSpacing.value12)
                         .padding(.vertical, UMCSpacing.value8)
                         .frame(minHeight: 40)
-                        .background(UMCColor.Custom.backgroundSurfaceWhite,
+                        .background(palette.backgroundSurfaceWhite,
                             in: .rect(cornerRadius: UMCRadius.value8))
                         .overlay {
                             RoundedRectangle(cornerRadius: UMCRadius.value8)
                                 .strokeBorder(viewModel.dialogMessage != nil ?
                                     UMCColor.Semantic.borderErrorStrong500 :
-                                    focusesCode ? UMCColor.Semantic.borderPrimaryStrong500 :
-                                        UMCColor.Semantic.borderNeutralMedium300)
+                                    focusesCode ? palette.borderPrimaryStrong500 :
+                                        palette.borderNeutralMedium300)
                         }
                         .focused($focusesCode)
                         .accessibilityLabel("활동 코드")
@@ -213,7 +214,7 @@ struct SettingsDialogContent: View {
                         viewModel.navigate(to: .about)
                     }
                     .buttonStyle(SettingsPlainButtonStyle())
-                    .foregroundStyle(UMCColor.Semantic.textBrandDefault)
+                    .foregroundStyle(palette.textBrandDefault)
                     .umcTypography(.headlineRegular)
                 }
                 HStack(spacing: UMCSpacing.value8) {

@@ -34,7 +34,21 @@ public struct SettingsView: View {
         case trigger, myPage, settings, logout
     }
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.colorScheme) private var colorScheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    private var palette: SettingsAppearancePalette {
+        .init(colors: colorScheme == .dark ? viewModel.preferences.selectedColorTheme.dark?.content :
+            viewModel.preferences.selectedColorTheme.light?.content)
+    }
+    private var sidebarPalette: SettingsAppearancePalette {
+        .init(colors: colorScheme == .dark ? viewModel.preferences.selectedColorTheme.dark?.sidebar :
+            viewModel.preferences.selectedColorTheme.light?.sidebar)
+    }
+
+    private var sidebarChromeForeground: Color {
+        sidebarPalette.colors?.foreground.color ?? UMCColor.Custom.backgroundTextWhite
+    }
 
     fileprivate enum Constants {
         static let railWidth: CGFloat = 44
@@ -57,17 +71,24 @@ public struct SettingsView: View {
             HStack(spacing: 0) {
                 if viewModel.page != .myPage {
                     settingsSidebar
+                        .foregroundStyle(sidebarPalette.textNeutralDefault)
+                        .tint(sidebarPalette.textBrandDefault)
+                        .environment(\.settingsAppearancePalette, sidebarPalette)
+                        .environment(\.colorScheme, sidebarPalette.colorScheme ?? colorScheme)
                         .zIndex(1)
                     Rectangle()
-                        .fill(UMCColor.Semantic.borderNeutralWeak200)
+                        .fill(palette.borderNeutralWeak200)
                         .frame(width: 1)
                         .accessibilityHidden(true)
                 }
                 pageContent
+                    .environment(\.settingsAppearancePalette, palette)
+                    .background(palette.backgroundDefault)
+                    .environment(\.colorScheme, palette.colorScheme ?? colorScheme)
                     .simultaneousGesture(TapGesture().onEnded { dismissSearchSuggestions() })
                     .frame(minWidth: 0, maxWidth: .infinity, maxHeight: .infinity)
             }
-            .background(UMCColor.Custom.backgroundDefault)
+            .background(palette.backgroundDefault)
             .clipShape(.rect(cornerRadius: UMCRadius.value16))
             .overlay(alignment: .bottom) {
                 ZStack {
@@ -85,7 +106,7 @@ public struct SettingsView: View {
         }
         .padding(.leading, UMCSpacing.value4)
         .padding([.bottom, .trailing], UMCSpacing.value12)
-        .background(UMCColor.Custom.backgroundAppShell)
+        .background(sidebarPalette.colors?.background.color ?? UMCColor.Custom.backgroundAppShell)
         .disabled(showsProfileMenu)
         .accessibilityHidden(showsProfileMenu)
         .overlay(alignment: .bottomLeading) {
@@ -96,6 +117,7 @@ public struct SettingsView: View {
                         .onTapGesture { dismissProfileMenu() }
                         .accessibilityHidden(true)
                     profileMenu
+                        .environment(\.colorScheme, palette.colorScheme ?? colorScheme)
                         .padding(.leading, Constants.railWidth + UMCSpacing.value12)
                         .padding(.bottom, UMCSpacing.value12 + UMCSpacing.value16)
                         .onAppear {
@@ -124,15 +146,22 @@ public struct SettingsView: View {
             }
         }
         .toolbar { navigationToolbar }
-        .toolbarBackground(UMCColor.Custom.backgroundAppShell, for: .windowToolbar)
+        .toolbarBackground(sidebarPalette.colors?.background.color ??
+            UMCColor.Custom.backgroundAppShell, for: .windowToolbar)
         .toolbarBackgroundVisibility(.visible, for: .windowToolbar)
-        .toolbarColorScheme(.dark, for: .windowToolbar)
-        .foregroundStyle(UMCColor.Semantic.textNeutralDefault)
-        .tint(UMCColor.Semantic.textBrandDefault)
+        .toolbarColorScheme(sidebarPalette.colorScheme ?? .dark, for: .windowToolbar)
+        .foregroundStyle(palette.textNeutralDefault)
+        .tint(palette.textBrandDefault)
         .sheet(item: $viewModel.dialog, onDismiss: viewModel.dismissDialog) { dialog in
             SettingsDialogContent(dialog: dialog, viewModel: viewModel)
+                .environment(\.settingsAppearancePalette, palette)
+                .environment(\.colorScheme, palette.colorScheme ?? colorScheme)
                 .interactiveDismissDisabled(viewModel.isAccountBusy || viewModel.isClearingCache)
         }
+        .environment(\.settingsThemeMode, colorScheme)
+        .environment(\.settingsAppearancePalette, palette)
+        .environment(\.umcFontDesign, viewModel.preferences.font.design)
+        .environment(\.umcFontFamily, viewModel.preferences.availableFontFamily)
         .task { await viewModel.load() }
         .task(id: viewModel.toast?.id) {
             guard let toast = viewModel.toast, !viewModel.isDesignPreview else { return }
@@ -166,7 +195,7 @@ public struct SettingsView: View {
                     .contentShape(.rect(cornerRadius: UMCRadius.value12))
             }
             .buttonStyle(SettingsPlainButtonStyle(
-                highlight: UMCColor.Custom.backgroundTextWhite.opacity(0.1),
+                highlight: sidebarChromeForeground.opacity(0.1),
                 cornerRadius: UMCRadius.value12))
             .accessibilityLabel("프로필 메뉴")
             .accessibilityHint("마이페이지, 설정 및 계정 메뉴")
@@ -180,7 +209,7 @@ public struct SettingsView: View {
     private func railItem(_ title: String, symbol: String) -> some View {
         Image(systemName: symbol)
             .font(.system(size: 16, weight: .medium))
-            .foregroundStyle(UMCColor.Custom.backgroundTextWhite.opacity(0.75))
+            .foregroundStyle(sidebarChromeForeground.opacity(0.75))
             .frame(width: 44, height: 44)
             .contentShape(.rect)
             .accessibilityLabel("\(title), 준비 중")
@@ -201,7 +230,7 @@ public struct SettingsView: View {
                             .truncationMode(.tail)
                         Text(profileMenuSummary(profile))
                             .umcTypography(.subheadlineRegular)
-                            .foregroundStyle(UMCColor.Semantic.textNeutralWeak500)
+                            .foregroundStyle(palette.textNeutralWeak500)
                             .lineLimit(1)
                             .truncationMode(.tail)
                     }
@@ -229,15 +258,15 @@ public struct SettingsView: View {
         }
         .padding(UMCSpacing.value8)
         .frame(width: 240)
-        .foregroundStyle(UMCColor.Semantic.textNeutralStrong800)
+        .foregroundStyle(palette.textNeutralStrong800)
         .background {
             RoundedRectangle(cornerRadius: UMCRadius.value12)
-                .fill(UMCColor.Custom.backgroundDefault)
+                .fill(palette.backgroundDefault)
                 .shadow(color: .black.opacity(0.16), radius: 16, y: 4)
         }
         .overlay {
             RoundedRectangle(cornerRadius: UMCRadius.value12)
-                .strokeBorder(UMCColor.Semantic.borderNeutralWeak200)
+                .strokeBorder(palette.borderNeutralWeak200)
         }
         .accessibilityElement(children: .contain)
         .accessibilityLabel("프로필 메뉴")
@@ -283,7 +312,7 @@ public struct SettingsView: View {
         }
         .buttonStyle(SettingsPlainButtonStyle(
             highlight: hoveredProfileMenuItem != nil || profileMenuFocus == focus ?
-                UMCColor.Semantic.fillPrimaryWeakHoverPressed : .clear,
+                palette.fillPrimaryWeakHoverPressed : .clear,
             cornerRadius: UMCRadius.value6,
             isFocused: profileMenuShowsKeyboardHighlight(
                 keyboardNavigation: showsProfileKeyboardFocus,
@@ -329,11 +358,11 @@ public struct SettingsView: View {
         } label: {
             Image(systemName: symbol)
                 .font(.system(size: 16, weight: .medium))
-                .foregroundStyle(UMCColor.Custom.backgroundTextWhite.opacity(isEnabled ? 0.75 : 0.3))
+                .foregroundStyle(sidebarChromeForeground.opacity(isEnabled ? 0.75 : 0.3))
                 .frame(width: UMCSpacing.value32, height: UMCSpacing.value32)
         }
         .buttonStyle(SettingsPlainButtonStyle(
-            highlight: UMCColor.Custom.backgroundTextWhite.opacity(0.1)))
+            highlight: sidebarChromeForeground.opacity(0.1)))
         .disabled(showsProfileMenu || !isEnabled)
         .accessibilityLabel(title)
         .modifier(SettingsTooltip(title: title, isSuppressed: showsProfileMenu, isBelow: true))
@@ -368,20 +397,20 @@ public struct SettingsView: View {
                                 .padding(.horizontal, UMCSpacing.value8)
                                 .contentShape(.rect)
                                 .background(viewModel.page == category ?
-                                    UMCColor.Semantic.backgroundBrandWeak : .clear,
+                                    sidebarPalette.backgroundBrandWeak : .clear,
                                     in: .rect(cornerRadius: UMCRadius.value8))
                             }
                             .buttonStyle(SettingsPlainButtonStyle())
                             .foregroundStyle(viewModel.page == category ?
-                                UMCColor.Semantic.textBrandDefault :
-                                UMCColor.Semantic.textNeutralStrong800)
+                                sidebarPalette.textBrandDefault :
+                                sidebarPalette.textNeutralStrong800)
                             .accessibilityAddTraits(viewModel.page == category ? .isSelected : [])
                         }
                     }
                     if viewModel.isSearching && viewModel.searchResults.isEmpty {
                         Text("검색 결과를 찾을 수 없어요")
                             .umcTypography(.headlineRegular)
-                            .foregroundStyle(UMCColor.Semantic.textNeutralWeak500)
+                            .foregroundStyle(sidebarPalette.textNeutralWeak500)
                             .padding(.vertical, UMCSpacing.value16)
                     }
                 }
@@ -391,14 +420,14 @@ public struct SettingsView: View {
             Spacer(minLength: 0)
             Text("변경 사항은 바로 적용돼요")
                 .umcTypography(.bodyRegular)
-                .foregroundStyle(UMCColor.Semantic.textNeutralWeak500)
+                .foregroundStyle(sidebarPalette.textNeutralWeak500)
                 .onTapGesture { dismissSearchSuggestions() }
         }
         .padding(.horizontal, UMCSpacing.value20)
         .padding(.vertical, UMCSpacing.value24)
         .frame(width: Constants.sidebarWidth)
         .background {
-            UMCColor.Custom.backgroundSurfaceGreyWeaker
+            sidebarPalette.backgroundSurfaceGreyWeaker
                 .contentShape(.rect)
                 .onTapGesture { dismissSearchSuggestions() }
         }
@@ -434,13 +463,13 @@ public struct SettingsView: View {
             }
         }
         .umcTypography(.headlineRegular)
-        .foregroundStyle(UMCColor.Semantic.textNeutralWeak500)
+        .foregroundStyle(sidebarPalette.textNeutralWeak500)
         .padding(.horizontal, UMCSpacing.value16)
         .frame(minHeight: 36)
-        .background(UMCColor.Custom.backgroundSurfaceGreyWeak, in: .capsule)
+        .background(sidebarPalette.backgroundSurfaceGreyWeak, in: .capsule)
         .overlay {
             Capsule().strokeBorder(searchFocus == .field ?
-                UMCColor.Semantic.textBrandDefault : .clear, lineWidth: 2)
+                sidebarPalette.textBrandDefault : .clear, lineWidth: 2)
         }
         .overlay(alignment: .topLeading) {
             if showsSearchSuggestions && !viewModel.isSearching {
@@ -479,12 +508,12 @@ public struct SettingsView: View {
         .frame(width: 280)
         .background {
             RoundedRectangle(cornerRadius: UMCRadius.value12)
-                .fill(UMCColor.Custom.backgroundDefault)
+                .fill(sidebarPalette.backgroundDefault)
                 .shadow(color: .black.opacity(0.16), radius: 16, y: 4)
         }
         .overlay {
             RoundedRectangle(cornerRadius: UMCRadius.value12)
-                .strokeBorder(UMCColor.Semantic.borderNeutralWeak200)
+                .strokeBorder(sidebarPalette.borderNeutralWeak200)
         }
         .accessibilityElement(children: .contain)
         .accessibilityLabel("설정 검색 제안")
@@ -496,7 +525,7 @@ public struct SettingsView: View {
         VStack(alignment: .leading, spacing: UMCSpacing.value4) {
             Text(title)
                 .umcTypography(.subheadlineRegular)
-                .foregroundStyle(UMCColor.Semantic.textNeutralWeak500)
+                .foregroundStyle(sidebarPalette.textNeutralWeak500)
                 .padding(.horizontal, UMCSpacing.value8)
                 .accessibilityAddTraits(.isHeader)
             ForEach(items) { result in
@@ -510,10 +539,10 @@ public struct SettingsView: View {
                             Text(result.title).umcTypography(.headlineRegular)
                             Text(result.page.title)
                                 .umcTypography(.captionRegular)
-                                .foregroundStyle(UMCColor.Semantic.textNeutralWeak500)
+                                .foregroundStyle(sidebarPalette.textNeutralWeak500)
                         }
                     }
-                    .foregroundStyle(UMCColor.Semantic.textNeutralStrong800)
+                    .foregroundStyle(sidebarPalette.textNeutralStrong800)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(UMCSpacing.value8)
                     .contentShape(.rect)
@@ -569,13 +598,13 @@ public struct SettingsView: View {
             VStack(alignment: .leading, spacing: UMCSpacing.value4) {
                 Text(result.title)
                     .umcTypography(.headlineBold)
-                    .foregroundStyle(UMCColor.Semantic.textNeutralStrong800)
+                    .foregroundStyle(sidebarPalette.textNeutralStrong800)
                 Text(result.summary)
                     .umcTypography(.bodyRegular)
-                    .foregroundStyle(UMCColor.Semantic.textNeutralMedium600)
+                    .foregroundStyle(sidebarPalette.textNeutralMedium600)
                 Text(result.page.title)
                     .umcTypography(.captionRegular)
-                    .foregroundStyle(UMCColor.Semantic.textNeutralWeak500)
+                    .foregroundStyle(sidebarPalette.textNeutralWeak500)
             }
             .fixedSize(horizontal: false, vertical: true)
             .multilineTextAlignment(.leading)
@@ -606,7 +635,7 @@ public struct SettingsView: View {
                             .accessibilityAddTraits(.isHeader)
                         Text("이 Mac에서 사용하는 앱의 환경을 설정하세요.")
                             .umcTypography(.bodyRegular)
-                            .foregroundStyle(UMCColor.Semantic.textNeutralWeak500)
+                            .foregroundStyle(palette.textNeutralWeak500)
                     }
                     switch viewModel.page {
                     case .general: SettingsGeneralView(viewModel: viewModel)
@@ -633,13 +662,13 @@ public struct SettingsView: View {
                 .accessibilityLabel("안내 닫기")
         }
         .foregroundStyle(toast.isError ? UMCColor.Semantic.textError :
-            UMCColor.Semantic.textNeutralStrong800)
+            palette.textNeutralStrong800)
         .padding(UMCSpacing.value16)
-        .background(UMCColor.Custom.backgroundSurfaceWhite,
+        .background(palette.backgroundSurfaceWhite,
             in: .rect(cornerRadius: UMCRadius.value12))
         .overlay {
             RoundedRectangle(cornerRadius: UMCRadius.value12)
-                .strokeBorder(UMCColor.Semantic.borderNeutralWeak200)
+                .strokeBorder(palette.borderNeutralWeak200)
         }
         .shadow(color: .black.opacity(0.08), radius: 8, y: 4)
         .accessibilityElement(children: .contain)

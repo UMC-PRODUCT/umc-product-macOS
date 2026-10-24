@@ -15,6 +15,19 @@ import Testing
 
 @MainActor
 struct SettingsAppearanceTests {
+    @Test("설치되지 않은 글꼴은 기본 글꼴로 복구한다")
+    func missingFontFallsBack() {
+        let suite = "missing-font.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        defaults.set("FontThatDoesNotExist-123456", forKey: "settings.fontFamily")
+        let preferences = SettingsPreferences(defaults: defaults)
+        #expect(preferences.availableFontFamily == nil)
+        #expect(preferences.font.design == nil)
+        preferences.fontFamily = NSFontManager.shared.availableFontFamilies.first
+        #expect(preferences.availableFontFamily == preferences.fontFamily)
+    }
+
     @Test("Settings screens keep a scrollable content area in both appearances",
         arguments: [CGSize(width: 1040, height: 720), CGSize(width: 1440, height: 960)],
         [ColorScheme.light, .dark])
@@ -22,6 +35,8 @@ struct SettingsAppearanceTests {
         let preferences = SettingsPreferences(defaults: UserDefaults(suiteName:
             "SettingsAppearanceTests.\(UUID().uuidString)")!)
         preferences.bodyTextSize = size.width == 1040 ? .extraLarge : .standard
+        preferences.selectedColorThemeID = "midnight"
+        preferences.font = .serif
         for id in ["757:12600", "807:13303", "903:3596", "903:14091", "903:14321", "906:3869",
             "activity_roles", "776:17026"] {
             let model = try #require(SettingsDesignPreview.makeViewModel(id: id,

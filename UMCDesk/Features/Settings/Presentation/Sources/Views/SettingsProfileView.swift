@@ -10,6 +10,7 @@ import SettingsDomain
 import SwiftUI
 
 struct SettingsProfileView: View {
+    @Environment(\.settingsAppearancePalette) private var palette
     @Bindable var viewModel: SettingsViewModel
     @Environment(\.openURL) private var openURL
 
@@ -71,10 +72,10 @@ struct SettingsProfileView: View {
                     }
                     Text(profile.schoolName ?? "학교 정보 없음")
                         .umcTypography(.headlineRegular)
-                        .foregroundStyle(UMCColor.Semantic.textNeutralWeak500)
+                        .foregroundStyle(palette.textNeutralWeak500)
                     Text(profile.email ?? "이메일 정보 없음")
                         .umcTypography(.headlineRegular)
-                        .foregroundStyle(UMCColor.Semantic.textNeutralWeak500)
+                        .foregroundStyle(palette.textNeutralWeak500)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 Button {
@@ -146,7 +147,7 @@ struct SettingsProfileView: View {
                                 }
                                 .buttonStyle(SettingsPlainButtonStyle())
                                 .frame(maxWidth: .infinity, alignment: .leading)
-                                .foregroundStyle(UMCColor.Semantic.textBrandDefault)
+                                .foregroundStyle(palette.textBrandDefault)
                                 .help(profile.links[kind])
                                 .accessibilityLabel("\(kind.title) 링크 열기")
                                 .accessibilityValue(url.absoluteString)
@@ -164,7 +165,7 @@ struct SettingsProfileView: View {
                                         .frame(minHeight: 32, alignment: .leading)
                                 }
                                 .buttonStyle(SettingsPlainButtonStyle())
-                                .foregroundStyle(UMCColor.Semantic.textBrandDefault)
+                                .foregroundStyle(palette.textBrandDefault)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                                 .disabled(viewModel.isAccountBusy)
                                 .accessibilityLabel("\(kind.title) 링크 \(isEmpty ? "추가" : "수정")")
@@ -190,7 +191,7 @@ struct SettingsProfileView: View {
     private func profileLinkIconStyle(_ kind: SettingsLinkKind) -> AnyShapeStyle {
         switch kind {
         case .github:
-            AnyShapeStyle(UMCColor.Semantic.textNeutralDefault)
+            AnyShapeStyle(palette.textNeutralDefault)
         case .linkedIn:
             AnyShapeStyle(Color(red: 10 / 255, green: 102 / 255, blue: 194 / 255))
         case .instagram:
@@ -204,7 +205,7 @@ struct SettingsProfileView: View {
                 endPoint: .bottomLeading
             ))
         case .blog, .personal:
-            AnyShapeStyle(UMCColor.Semantic.iconBrandStrong600)
+            AnyShapeStyle(palette.iconBrandStrong600)
         }
     }
 
@@ -218,7 +219,7 @@ struct SettingsProfileView: View {
                         Text("아직 등록된 활동이 없어요.").umcTypography(.headlineBold)
                         Text("운영진에게 받은 챌린저 코드로 활동을 등록해 주세요.")
                             .umcTypography(.bodyRegular)
-                            .foregroundStyle(UMCColor.Semantic.textNeutralWeak500)
+                            .foregroundStyle(palette.textNeutralWeak500)
                     }
                     .padding(.vertical, UMCSpacing.value16)
                 } else {
@@ -241,7 +242,7 @@ struct SettingsProfileView: View {
             Text(title).umcTypography(.title4Bold).accessibilityAddTraits(.isHeader)
             Text(description)
                 .umcTypography(.bodyRegular)
-                .foregroundStyle(UMCColor.Semantic.textNeutralWeak500)
+                .foregroundStyle(palette.textNeutralWeak500)
                 .fixedSize(horizontal: false, vertical: true)
         }
     }
@@ -257,7 +258,7 @@ struct SettingsProfileView: View {
             VStack(spacing: UMCSpacing.value24) {
                 Image(systemName: "person.crop.circle")
                     .font(.system(size: 48))
-                    .foregroundStyle(UMCColor.Semantic.iconNeutralMedium500)
+                    .foregroundStyle(palette.iconNeutralMedium500)
                 Text(error as? SettingsError == .authenticationRequired ?
                     "로그인이 필요해요" : "프로필을 불러오지 못했어요")
                     .umcTypography(.largeTitle3Bold)
@@ -265,7 +266,7 @@ struct SettingsProfileView: View {
                     "로그인한 계정의 프로필과 활동을 여기에서 확인할 수 있어요." :
                     "연결 상태를 확인한 뒤 다시 시도해 주세요.")
                     .umcTypography(.title4Regular)
-                    .foregroundStyle(UMCColor.Semantic.textNeutralMedium600)
+                    .foregroundStyle(palette.textNeutralMedium600)
                 if error as? SettingsError == .authenticationRequired {
                     SettingsActionButton(title: "로그인 화면으로", kind: .brand) {
                         viewModel.onOpenLogin?()
@@ -304,6 +305,7 @@ extension SettingsLinkKind {
 }
 
 struct SettingsActivityRow: View {
+    @Environment(\.settingsAppearancePalette) private var palette
     let activity: SettingsActivity
 
     var body: some View {
@@ -312,8 +314,8 @@ struct SettingsActivityRow: View {
                 .umcTypography(.bodyRegular)
                 .padding(.horizontal, 6)
                 .frame(minHeight: 24)
-                .foregroundStyle(UMCColor.Semantic.textBrandDefault)
-                .background(UMCColor.Semantic.fillPrimaryWeak75,
+                .foregroundStyle(palette.textBrandDefault)
+                .background(palette.fillPrimaryWeak75,
                     in: .rect(cornerRadius: UMCRadius.value6))
             SettingsPartTag(part: activity.part)
             Spacer(minLength: UMCSpacing.value8)
@@ -336,14 +338,15 @@ struct SettingsActivityRow: View {
             .umcTypography(.bodyRegular)
             .padding(.horizontal, 6)
             .frame(minHeight: 24)
-            .foregroundStyle(roleColors(role).foreground)
-            .background(roleColors(role).background,
+            .foregroundStyle(roleColors(role, palette: palette).foreground)
+            .background(roleColors(role, palette: palette).background,
                 in: .rect(cornerRadius: UMCRadius.value6))
         }
     }
 }
 
 struct SettingsPartTag: View {
+    @Environment(\.settingsAppearancePalette) private var palette
     let part: String
     var minimumHeight: CGFloat = 24
 
@@ -368,7 +371,7 @@ struct SettingsPartTag: View {
         case "WEB", "WEB_PRODUCT_ENGINEER":
             (UMCColor.Semantic.tagPartWebPeStrong, UMCColor.Semantic.tagPartWebPeWeaker)
         default:
-            (UMCColor.Semantic.textNeutralStrong800, UMCColor.Custom.backgroundTagGrey)
+            (palette.textNeutralStrong800, palette.backgroundTagGrey)
         }
     }
 }
@@ -408,7 +411,7 @@ func roleTitle(_ role: String) -> String {
     }
 }
 
-func roleColors(_ role: String) -> (foreground: Color, background: Color) {
+func roleColors(_ role: String, palette: SettingsAppearancePalette = .init()) -> (foreground: Color, background: Color) {
     switch role {
     case "CENTRAL_PRESIDENT", "CENTRAL_VICE_PRESIDENT",
         "CENTRAL_OPERATING_TEAM_MEMBER", "CENTRAL_EDUCATION_TEAM_MEMBER":
@@ -421,13 +424,14 @@ func roleColors(_ role: String) -> (foreground: Color, background: Color) {
         (UMCColor.Semantic.tagRoleChallengerSuperAdminStrong,
             UMCColor.Semantic.tagRoleChallengerSuperAdminWeak)
     case "PRODUCT":
-        (UMCColor.Semantic.tagRoleProductStrong, UMCColor.Custom.backgroundTagGrey)
+        (UMCColor.Semantic.tagRoleProductStrong, palette.backgroundTagGrey)
     default:
-        (UMCColor.Semantic.textNeutralStrong800, UMCColor.Custom.backgroundTagGrey)
+        (palette.textNeutralStrong800, palette.backgroundTagGrey)
     }
 }
 
 private struct SettingsUsageCard: View {
+    @Environment(\.settingsAppearancePalette) private var palette
     let isDesignPreview: Bool
 
     private var statistics: [String] {
@@ -451,10 +455,10 @@ private struct SettingsUsageCard: View {
                     if isDesignPreview {
                         Text("미리보기 데이터")
                             .umcTypography(.captionRegular)
-                            .foregroundStyle(UMCColor.Semantic.textNeutralMedium600)
+                            .foregroundStyle(palette.textNeutralMedium600)
                             .padding(.horizontal, UMCSpacing.value8)
                             .padding(.vertical, UMCSpacing.value4)
-                            .background(UMCColor.Semantic.surfaceNeutralMedium,
+                            .background(palette.surfaceNeutralMedium,
                                 in: .rect(cornerRadius: UMCRadius.value4))
                     }
                     #endif
@@ -483,6 +487,7 @@ private struct SettingsUsageCard: View {
 }
 
 private struct SettingsUsageStatistics: View {
+    @Environment(\.settingsAppearancePalette) private var palette
     let values: [String]
 
     var body: some View {
@@ -491,7 +496,7 @@ private struct SettingsUsageStatistics: View {
             VStack(alignment: .leading, spacing: UMCSpacing.value8) {
                 Text(title)
                     .umcTypography(.bodyRegular)
-                    .foregroundStyle(UMCColor.Semantic.textNeutralWeak500)
+                    .foregroundStyle(palette.textNeutralWeak500)
                 Text(value).umcTypography(.title2Bold)
             }
             .fixedSize(horizontal: true, vertical: true)
@@ -502,10 +507,11 @@ private struct SettingsUsageStatistics: View {
 }
 
 private struct SettingsUsagePlaceholder: View {
+    @Environment(\.settingsAppearancePalette) private var palette
     var body: some View {
         Text("사용 기록 기능을 준비하고 있어요.")
             .umcTypography(.bodyRegular)
-            .foregroundStyle(UMCColor.Semantic.textNeutralWeak500)
+            .foregroundStyle(palette.textNeutralWeak500)
             .frame(maxWidth: .infinity, minHeight: 140)
     }
 }
@@ -569,11 +575,12 @@ enum SettingsUsagePreview {
 }
 
 private struct SettingsUsageHeatmap: View {
+    @Environment(\.settingsAppearancePalette) private var palette
     var body: some View {
         VStack(alignment: .leading, spacing: UMCSpacing.value12) {
             Text("최근 12주 · 2026. 7. 27. – 10. 18.")
                 .umcTypography(.bodyRegular)
-                .foregroundStyle(UMCColor.Semantic.textNeutralWeak500)
+                .foregroundStyle(palette.textNeutralWeak500)
             HStack(alignment: .top, spacing: UMCSpacing.value4) {
                 VStack(spacing: UMCSpacing.value4) {
                     Text(" ").frame(height: 16)
@@ -582,14 +589,14 @@ private struct SettingsUsageHeatmap: View {
                     }
                 }
                 .umcTypography(.captionRegular)
-                .foregroundStyle(UMCColor.Semantic.textNeutralWeak500)
+                .foregroundStyle(palette.textNeutralWeak500)
                 .padding(.trailing, UMCSpacing.value4)
                 .accessibilityHidden(true)
                 ForEach(SettingsUsagePreview.weeks) { week in
                     VStack(spacing: UMCSpacing.value4) {
                         Text(week.month)
                             .umcTypography(.captionRegular)
-                            .foregroundStyle(UMCColor.Semantic.textNeutralWeak500)
+                            .foregroundStyle(palette.textNeutralWeak500)
                             .frame(height: 16)
                             .accessibilityHidden(true)
                         ForEach(week.days) { day in
@@ -615,7 +622,7 @@ private struct SettingsUsageHeatmap: View {
                 Text("많음")
             }
             .umcTypography(.captionRegular)
-            .foregroundStyle(UMCColor.Semantic.textNeutralWeak500)
+            .foregroundStyle(palette.textNeutralWeak500)
             .accessibilityElement(children: .ignore)
             .accessibilityLabel("사용 시간 색상: 기록 없음, 30분 미만, 1시간 미만, 1시간 30분 미만, 그 이상")
         }

@@ -32,6 +32,8 @@ struct UMCDeskApp: App {
                 .toggleStyle(UMCCheckboxStyle())
                 .preferredColorScheme(preferences.theme.colorScheme)
                 .environment(\.umcBodyTextScale, preferences.bodyTextSize.scale)
+                .environment(\.umcFontDesign, preferences.font.design)
+                .environment(\.umcFontFamily, preferences.availableFontFamily)
                 .frame(minWidth: 1040, minHeight: 720)
                 #if DEBUG || UMC_PRERELEASE
                 .environment(\.umcTypographyPreview, typographyPreview)
@@ -53,6 +55,8 @@ struct UMCDeskApp: App {
                 .toggleStyle(UMCCheckboxStyle())
                 .preferredColorScheme(preferences.theme.colorScheme)
                 .environment(\.umcBodyTextScale, preferences.bodyTextSize.scale)
+                .environment(\.umcFontDesign, preferences.font.design)
+                .environment(\.umcFontFamily, preferences.availableFontFamily)
                 .frame(minWidth: 1040, minHeight: 720)
                 #if DEBUG || UMC_PRERELEASE
                 .environment(\.umcTypographyPreview, typographyPreview)
@@ -68,6 +72,8 @@ struct UMCDeskApp: App {
                 .toggleStyle(UMCCheckboxStyle())
                 .preferredColorScheme(previewPreferences.theme.colorScheme)
                 .environment(\.umcBodyTextScale, previewPreferences.bodyTextSize.scale)
+                .environment(\.umcFontDesign, previewPreferences.font.design)
+                .environment(\.umcFontFamily, previewPreferences.availableFontFamily)
                 .environment(\.umcTypographyPreview, typographyPreview)
                 .frame(minWidth: 1040, minHeight: 720)
         }

@@ -109,6 +109,8 @@ public final class SettingsViewModel {
     }
     var isDefaultAppearance: Bool {
         preferences.theme == .system && preferences.bodyTextSize == .standard
+            && preferences.selectedColorTheme.id == SettingsColorTheme.standard.id
+            && preferences.font == .pretendard && preferences.fontFamily == nil
     }
     var canClearCache: Bool {
         (cacheBytes ?? 0) > 0 && !isRefreshingCache && !isClearingCache && !cacheLoadFailed
@@ -355,6 +357,9 @@ public final class SettingsViewModel {
 
     func resetAppearance() {
         preferences.theme = .system
+        preferences.selectedColorThemeID = SettingsColorTheme.standard.id
+        preferences.fontFamily = nil
+        preferences.font = .pretendard
         preferences.bodyTextSize = .standard
     }
 

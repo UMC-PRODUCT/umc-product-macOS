@@ -13,6 +13,11 @@ public enum SettingsTheme: String, CaseIterable, Identifiable, Sendable {
     public var id: String { rawValue }
 }
 
+public enum SettingsFont: String, CaseIterable, Identifiable, Sendable {
+    case pretendard, system, rounded, serif
+    public var id: String { rawValue }
+}
+
 public enum SettingsBodyTextSize: String, CaseIterable, Identifiable, Sendable {
     case standard, large, extraLarge
     public var id: String { rawValue }
@@ -40,6 +45,12 @@ public enum SettingsWindowCloseBehavior: String, CaseIterable, Identifiable, Sen
 public final class SettingsPreferences {
     @ObservationIgnored private let defaults: UserDefaults
     public var theme: SettingsTheme { didSet { save(theme.rawValue, key: "theme") } }
+    public var selectedColorThemeID: String {
+        didSet { save(selectedColorThemeID, key: "colorThemeID") }
+    }
+    public private(set) var customColorThemes: [SettingsColorTheme]
+    public var fontFamily: String? { didSet { save(fontFamily, key: "fontFamily") } }
+    public var font: SettingsFont { didSet { save(font.rawValue, key: "font") } }
     public var bodyTextSize: SettingsBodyTextSize {
         didSet { save(bodyTextSize.rawValue, key: "bodyTextSize") }
     }
@@ -66,6 +77,15 @@ public final class SettingsPreferences {
     public init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
         theme = defaults.string(forKey: "settings.theme").flatMap(SettingsTheme.init) ?? .system
+        selectedColorThemeID = defaults.string(forKey: "settings.colorThemeID") ?? "umc"
+        let storedThemes = defaults.data(forKey: "settings.colorThemes")
+            .flatMap { try? JSONDecoder().decode([SettingsColorTheme].self, from: $0) }?
+            .filter { UUID(uuidString: $0.id) != nil && !$0.name.isEmpty
+                && $0.name.count <= 40 && $0.light != nil && $0.dark != nil } ?? []
+        var identifiers = Set<String>()
+        customColorThemes = storedThemes.filter { identifiers.insert($0.id).inserted }
+        fontFamily = defaults.string(forKey: "settings.fontFamily")
+        font = defaults.string(forKey: "settings.font").flatMap(SettingsFont.init) ?? .pretendard
         bodyTextSize = defaults.string(forKey: "settings.bodyTextSize")
             .flatMap(SettingsBodyTextSize.init) ?? .standard
         launchPage = defaults.string(forKey: "settings.launchPage")
@@ -92,7 +112,62 @@ public final class SettingsPreferences {
             as? Bool ?? false
     }
 
-    private func save(_ value: Any, key: String) {
+    public var colorThemes: [SettingsColorTheme] { SettingsColorTheme.presets + customColorThemes }
+
+    public var selectedColorTheme: SettingsColorTheme {
+        colorThemes.first { $0.id == selectedColorThemeID } ?? .standard
+    }
+
+    public var isCustomColorTheme: Bool {
+        customColorThemes.contains { $0.id == selectedColorThemeID }
+    }
+
+    @discardableResult
+    public func duplicateColorTheme(
+        name: String, light: SettingsThemeColors, dark: SettingsThemeColors
+    ) -> Bool {
+        let name = String(name.trimmingCharacters(in: .whitespacesAndNewlines).prefix(40))
+        guard !name.isEmpty else { return false }
+        var uniqueName = name
+        var suffix = 2
+        while colorThemes.contains(where: { $0.name == uniqueName }) {
+            let ending = " (\(suffix))"
+            uniqueName = String(name.prefix(40 - ending.count)) + ending
+            suffix += 1
+        }
+        let theme = SettingsColorTheme(id: UUID().uuidString, name: uniqueName,
+            light: light, dark: dark)
+        customColorThemes.append(theme)
+        persistColorThemes()
+        selectedColorThemeID = theme.id
+        return true
+    }
+
+    public func updateColorTheme(light: SettingsThemeColors, dark: SettingsThemeColors) {
+        if let index = customColorThemes.firstIndex(where: { $0.id == selectedColorThemeID }) {
+            customColorThemes[index].light = light
+            customColorThemes[index].dark = dark
+            persistColorThemes()
+        } else {
+            duplicateColorTheme(name: "\(selectedColorTheme.name) 사용자 지정",
+                light: light, dark: dark)
+        }
+    }
+
+    public func deleteSelectedColorTheme() {
+        guard isCustomColorTheme else { return }
+        customColorThemes.removeAll { $0.id == selectedColorThemeID }
+        selectedColorThemeID = SettingsColorTheme.standard.id
+        persistColorThemes()
+    }
+
+    private func persistColorThemes() {
+        if let data = try? JSONEncoder().encode(customColorThemes) {
+            save(data, key: "colorThemes")
+        }
+    }
+
+    private func save(_ value: Any?, key: String) {
         defaults.set(value, forKey: "settings.\(key)")
     }
 }

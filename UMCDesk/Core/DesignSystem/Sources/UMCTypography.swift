@@ -55,7 +55,11 @@ public enum UMCTypography: String, CaseIterable, Sendable {
         font(size: size, weight: weight)
     }
 
-    func font(size: CGFloat, weight: Font.Weight) -> Font {
+    func font(
+        size: CGFloat, weight: Font.Weight, design: Font.Design? = nil, family: String? = nil
+    ) -> Font {
+        if let family { return .custom(family, size: size, relativeTo: textStyle).weight(weight) }
+        if let design { return .system(size: size, weight: weight, design: design) }
         _ = PretendardFonts.registered
         let name = weight == .bold ? "Pretendard-Bold" : "Pretendard-Regular"
         return .custom(name, size: size, relativeTo: textStyle)
@@ -112,6 +116,9 @@ public enum UMCTypography: String, CaseIterable, Sendable {
 
 public extension EnvironmentValues {
     @Entry var umcBodyTextScale: CGFloat = 1
+    /// nil keeps the bundled Pretendard face; other designs use the system font.
+    @Entry var umcFontDesign: Font.Design? = nil
+    @Entry var umcFontFamily: String? = nil
 }
 
 public extension View {
@@ -125,6 +132,8 @@ private struct UMCTypographyModifier: ViewModifier {
     let style: UMCTypography
     @ScaledMetric private var scale: CGFloat
     @Environment(\.umcBodyTextScale) private var preferredBodyScale
+    @Environment(\.umcFontDesign) private var fontDesign
+    @Environment(\.umcFontFamily) private var fontFamily
 
     private var bodyScale: CGFloat {
         style.scalesWithBodyPreference && preferredBodyScale.isFinite && preferredBodyScale > 0
@@ -142,14 +151,16 @@ private struct UMCTypographyModifier: ViewModifier {
     func body(content: Content) -> some View {
         #if DEBUG || UMC_PRERELEASE
         content
-            .font(preview.font(for: style, bodyScale: bodyScale))
+            .font(preview.font(for: style, bodyScale: bodyScale,
+                design: fontDesign, family: fontFamily))
             .tracking((style.tracking * preview.appliedSizeScale
                 + preview.appliedTrackingAdjustment) * scale * bodyScale)
             .lineHeight(.exact(points: style.lineHeight * preview.appliedSizeScale
                 * preview.appliedLineHeightScale * scale * bodyScale))
         #else
         content
-            .font(style.font(size: style.size * bodyScale, weight: style.weight))
+            .font(style.font(size: style.size * bodyScale, weight: style.weight,
+                design: fontDesign, family: fontFamily))
             .tracking(style.tracking * scale * bodyScale)
             .lineHeight(.exact(points: style.lineHeight * scale * bodyScale))
         #endif
