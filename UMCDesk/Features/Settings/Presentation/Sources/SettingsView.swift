@@ -309,18 +309,16 @@ public struct SettingsView: View {
                 dismissSearchSuggestions()
                 viewModel.goBack()
             }
-                .buttonStyle(.plain)
                 .disabled(showsProfileMenu || !viewModel.canGoBack)
                 .accessibilityLabel("뒤로")
-                .keyboardShortcut("[", modifiers: .command)
+                .help("뒤로")
             Button("앞으로", systemImage: "chevron.right") {
                 dismissSearchSuggestions()
                 viewModel.goForward()
             }
-                .buttonStyle(.plain)
                 .disabled(showsProfileMenu || !viewModel.canGoForward)
                 .accessibilityLabel("앞으로")
-                .keyboardShortcut("]", modifiers: .command)
+                .help("앞으로")
         }
         .sharedBackgroundVisibility(.hidden)
     }
