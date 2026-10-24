@@ -13,6 +13,16 @@ public struct SettingsView: View {
     // MARK: - Property
 
     @State private var viewModel: SettingsViewModel
+    @State private var showsSearchSuggestions = false
+    @FocusState private var searchFocus: SearchFocus?
+
+    private enum SearchFocus: Hashable {
+        case field
+        case recent(String)
+        case recommended(String)
+        case result(String)
+    }
+
     @State private var showsProfileMenu = false
     @State private var hoveredProfileMenuItem: ProfileMenuFocus?
     @State private var showsProfileKeyboardFocus = false
@@ -42,15 +52,18 @@ public struct SettingsView: View {
                 .frame(width: Constants.railWidth)
                 .environment(\.colorScheme, .light)
                 .zIndex(1)
+                .simultaneousGesture(TapGesture().onEnded { dismissSearchSuggestions() })
             HStack(spacing: 0) {
                 if viewModel.page != .myPage {
                     settingsSidebar
+                        .zIndex(1)
                     Rectangle()
                         .fill(UMCColor.Semantic.borderNeutralWeak200)
                         .frame(width: 1)
                         .accessibilityHidden(true)
                 }
                 pageContent
+                    .simultaneousGesture(TapGesture().onEnded { dismissSearchSuggestions() })
                     .frame(minWidth: 0, maxWidth: .infinity, maxHeight: .infinity)
             }
             .background(UMCColor.Custom.backgroundDefault)
@@ -92,7 +105,17 @@ public struct SettingsView: View {
                 }
             }
         }
-        .onExitCommand(perform: dismissProfileMenu)
+        .onExitCommand {
+            if showsProfileMenu { dismissProfileMenu() }
+            else { dismissSearchSuggestions() }
+        }
+        .onChange(of: searchFocus) { _, focus in
+            if focus == .field { showsSearchSuggestions = true }
+            else if focus == nil { showsSearchSuggestions = false }
+        }
+        .onChange(of: viewModel.searchText) { _, _ in
+            if searchFocus == .field { showsSearchSuggestions = true }
+        }
         .onChange(of: showsProfileMenu) { _, isPresented in
             if !isPresented {
                 profileMenuFocus = .trigger
@@ -282,12 +305,18 @@ public struct SettingsView: View {
     @ToolbarContentBuilder
     private var navigationToolbar: some ToolbarContent {
         ToolbarItemGroup(placement: .navigation) {
-            Button("뒤로", systemImage: "chevron.left", action: viewModel.goBack)
+            Button("뒤로", systemImage: "chevron.left") {
+                dismissSearchSuggestions()
+                viewModel.goBack()
+            }
                 .buttonStyle(.plain)
                 .disabled(showsProfileMenu || !viewModel.canGoBack)
                 .accessibilityLabel("뒤로")
                 .keyboardShortcut("[", modifiers: .command)
-            Button("앞으로", systemImage: "chevron.right", action: viewModel.goForward)
+            Button("앞으로", systemImage: "chevron.right") {
+                dismissSearchSuggestions()
+                viewModel.goForward()
+            }
                 .buttonStyle(.plain)
                 .disabled(showsProfileMenu || !viewModel.canGoForward)
                 .accessibilityLabel("앞으로")
@@ -299,24 +328,9 @@ public struct SettingsView: View {
     private var settingsSidebar: some View {
         VStack(alignment: .leading, spacing: UMCSpacing.value16) {
             Text("설정").umcTypography(.title3Bold)
-            HStack(spacing: UMCSpacing.value8) {
-                Image(systemName: "magnifyingglass").accessibilityHidden(true)
-                TextField("검색", text: $viewModel.searchText)
-                    .textFieldStyle(.plain)
-                    .accessibilityLabel("설정 검색")
-                if !viewModel.searchText.isEmpty {
-                    Button { viewModel.searchText = "" } label: {
-                        Image(systemName: "xmark.circle.fill")
-                    }
-                    .buttonStyle(SettingsPlainButtonStyle())
-                    .accessibilityLabel("검색어 지우기")
-                }
-            }
-            .umcTypography(.headlineRegular)
-            .foregroundStyle(UMCColor.Semantic.textNeutralWeak500)
-            .padding(.horizontal, UMCSpacing.value16)
-            .frame(minHeight: 36)
-            .background(UMCColor.Custom.backgroundSurfaceGreyWeak, in: .capsule)
+                .onTapGesture { dismissSearchSuggestions() }
+            searchField
+                .zIndex(1)
 
             ScrollView {
                 VStack(alignment: .leading, spacing: UMCSpacing.value4) {
@@ -326,7 +340,10 @@ public struct SettingsView: View {
                         }
                     } else {
                         ForEach(SettingsPage.categories) { category in
-                            Button { viewModel.navigate(to: category) } label: {
+                            Button {
+                                dismissSearchSuggestions()
+                                viewModel.navigate(to: category)
+                            } label: {
                                 HStack(spacing: UMCSpacing.value8) {
                                     Image(systemName: category.symbol)
                                         .font(.system(size: 16))
@@ -356,19 +373,185 @@ public struct SettingsView: View {
                 }
             }
             .scrollIndicators(.hidden)
+            .simultaneousGesture(TapGesture().onEnded { dismissSearchSuggestions() })
             Spacer(minLength: 0)
             Text("변경 사항은 바로 적용돼요")
                 .umcTypography(.bodyRegular)
                 .foregroundStyle(UMCColor.Semantic.textNeutralWeak500)
+                .onTapGesture { dismissSearchSuggestions() }
         }
         .padding(.horizontal, UMCSpacing.value20)
         .padding(.vertical, UMCSpacing.value24)
         .frame(width: Constants.sidebarWidth)
-        .background(UMCColor.Custom.backgroundSurfaceGreyWeaker)
+        .background {
+            UMCColor.Custom.backgroundSurfaceGreyWeaker
+                .contentShape(.rect)
+                .onTapGesture { dismissSearchSuggestions() }
+        }
+        .onKeyPress(keys: [.downArrow, .upArrow, .tab]) { press in
+            moveSearchFocus(press)
+        }
+    }
+
+    private var searchField: some View {
+        HStack(spacing: UMCSpacing.value8) {
+            Image(systemName: "magnifyingglass").accessibilityHidden(true)
+            TextField("검색", text: $viewModel.searchText)
+                .textFieldStyle(.plain)
+                .accessibilityLabel("설정 검색")
+                .focused($searchFocus, equals: .field)
+                .onTapGesture { showsSearchSuggestions = true }
+                .onSubmit {
+                    if let result = viewModel.isSearching ? viewModel.searchResults.first :
+                        suggestionItems.first?.result {
+                        selectSearchResult(result)
+                    }
+                }
+            if !viewModel.searchText.isEmpty {
+                Button {
+                    viewModel.searchText = ""
+                    searchFocus = .field
+                    showsSearchSuggestions = true
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                }
+                .buttonStyle(SettingsPlainButtonStyle())
+                .accessibilityLabel("검색어 지우기")
+            }
+        }
+        .umcTypography(.headlineRegular)
+        .foregroundStyle(UMCColor.Semantic.textNeutralWeak500)
+        .padding(.horizontal, UMCSpacing.value16)
+        .frame(minHeight: 36)
+        .background(UMCColor.Custom.backgroundSurfaceGreyWeak, in: .capsule)
+        .overlay {
+            Capsule().strokeBorder(searchFocus == .field ?
+                UMCColor.Semantic.textBrandDefault : .clear, lineWidth: 2)
+        }
+        .overlay(alignment: .topLeading) {
+            if showsSearchSuggestions && !viewModel.isSearching {
+                searchSuggestions
+                    .offset(y: 36 + UMCSpacing.value8)
+            }
+        }
+    }
+
+    private var suggestionItems: [(focus: SearchFocus, result: SettingsSearchResult)] {
+        viewModel.recentSearchItems.map { (.recent($0.id), $0) } +
+            SettingsSearchResult.recommendations.map { (.recommended($0.id), $0) }
+    }
+
+    private var searchSuggestions: some View {
+        ScrollViewReader { proxy in
+            ScrollView {
+                VStack(alignment: .leading, spacing: UMCSpacing.value8) {
+                    if !viewModel.recentSearchItems.isEmpty {
+                        suggestionSection("최근 항목", items: viewModel.recentSearchItems,
+                            recent: true)
+                        SettingsDivider()
+                    }
+                    suggestionSection("추천 설정", items: SettingsSearchResult.recommendations,
+                        recent: false)
+                }
+                .padding(UMCSpacing.value8)
+            }
+            .scrollBounceBehavior(.basedOnSize)
+            .frame(maxHeight: 480)
+            .fixedSize(horizontal: false, vertical: true)
+            .onChange(of: searchFocus) { _, focus in
+                if let focus { proxy.scrollTo(focus) }
+            }
+        }
+        .frame(width: 280)
+        .background {
+            RoundedRectangle(cornerRadius: UMCRadius.value12)
+                .fill(UMCColor.Custom.backgroundDefault)
+                .shadow(color: .black.opacity(0.16), radius: 16, y: 4)
+        }
+        .overlay {
+            RoundedRectangle(cornerRadius: UMCRadius.value12)
+                .strokeBorder(UMCColor.Semantic.borderNeutralWeak200)
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("설정 검색 제안")
+    }
+
+    private func suggestionSection(
+        _ title: String, items: [SettingsSearchResult], recent: Bool
+    ) -> some View {
+        VStack(alignment: .leading, spacing: UMCSpacing.value4) {
+            Text(title)
+                .umcTypography(.subheadlineRegular)
+                .foregroundStyle(UMCColor.Semantic.textNeutralWeak500)
+                .padding(.horizontal, UMCSpacing.value8)
+                .accessibilityAddTraits(.isHeader)
+            ForEach(items) { result in
+                let focus: SearchFocus = recent ? .recent(result.id) : .recommended(result.id)
+                Button { selectSearchResult(result) } label: {
+                    HStack(spacing: UMCSpacing.value8) {
+                        Image(systemName: result.page.symbol)
+                            .frame(width: 24)
+                            .accessibilityHidden(true)
+                        VStack(alignment: .leading, spacing: 0) {
+                            Text(result.title).umcTypography(.headlineRegular)
+                            Text(result.page.title)
+                                .umcTypography(.captionRegular)
+                                .foregroundStyle(UMCColor.Semantic.textNeutralWeak500)
+                        }
+                    }
+                    .foregroundStyle(UMCColor.Semantic.textNeutralStrong800)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(UMCSpacing.value8)
+                    .contentShape(.rect)
+                }
+                .buttonStyle(SettingsPlainButtonStyle(isFocused: searchFocus == focus))
+                .focusable()
+                .focused($searchFocus, equals: focus)
+                .id(focus)
+                .focusEffectDisabled()
+                .accessibilityElement(children: .combine)
+                .onKeyPress(.return) {
+                    selectSearchResult(result)
+                    return .handled
+                }
+            }
+        }
+    }
+
+    private func moveSearchFocus(_ press: KeyPress) -> KeyPress.Result {
+        guard viewModel.isSearching || showsSearchSuggestions else { return .ignored }
+        let rows = viewModel.isSearching ? viewModel.searchResults.map {
+            SearchFocus.result($0.id)
+        } : suggestionItems.map(\.focus)
+        let positions: [SearchFocus] = [.field] + rows
+        guard let focus = searchFocus, let index = positions.firstIndex(of: focus) else {
+            return .ignored
+        }
+        let backwards = press.key == .upArrow || press.modifiers.contains(.shift)
+        let next = index + (backwards ? -1 : 1)
+        guard positions.indices.contains(next) else {
+            if press.key == .tab {
+                showsSearchSuggestions = false
+                return .ignored
+            }
+            return .handled
+        }
+        searchFocus = positions[next]
+        return .handled
+    }
+
+    private func dismissSearchSuggestions() {
+        showsSearchSuggestions = false
+        searchFocus = nil
+    }
+
+    private func selectSearchResult(_ result: SettingsSearchResult) {
+        viewModel.selectSearchResult(result)
+        dismissSearchSuggestions()
     }
 
     private func searchResultButton(_ result: SettingsSearchResult) -> some View {
-        Button { viewModel.navigate(to: result.page) } label: {
+        Button { selectSearchResult(result) } label: {
             VStack(alignment: .leading, spacing: UMCSpacing.value4) {
                 Text(result.title)
                     .umcTypography(.headlineBold)
@@ -388,6 +571,12 @@ public struct SettingsView: View {
         }
         .buttonStyle(SettingsPlainButtonStyle())
         .accessibilityElement(children: .combine)
+        .focusable()
+        .focused($searchFocus, equals: .result(result.id))
+        .onKeyPress(.return) {
+            selectSearchResult(result)
+            return .handled
+        }
     }
 
     @ViewBuilder

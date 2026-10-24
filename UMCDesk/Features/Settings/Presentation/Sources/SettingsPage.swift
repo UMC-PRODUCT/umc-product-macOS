@@ -52,6 +52,10 @@ struct SettingsSearchResult: Identifiable {
     let title: String
     let summary: String
 
+    static let recommendations: [Self] = [
+        "theme", "bodyTextSize", "launchAtLogin", "notificationAccess",
+    ].compactMap { identifier in items.first { $0.id == identifier } }
+
     // shortcut: 화면 문구와 수동 동기화하며, 설정 항목이 동적으로 바뀌면 공통 정의로 옮긴다.
     static let items: [Self] = [
         .init(id: "launchPage", page: .general, title: "앱을 열 때",

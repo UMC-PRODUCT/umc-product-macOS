@@ -11,6 +11,16 @@ import Testing
 @testable import SettingsPresentation
 
 struct SettingsSearchTests {
+    @Test("Recommendations use existing searchable settings with stable order")
+    func recommendations() {
+        #expect(SettingsSearchResult.recommendations.map(\.id) == [
+            "theme", "bodyTextSize", "launchAtLogin", "notificationAccess",
+        ])
+        for result in SettingsSearchResult.recommendations {
+            #expect(SettingsPage.search(result.title).contains { $0.id == result.id })
+        }
+    }
+
     @Test("Search previews matching setting items and their options")
     func searchFindsItems() {
         #expect(SettingsPage.search("  위치  ").map(\.title) == ["위치 접근"])
