@@ -10,6 +10,7 @@ import SettingsDomain
 import SwiftUI
 
 struct SettingsPrivacyView: View {
+    @Environment(\.settingsAppearancePalette) private var palette
     @Bindable var viewModel: SettingsViewModel
 
     var body: some View {
@@ -48,7 +49,7 @@ struct SettingsPrivacyView: View {
                         .umcTypography(.headlineRegular)
                     Text("계정 정보와 환경 설정, 사용자 문서와 다운로드 폴더는 삭제하지 않아요.")
                         .umcTypography(.bodyRegular)
-                        .foregroundStyle(UMCColor.Semantic.textNeutralMedium600)
+                        .foregroundStyle(palette.textNeutralMedium600)
                 }
             }
         }

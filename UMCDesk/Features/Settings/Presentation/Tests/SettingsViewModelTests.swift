@@ -20,7 +20,7 @@ struct SettingsViewModelTests {
         model.searchText = "다크"
         #expect(model.isSearching)
         let result = try #require(model.searchResults.first)
-        #expect(result.title == "테마")
+        #expect(result.title == "앱 모드")
         model.selectSearchResult(result)
         #expect(model.page == .appearance)
         #expect(model.searchText == "다크")
@@ -240,10 +240,13 @@ struct SettingsViewModelTests {
         #expect(model.toast?.isError == true)
     }
 
-    @Test("모양을 복원하면 테마와 본문 크기만 기본값으로 바뀐다")
+    @Test("모양을 복원하면 영역별 테마와 글꼴을 포함한 모양 설정만 바뀐다")
     func appearanceResetPreservesOtherPreferences() {
         let model = makeModel(useCase: ControlledSettingsUseCase())
         model.preferences.theme = .dark
+        model.preferences.selectedColorThemeID = "paper"
+        model.preferences.fontFamily = "Arial"
+        model.preferences.font = .rounded
         model.preferences.bodyTextSize = .extraLarge
         model.preferences.launchPage = .myPage
         model.preferences.windowCloseBehavior = .quit
@@ -252,9 +255,16 @@ struct SettingsViewModelTests {
         model.preferences.noticeNotifications = false
         model.preferences.threadNotifications = false
         model.preferences.showsNotificationContent = true
+        let preset = SettingsColorTheme.presets[1]
+        model.preferences.duplicateColorTheme(name: "보존할 테마",
+            light: preset.light!, dark: preset.dark!)
         #expect(!model.isDefaultAppearance)
         model.resetAppearance()
         #expect(model.isDefaultAppearance)
+        #expect(model.preferences.selectedColorThemeID == "umc")
+        #expect(model.preferences.fontFamily == nil)
+        #expect(model.preferences.customColorThemes.count == 1)
+        #expect(model.preferences.font == .pretendard)
         #expect(model.preferences.launchPage == .myPage)
         #expect(model.preferences.windowCloseBehavior == .quit)
         #expect(!model.preferences.showsMenuBar)

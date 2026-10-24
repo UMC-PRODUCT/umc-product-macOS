@@ -9,6 +9,7 @@ import CoreDesignSystem
 import SwiftUI
 
 struct SettingsAboutView: View {
+    @Environment(\.settingsAppearancePalette) private var palette
     @Bindable var viewModel: SettingsViewModel
     @Environment(\.openURL) private var openURL
 
@@ -27,13 +28,13 @@ struct SettingsAboutView: View {
                             Text("버전 \(version) | 빌드 \(build)")
                                 .textSelection(.enabled)
                                 .umcTypography(.bodyRegular)
-                                .foregroundStyle(UMCColor.Semantic.textNeutralWeak500)
+                                .foregroundStyle(palette.textNeutralWeak500)
                         }
                     }
                     SettingsDivider()
                     Text("게시된 릴리스를 조회하며, 업데이트를 자동으로 설치하지 않아요.")
                         .umcTypography(.bodyRegular)
-                        .foregroundStyle(UMCColor.Semantic.textNeutralMedium600)
+                        .foregroundStyle(palette.textNeutralMedium600)
                     SettingsRow(title: "업데이트", description: releaseDescription) {
                         SettingsActionButton(title: viewModel.isCheckingRelease ? "확인 중" :
                             "업데이트 확인", kind: .brand) {
@@ -106,6 +107,7 @@ struct SettingsAboutView: View {
 }
 
 struct SettingsLicenseList: View {
+    @Environment(\.settingsAppearancePalette) private var palette
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: UMCSpacing.value16) {
@@ -135,6 +137,6 @@ struct SettingsLicenseList: View {
             .padding(.vertical, UMCSpacing.value8)
         }
         .buttonStyle(SettingsPlainButtonStyle())
-        .foregroundStyle(UMCColor.Semantic.textBrandDefault)
+        .foregroundStyle(palette.textBrandDefault)
     }
 }

@@ -9,6 +9,7 @@ import CoreDesignSystem
 import SwiftUI
 
 struct SettingsCard<Content: View>: View {
+    @Environment(\.settingsAppearancePalette) private var palette
     var isSubtle = false
     var minimumHeight: CGFloat?
     @ViewBuilder let content: Content
@@ -19,18 +20,19 @@ struct SettingsCard<Content: View>: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .frame(minHeight: minimumHeight, alignment: .topLeading)
             .background(
-                isSubtle ? UMCColor.Custom.backgroundSurfaceGreyWeaker :
-                    UMCColor.Custom.backgroundSurfaceWhite,
+                isSubtle ? palette.backgroundSurfaceGreyWeaker :
+                    palette.backgroundSurfaceWhite,
                 in: .rect(cornerRadius: UMCRadius.value16)
             )
             .overlay {
                 RoundedRectangle(cornerRadius: UMCRadius.value16)
-                    .strokeBorder(UMCColor.Semantic.borderNeutralWeak200, lineWidth: 1)
+                    .strokeBorder(palette.borderNeutralWeak200, lineWidth: 1)
             }
     }
 }
 
 struct SettingsRow<Accessory: View>: View {
+    @Environment(\.settingsAppearancePalette) private var palette
     let title: String
     let description: String
     @ViewBuilder let accessory: Accessory
@@ -40,11 +42,11 @@ struct SettingsRow<Accessory: View>: View {
             VStack(alignment: .leading, spacing: UMCSpacing.value4) {
                 Text(title)
                     .umcTypography(.headlineRegular)
-                    .foregroundStyle(UMCColor.Semantic.textNeutralStrong800)
+                    .foregroundStyle(palette.textNeutralStrong800)
                 if !description.isEmpty {
                     Text(description)
                         .umcTypography(.bodyRegular)
-                        .foregroundStyle(UMCColor.Semantic.textNeutralMedium600)
+                        .foregroundStyle(palette.textNeutralMedium600)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
@@ -57,6 +59,7 @@ struct SettingsRow<Accessory: View>: View {
 }
 
 struct SettingsSection<Content: View>: View {
+    @Environment(\.settingsAppearancePalette) private var palette
     let title: String
     @ViewBuilder let content: Content
 
@@ -64,7 +67,7 @@ struct SettingsSection<Content: View>: View {
         VStack(alignment: .leading, spacing: UMCSpacing.value12) {
             Text(title)
                 .umcTypography(.headlineBold)
-                .foregroundStyle(UMCColor.Semantic.textNeutralStrong800)
+                .foregroundStyle(palette.textNeutralStrong800)
                 .accessibilityAddTraits(.isHeader)
             content
         }
@@ -72,9 +75,10 @@ struct SettingsSection<Content: View>: View {
 }
 
 struct SettingsDivider: View {
+    @Environment(\.settingsAppearancePalette) private var palette
     var body: some View {
         Rectangle()
-            .fill(UMCColor.Semantic.borderNeutralWeak200)
+            .fill(palette.borderNeutralWeak200)
             .frame(height: 1)
             .accessibilityHidden(true)
     }
@@ -107,6 +111,7 @@ struct SettingsActionButton: View {
 }
 
 struct SettingsButtonStyle: ButtonStyle {
+    @Environment(\.settingsAppearancePalette) private var palette
     let kind: SettingsButtonKind
     @Environment(\.isEnabled) private var isEnabled
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -121,7 +126,7 @@ struct SettingsButtonStyle: ButtonStyle {
             .overlay {
                 RoundedRectangle(cornerRadius: UMCRadius.value12)
                     .strokeBorder(kind == .secondary ?
-                        UMCColor.Semantic.borderNeutralWeak200 : .clear, lineWidth: 1)
+                        palette.borderNeutralWeak200 : .clear, lineWidth: 1)
             }
             .opacity(isEnabled ? 1 : 0.45)
             .onHover { hovering in
@@ -134,8 +139,8 @@ struct SettingsButtonStyle: ButtonStyle {
     private var activeBackground: Color {
         switch kind {
         case .primary: UMCColor.Semantic.fillPrimaryInverseStrongHoverPressed
-        case .brand: UMCColor.Semantic.fillPrimaryWeakHoverPressed
-        case .secondary, .quiet: UMCColor.Semantic.fillNeutralWeakerHoverPressed
+        case .brand: palette.fillPrimaryWeakHoverPressed
+        case .secondary, .quiet: palette.fillNeutralWeakerHoverPressed
         case .destructive: UMCColor.Semantic.fillErrorWeakHoverPressed
         }
     }
@@ -144,24 +149,25 @@ struct SettingsButtonStyle: ButtonStyle {
         switch kind {
         case .primary: UMCColor.Custom.backgroundTextWhite
         case .destructive: UMCColor.Semantic.textError
-        case .brand: UMCColor.Semantic.textBrandDefault
-        case .secondary, .quiet: UMCColor.Semantic.textNeutralMedium600
+        case .brand: palette.textBrandDefault
+        case .secondary, .quiet: palette.textNeutralMedium600
         }
     }
 
     private var background: Color {
         switch kind {
         case .primary: UMCColor.Semantic.fillPrimaryInverseStrong500
-        case .brand: UMCColor.Semantic.fillPrimaryWeak75
-        case .secondary: UMCColor.Custom.backgroundSurfaceWhite
-        case .quiet: UMCColor.Custom.backgroundSurfaceGreyWeak
+        case .brand: palette.fillPrimaryWeak75
+        case .secondary: palette.backgroundSurfaceWhite
+        case .quiet: palette.backgroundSurfaceGreyWeak
         case .destructive: UMCColor.Semantic.fillErrorWeak50
         }
     }
 }
 
 struct SettingsPlainButtonStyle: ButtonStyle {
-    var highlight = UMCColor.Semantic.fillNeutralWeakerHoverPressed
+    @Environment(\.settingsAppearancePalette) private var palette
+    var highlight: Color?
     var cornerRadius: CGFloat = UMCRadius.value8
     var isFocused = false
     @Environment(\.isEnabled) private var isEnabled
@@ -171,7 +177,7 @@ struct SettingsPlainButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .background(
-                isEnabled && (isHovered || isFocused || configuration.isPressed) ? highlight : .clear,
+                isEnabled && (isHovered || isFocused || configuration.isPressed) ? (highlight ?? palette.fillNeutralWeakerHoverPressed) : .clear,
                 in: .rect(cornerRadius: cornerRadius))
             .contentShape(.rect(cornerRadius: cornerRadius))
             .onHover { hovering in
@@ -183,17 +189,19 @@ struct SettingsPlainButtonStyle: ButtonStyle {
 }
 
 struct SettingsStatusText: View {
+    @Environment(\.settingsAppearancePalette) private var palette
     let text: String
 
     var body: some View {
         Text(text)
             .umcTypography(.headlineRegular)
-            .foregroundStyle(UMCColor.Semantic.textNeutralMedium600)
+            .foregroundStyle(palette.textNeutralMedium600)
             .fixedSize()
     }
 }
 
 struct SettingsInlineMessage: View {
+    @Environment(\.settingsAppearancePalette) private var palette
     let message: String
     var isError = false
     var typography: UMCTypography = .title4Regular
@@ -202,13 +210,14 @@ struct SettingsInlineMessage: View {
         Label(message, systemImage: isError ? "exclamationmark.circle" : "info.circle")
             .umcTypography(typography)
             .foregroundStyle(isError ? UMCColor.Semantic.textError :
-                UMCColor.Semantic.textNeutralMedium600)
+                palette.textNeutralMedium600)
             .fixedSize(horizontal: false, vertical: true)
             .accessibilityElement(children: .combine)
     }
 }
 
 struct SettingsAvatar: View {
+    @Environment(\.settingsAppearancePalette) private var palette
     var url: URL?
     var size: CGFloat = 64
     var usesDesignImage = false
@@ -228,9 +237,9 @@ struct SettingsAvatar: View {
             #endif
         }
         .frame(width: size, height: size)
-        .background(UMCColor.Semantic.fillNeutralMedium100, in: .circle)
+        .background(palette.fillNeutralMedium100, in: .circle)
         .clipShape(.circle)
-        .overlay { Circle().strokeBorder(UMCColor.Semantic.borderNeutralWeak200) }
+        .overlay { Circle().strokeBorder(palette.borderNeutralWeak200) }
         .accessibilityHidden(true)
     }
 
@@ -243,7 +252,7 @@ struct SettingsAvatar: View {
                     .resizable()
                     .scaledToFit()
                     .padding(size * 0.22)
-                    .foregroundStyle(UMCColor.Semantic.iconNeutralMedium500)
+                    .foregroundStyle(palette.iconNeutralMedium500)
             }
         }
     }

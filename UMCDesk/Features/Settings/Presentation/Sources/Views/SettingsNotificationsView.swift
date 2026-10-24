@@ -10,6 +10,7 @@ import SettingsDomain
 import SwiftUI
 
 struct SettingsNotificationsView: View {
+    @Environment(\.settingsAppearancePalette) private var palette
     let viewModel: SettingsViewModel
 
     var body: some View {
@@ -55,7 +56,7 @@ struct SettingsNotificationsView: View {
                 앱이 종료된 동안 받는 원격 푸시는 제공하지 않아요.
                 """)
                 .umcTypography(.headlineRegular)
-                .foregroundStyle(UMCColor.Semantic.textNeutralWeak500)
+                .foregroundStyle(palette.textNeutralWeak500)
                 .fixedSize(horizontal: false, vertical: true)
         }
     }
