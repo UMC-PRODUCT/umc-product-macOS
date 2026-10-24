@@ -7,6 +7,7 @@
 
 #if DEBUG || UMC_PRERELEASE
 import SwiftUI
+import UMCFoundation
 
 struct AuthPreviewModelKey: FocusedValueKey {
     typealias Value = Binding<AuthViewModel>
@@ -30,8 +31,8 @@ public struct AuthPreviewCommands: Commands {
                 AuthPreviewFlowMenu(viewModel: binding.wrappedValue)
                 AuthPreviewMenu(viewModel: binding)
             } else {
-                Menu("흐름 미리보기") {}.disabled(true)
-                Menu("디자인 미리보기") {}.disabled(true)
+                Menu(AppLocalization.string("흐름 미리보기")) {}.disabled(true)
+                Menu(AppLocalization.string("디자인 미리보기")) {}.disabled(true)
             }
         }
     }

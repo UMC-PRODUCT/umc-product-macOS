@@ -9,14 +9,15 @@
 import CoreDesignSystem
 import CoreUIComponents
 import SwiftUI
+import UMCFoundation
 
 struct AuthDesignPreview: Identifiable {
     let id: String
-    let title: String
+    let title: String.LocalizationValue
     let section: Int
     let screen: AuthScreen
-    let quote: String
-    let author: String
+    let quote: String.LocalizationValue
+    let author: String.LocalizationValue
 
     static let all: [AuthDesignPreview] = [
         .init(
@@ -336,21 +337,23 @@ struct AuthDesignPreview: Identifiable {
 
 struct AuthPreviewMenu: View {
     @Binding var viewModel: AuthViewModel
-    private let sections = [
+    private let sections: [String.LocalizationValue] = [
         "로그인", "회원가입", "챌린저 인증", "비밀번호 변경", "시스템", "계정 관리",
     ]
 
     var body: some View {
-        Menu("디자인 미리보기", systemImage: "rectangle.on.rectangle") {
+        Menu(AppLocalization.string("디자인 미리보기"), systemImage: "rectangle.on.rectangle") {
             ForEach(1...6, id: \.self) { section in
-                Menu(sections[section - 1]) {
+                Menu(AppLocalization.string(sections[section - 1])) {
                     ForEach(AuthDesignPreview.all.filter { $0.section == section }) { preview in
-                        Button(preview.title) { viewModel = preview.makeViewModel() }
+                            Button(AppLocalization.string(preview.title)) {
+                                viewModel = preview.makeViewModel()
+                            }
                     }
                 }
             }
         }
-        .help("Figma 로그인·회원가입 섹션의 화면 상태 보기")
+        .help(AppLocalization.string("Figma 로그인·회원가입 섹션의 화면 상태 보기"))
     }
 }
 

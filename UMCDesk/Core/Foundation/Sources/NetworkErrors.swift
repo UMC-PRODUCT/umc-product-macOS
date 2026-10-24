@@ -161,21 +161,22 @@ extension NetworkError: LocalizedError {
     public var errorDescription: String? {
         switch self {
         case .unauthorized:
-            return "인증이 필요합니다."
+            return AppLocalization.string("인증이 필요합니다.")
         case .tokenRefreshFailed(let reason):
-            return "토큰 갱신 실패: \(reason ?? "알 수 없음")"
+            return AppLocalization.string(
+                "토큰 갱신 실패: \(reason ?? AppLocalization.string("알 수 없음"))")
         case .noRefreshToken:
-            return "리프레시 토큰이 없습니다."
+            return AppLocalization.string("리프레시 토큰이 없습니다.")
         case .requestFailed(let statusCode, _):
-            return "요청 실패 status: \(statusCode)"
+            return AppLocalization.string("요청 실패 status: \(statusCode)")
         case .invalidResponse:
-            return "잘못된 서버 응답"
+            return AppLocalization.string("잘못된 서버 응답")
         case .maxRetryExceeded:
-            return "최대 재시도 횟수 초과"
+            return AppLocalization.string("최대 재시도 횟수 초과")
         case .noNetwork:
-            return "네트워크 연결이 없습니다."
+            return AppLocalization.string("네트워크 연결이 없습니다.")
         case .timeout:
-            return "요청 시간이 초과되었습니다."
+            return AppLocalization.string("요청 시간이 초과되었습니다.")
         }
     }
 
@@ -185,29 +186,29 @@ extension NetworkError: LocalizedError {
     public var userMessage: String {
         switch self {
         case .unauthorized:
-            return "로그인이 필요합니다."
+            return AppLocalization.string("로그인이 필요합니다.")
         case .tokenRefreshFailed, .noRefreshToken:
-            return "세션이 만료되었습니다. 다시 로그인해주세요."
+            return AppLocalization.string("세션이 만료되었습니다. 다시 로그인해주세요.")
         case .maxRetryExceeded:
-            return "인증 정보를 확인하지 못했어요. 잠시 후 다시 시도해주세요."
+            return AppLocalization.string("인증 정보를 확인하지 못했어요. 잠시 후 다시 시도해주세요.")
         case .requestFailed(let statusCode, let data):
             if let serverMessage = Self.parseServerMessage(from: data) {
                 return serverMessage
             }
             switch statusCode {
             case 400...499:
-                return "요청을 처리할 수 없습니다. 다시 시도해주세요."
+                return AppLocalization.string("요청을 처리할 수 없습니다. 다시 시도해주세요.")
             case 500...599:
-                return "서버에 일시적인 오류가 발생했습니다."
+                return AppLocalization.string("서버에 일시적인 오류가 발생했습니다.")
             default:
-                return "네트워크 연결이 원활하지 않습니다."
+                return AppLocalization.string("네트워크 연결이 원활하지 않습니다.")
             }
         case .invalidResponse:
-            return "네트워크 연결이 원활하지 않습니다."
+            return AppLocalization.string("네트워크 연결이 원활하지 않습니다.")
         case .noNetwork:
-            return "인터넷 연결을 확인해주세요."
+            return AppLocalization.string("인터넷 연결을 확인해주세요.")
         case .timeout:
-            return "서버 응답이 늦어지고 있어요. 잠시 후 다시 시도해주세요."
+            return AppLocalization.string("서버 응답이 늦어지고 있어요. 잠시 후 다시 시도해주세요.")
         }
     }
 
@@ -310,11 +311,13 @@ public enum RepositoryError: Error, LocalizedError, Sendable, Equatable {
     public var errorDescription: String? {
         switch self {
         case .serverError(_, let message):
-            return message ?? "서버 오류가 발생했습니다"
+            return message ?? AppLocalization.string("서버 오류가 발생했습니다")
         case .decodingError(let detail):
-            return "데이터 파싱 실패: \(detail ?? "알 수 없는 오류")"
+            return AppLocalization.string(
+                "데이터 파싱 실패: \(detail ?? AppLocalization.string("알 수 없는 오류"))")
         case .invalidResponse(let detail):
-            return "서버 응답이 유효하지 않습니다: \(detail ?? "알 수 없는 오류")"
+            return AppLocalization.string(
+                "서버 응답이 유효하지 않습니다: \(detail ?? AppLocalization.string("알 수 없는 오류"))")
         }
     }
 
@@ -337,9 +340,9 @@ public enum RepositoryError: Error, LocalizedError, Sendable, Equatable {
     public var userMessage: String {
         switch self {
         case .serverError:
-            return errorDescription ?? "알 수 없는 오류가 발생했습니다"
+            return errorDescription ?? AppLocalization.string("알 수 없는 오류가 발생했습니다")
         case .decodingError, .invalidResponse:
-            return "앱에 일시적인 오류가 있어요. 불편을 드려 죄송해요."
+            return AppLocalization.string("앱에 일시적인 오류가 있어요. 불편을 드려 죄송해요.")
         }
     }
 

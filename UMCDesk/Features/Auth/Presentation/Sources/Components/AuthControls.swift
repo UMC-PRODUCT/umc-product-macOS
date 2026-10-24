@@ -5,6 +5,7 @@
 //  Created by euijjang97 on 10/10/26.
 //
 
+import UMCFoundation
 import CoreDesignSystem
 import SwiftUI
 
@@ -148,7 +149,9 @@ struct AuthTextField: View {
                     }
                     .buttonStyle(.plain)
                     .foregroundStyle(UMCColor.Semantic.iconNeutralMedium500)
-                    .accessibilityLabel("\(title) \(showsValue ? "가리기" : "보기")")
+                    .accessibilityLabel(showsValue ?
+                        AppLocalization.string("\(title) 가리기") :
+                        AppLocalization.string("\(title) 보기"))
                     .disabled(isDisabled)
                 } else if showsClear && !text.isEmpty {
                     Button {
@@ -160,7 +163,7 @@ struct AuthTextField: View {
                     }
                     .buttonStyle(.plain)
                     .foregroundStyle(UMCColor.Semantic.iconNeutralMedium500)
-                    .accessibilityLabel("\(title) 지우기")
+                    .accessibilityLabel(AppLocalization.string("\(title) 지우기"))
                 }
             }
             .padding(.leading, UMCSpacing.value16)
@@ -308,7 +311,9 @@ struct AuthSteps: View {
                     index <= completedCount ? UMCColor.Semantic.textBrandDefault :
                         UMCColor.Semantic.textBrandDisabled
                 )
-                .accessibilityLabel("\(title), \(index < completedCount ? "완료" : "대기 중")")
+                .accessibilityLabel(index < completedCount ?
+                    AppLocalization.string("\(title), 완료") :
+                    AppLocalization.string("\(title), 대기 중"))
             }
         }
         .padding(UMCSpacing.value12)

@@ -5,6 +5,7 @@
 //  Created by euijjang97 on 10/10/26.
 //
 
+import UMCFoundation
 import CoreDesignSystem
 import CoreUIComponents
 import SwiftUI
@@ -26,11 +27,13 @@ struct AuthRegistration: View {
                 VStack(spacing: UMCSpacing.value20) {
                     HStack(alignment: .top, spacing: UMCSpacing.value12) {
                         AuthTextField(
-                            "이름", placeholder: "이름을 입력해 주세요.",
+                            AppLocalization.string("이름"),
+                            placeholder: AppLocalization.string("이름을 입력해 주세요."),
                             text: $form.name, field: .name, focus: $focusedField
                         )
                         AuthTextField(
-                            "닉네임", placeholder: "닉네임을 입력해 주세요.",
+                            AppLocalization.string("닉네임"),
+                            placeholder: AppLocalization.string("닉네임을 입력해 주세요."),
                             text: $form.nickname, field: .nickname, focus: $focusedField
                         )
                     }
@@ -44,9 +47,11 @@ struct AuthRegistration: View {
                 }
                 .zIndex(form.showsSchoolPicker ? 1 : 0)
                 VStack(spacing: UMCSpacing.value16) {
-                    AuthButton(title: "가입 완료") { viewModel.completeRegistration() }
+                    AuthButton(title: AppLocalization.string("가입 완료")) {
+                        viewModel.completeRegistration()
+                    }
                         .disabled(!form.canRegister)
-                    AuthButton(title: "로그인으로 돌아가기", kind: .tertiary) {
+                    AuthButton(title: AppLocalization.string("로그인으로 돌아가기"), kind: .tertiary) {
                         viewModel.navigate(to: .emailLogin)
                     }
                 }
@@ -68,10 +73,10 @@ struct AuthPasswordReset: View {
         VStack(spacing: UMCSpacing.value40) {
             AuthHeading(
                 title: form.emailVerification == .verified ?
-                    "새 비밀번호를 설정해 주세요" : "비밀번호 찾기",
+                    AppLocalization.string("새 비밀번호를 설정해 주세요") : AppLocalization.string("비밀번호 찾기"),
                 subtitle: form.emailVerification == .verified ?
-                    "이메일 인증을 마쳤어요. 새 비밀번호를 입력해 주세요." :
-                    "이메일을 인증하고 새 비밀번호를 설정해 주세요.",
+                    AppLocalization.string("이메일 인증을 마쳤어요. 새 비밀번호를 입력해 주세요.") :
+                    AppLocalization.string("이메일을 인증하고 새 비밀번호를 설정해 주세요."),
                 isLeading: true
             )
             VStack(spacing: UMCSpacing.value32) {
@@ -80,7 +85,7 @@ struct AuthPasswordReset: View {
                     AuthPasswordFields(form: form, focus: $focusedField, isReset: true)
                 }
                 VStack(spacing: UMCSpacing.value16) {
-                    AuthButton(title: "비밀번호 변경") {
+                    AuthButton(title: AppLocalization.string("비밀번호 변경")) {
                         if form.canResetPassword {
                             viewModel.navigate(to: .passwordResetComplete)
                         } else {
@@ -88,7 +93,7 @@ struct AuthPasswordReset: View {
                         }
                     }
                     .disabled(form.emailVerification != .verified || form.password.isEmpty)
-                    AuthButton(title: "로그인으로 돌아가기", kind: .tertiary) {
+                    AuthButton(title: AppLocalization.string("로그인으로 돌아가기"), kind: .tertiary) {
                         viewModel.navigate(to: .emailLogin)
                     }
                 }
@@ -107,7 +112,8 @@ private struct AuthEmailVerificationFields: View {
         VStack(alignment: .leading, spacing: UMCSpacing.value20) {
             HStack(alignment: .bottom, spacing: UMCSpacing.value12) {
                 AuthTextField(
-                    "이메일", placeholder: "이메일을 입력해 주세요.",
+                    AppLocalization.string("이메일"),
+                    placeholder: AppLocalization.string("이메일을 입력해 주세요."),
                     text: $form.email, field: .email, focus: focus,
                     isDisabled: form.emailVerification == .verified,
                     isInvalid: form.showsEmailError,
@@ -124,7 +130,7 @@ private struct AuthEmailVerificationFields: View {
                 .disabled(!form.canSubmitEmailVerification)
             }
             if form.showsEmailError {
-                Text("올바른 이메일 주소를 입력해 주세요.")
+                Text(AppLocalization.string("올바른 이메일 주소를 입력해 주세요."))
                     .umcTypography(.headlineRegular)
                     .foregroundStyle(UMCColor.Semantic.textError)
             }
@@ -132,11 +138,12 @@ private struct AuthEmailVerificationFields: View {
                 VStack(alignment: .leading, spacing: UMCSpacing.value8) {
                     HStack(alignment: .bottom, spacing: UMCSpacing.value12) {
                         AuthTextField(
-                            "이메일 인증번호", placeholder: "6자리 숫자를 입력해 주세요.",
+                            AppLocalization.string("이메일 인증번호"),
+                            placeholder: AppLocalization.string("6자리 숫자를 입력해 주세요."),
                             text: $form.verificationCode, field: .verificationCode, focus: focus,
                             isInvalid: form.emailVerification == .invalid
                         )
-                        AuthButton(title: "인증번호 확인") {
+                        AuthButton(title: AppLocalization.string("인증번호 확인")) {
                             #if DEBUG || UMC_PRERELEASE
                             if form.verificationCode != "123456" {
                                 form.emailVerification = .invalid
@@ -153,7 +160,7 @@ private struct AuthEmailVerificationFields: View {
                         )
                     }
                     if form.emailVerification == .invalid {
-                        Text("최신 메일의 번호를 입력하세요. 재전송 시 이전 번호는 만료돼요.")
+                        Text(AppLocalization.string("최신 메일의 번호를 입력하세요. 재전송 시 이전 번호는 만료돼요."))
                             .umcTypography(.headlineRegular)
                             .foregroundStyle(UMCColor.Semantic.textError)
                     }
@@ -167,9 +174,9 @@ private struct AuthEmailVerificationFields: View {
 
     private var buttonTitle: String {
         switch form.emailVerification {
-        case .idle: "인증번호 받기"
-        case .sent, .invalid: "재전송"
-        case .verified: "인증 완료"
+        case .idle: AppLocalization.string("인증번호 받기")
+        case .sent, .invalid: AppLocalization.string("재전송")
+        case .verified: AppLocalization.string("인증 완료")
         }
     }
 }
@@ -184,22 +191,23 @@ private struct AuthPasswordFields: View {
         VStack(alignment: .leading, spacing: UMCSpacing.value8) {
             HStack(alignment: .top, spacing: UMCSpacing.value12) {
                 AuthTextField(
-                    isReset ? "새 비밀번호" : "비밀번호",
-                    placeholder: "숫자, 특수문자를 포함한 8자리 이상",
+                    isReset ? AppLocalization.string("새 비밀번호") : AppLocalization.string("비밀번호"),
+                    placeholder: AppLocalization.string("숫자, 특수문자를 포함한 8자리 이상"),
                     text: $form.password, field: .password, focus: focus,
                     isSecure: true, showsValue: $form.showsPassword,
                     isDisabled: form.emailVerification != .verified
                 )
                 AuthTextField(
-                    isReset ? "새 비밀번호 확인" : "비밀번호 확인",
-                    placeholder: "비밀번호를 다시 입력해 주세요.",
+                    isReset
+                        ? AppLocalization.string("새 비밀번호 확인") : AppLocalization.string("비밀번호 확인"),
+                    placeholder: AppLocalization.string("비밀번호를 다시 입력해 주세요."),
                     text: $form.passwordConfirmation, field: .passwordConfirmation, focus: focus,
                     isSecure: true, showsValue: $form.showsPasswordConfirmation,
                     isDisabled: form.emailVerification != .verified
                 )
             }
             if form.showsPasswordError {
-                Text("입력 조건을 충족하지 않거나 비밀번호가 일치하지 않아요.")
+                Text(AppLocalization.string("입력 조건을 충족하지 않거나 비밀번호가 일치하지 않아요."))
                     .umcTypography(.headlineRegular)
                     .foregroundStyle(UMCColor.Semantic.textError)
                     .transition(.opacity)
@@ -216,11 +224,13 @@ private struct AuthSchoolPicker: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: UMCSpacing.value4) {
-            Text("학교")
+            Text(AppLocalization.string("학교"))
                 .umcTypography(.title3Regular)
             Button { form.showsSchoolPicker.toggle() } label: {
                 HStack {
-                    Text(form.school.isEmpty ? "학교를 선택해 주세요." : form.school)
+                    Text(
+                        form.school.isEmpty ? AppLocalization.string("학교를 선택해 주세요.") : form.school
+                    )
                         .umcTypography(.title3Regular)
                         .foregroundStyle(
                             form.school.isEmpty ? UMCColor.Semantic.textPlaceholder :
@@ -244,7 +254,7 @@ private struct AuthSchoolPicker: View {
                 RoundedRectangle(cornerRadius: UMCRadius.value12)
                     .strokeBorder(UMCColor.Semantic.borderNeutralMedium300)
             }
-            .accessibilityLabel("학교 선택")
+            .accessibilityLabel(AppLocalization.string("학교 선택"))
             .accessibilityValue(form.school)
             .overlay(alignment: .top) {
                 if form.showsSchoolPicker {
@@ -307,7 +317,7 @@ private struct AuthTermsAgreement: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: UMCSpacing.value8) {
-            Toggle("전체 약관 동의", isOn: Binding(
+            Toggle(AppLocalization.string("전체 약관 동의"), isOn: Binding(
                 get: { form.agreesToService && form.agreesToPrivacy },
                 set: { form.agreesToService = $0; form.agreesToPrivacy = $0 }
             ))
@@ -317,11 +327,11 @@ private struct AuthTermsAgreement: View {
                 .frame(height: 1)
                 .accessibilityHidden(true)
             AuthTermRow(
-                title: "[필수] 서비스 이용약관", isOn: $form.agreesToService
-            ) { selectedTerm = "서비스 이용약관" }
+                title: AppLocalization.string("[필수] 서비스 이용약관"), isOn: $form.agreesToService
+            ) { selectedTerm = AppLocalization.string("서비스 이용약관") }
             AuthTermRow(
-                title: "[필수] 개인정보 처리방침", isOn: $form.agreesToPrivacy
-            ) { selectedTerm = "개인정보 처리방침" }
+                title: AppLocalization.string("[필수] 개인정보 처리방침"), isOn: $form.agreesToPrivacy
+            ) { selectedTerm = AppLocalization.string("개인정보 처리방침") }
         }
         .toggleStyle(UMCCheckboxStyle())
         .umcTypography(.title3Regular)
@@ -329,9 +339,9 @@ private struct AuthTermsAgreement: View {
         .alert(selectedTerm ?? "", isPresented: Binding(
             get: { selectedTerm != nil }, set: { if !$0 { selectedTerm = nil } }
         )) {
-            Button("확인", role: .cancel) { selectedTerm = nil }
+            Button(AppLocalization.string("확인"), role: .cancel) { selectedTerm = nil }
         } message: {
-            Text("약관 내용은 추후 연결될 예정이에요.")
+            Text(AppLocalization.string("약관 내용은 추후 연결될 예정이에요."))
         }
     }
 }
@@ -351,7 +361,7 @@ private struct AuthTermRow: View {
                     .frame(width: 24, height: 32)
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("\(title) 내용 보기")
+            .accessibilityLabel(AppLocalization.string("\(title) 내용 보기"))
             Spacer(minLength: 0)
         }
         .frame(minHeight: 32)

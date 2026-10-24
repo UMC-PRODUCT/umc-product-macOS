@@ -5,6 +5,7 @@
 //  Created by euijjang97 on 10/10/26.
 //
 
+import UMCFoundation
 import CoreDesignSystem
 import SwiftUI
 
@@ -42,30 +43,32 @@ struct AuthUpdateProgress: View {
                 switch screen {
                 case .updateDownloading:
                     AuthUpdateCard(
-                        title: "다운로드 중", progress: viewModel.downloadProgress
+                        title: AppLocalization.string("다운로드 중"),
+                        progress: viewModel.downloadProgress
                     )
-                    AuthButton(title: "다운로드 취소", kind: .tertiary) {
+                    AuthButton(title: AppLocalization.string("다운로드 취소"), kind: .tertiary) {
                         viewModel.navigate(to: .updateAvailable)
                     }
                 case .updateVerifying:
                     AuthUpdateCard(
-                        title: "파일 확인 중",
-                        message: "확인이 끝나면 설치 준비 화면으로 이동해요."
+                        title: AppLocalization.string("파일 확인 중"),
+                        message: AppLocalization.string("확인이 끝나면 설치 준비 화면으로 이동해요.")
                     )
                 case .updateReady:
                     AuthBanner(
-                        title: "진행 중인 작업을 먼저 저장해 주세요.",
-                        message: "설치 후 앱이 다시 시작돼요."
+                        title: AppLocalization.string("진행 중인 작업을 먼저 저장해 주세요."),
+                        message: AppLocalization.string("설치 후 앱이 다시 시작돼요.")
                     )
-                    AuthButton(title: "설치하고 다시 시작") {
+                    AuthButton(title: AppLocalization.string("설치하고 다시 시작")) {
                         viewModel.navigate(to: .updateInstalling)
                     }
                 case .updateInstalling:
                     AuthUpdateCard(
-                        title: "설치 중", message: "설치 중에는 업데이트를 취소할 수 없어요."
+                        title: AppLocalization.string("설치 중"),
+                        message: AppLocalization.string("설치 중에는 업데이트를 취소할 수 없어요.")
                     )
                 case .updateComplete:
-                    AuthButton(title: "UMC 다시 시작") {
+                    AuthButton(title: AppLocalization.string("UMC 다시 시작")) {
                         viewModel.navigate(to: .loginSelection)
                     }
                 default:
@@ -112,7 +115,7 @@ private struct AuthUpdateCard: View {
             if let progress {
                 ProgressView(value: progress)
                     .progressViewStyle(AuthDownloadProgressStyle())
-                    .accessibilityLabel("업데이트 다운로드 진행률")
+                    .accessibilityLabel(AppLocalization.string("업데이트 다운로드 진행률"))
             } else {
                 Text(message)
                     .umcTypography(.title4Regular)

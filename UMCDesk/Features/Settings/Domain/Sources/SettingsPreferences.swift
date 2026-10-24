@@ -7,6 +7,7 @@
 
 import Foundation
 import Observation
+import UMCFoundation
 
 public enum SettingsTheme: String, CaseIterable, Identifiable, Sendable {
     case system, light, dark
@@ -44,6 +45,21 @@ public enum SettingsWindowCloseBehavior: String, CaseIterable, Identifiable, Sen
 @Observable
 public final class SettingsPreferences {
     @ObservationIgnored private let defaults: UserDefaults
+    @ObservationIgnored private let languagePreferences: SettingsPreferences?
+    private var storedLanguage: AppLanguage
+
+    public var language: AppLanguage {
+        get { languagePreferences?.language ?? storedLanguage }
+        set {
+            if let languagePreferences {
+                languagePreferences.language = newValue
+            } else {
+                storedLanguage = newValue
+                save(newValue.rawValue, key: "language")
+                AppLocalization.shared.language = newValue
+            }
+        }
+    }
     public var theme: SettingsTheme { didSet { save(theme.rawValue, key: "theme") } }
     public var selectedColorThemeID: String {
         didSet { save(selectedColorThemeID, key: "colorThemeID") }
@@ -74,8 +90,14 @@ public final class SettingsPreferences {
         didSet { save(showsNotificationContent, key: "showsNotificationContent") }
     }
 
-    public init(defaults: UserDefaults = .standard) {
+    public init(
+        defaults: UserDefaults = .standard,
+        languagePreferences: SettingsPreferences? = nil
+    ) {
         self.defaults = defaults
+        self.languagePreferences = languagePreferences
+        storedLanguage = defaults.string(forKey: "settings.language")
+            .flatMap(AppLanguage.init) ?? .korean
         theme = defaults.string(forKey: "settings.theme").flatMap(SettingsTheme.init) ?? .system
         selectedColorThemeID = defaults.string(forKey: "settings.colorThemeID") ?? "umc"
         let storedThemes = defaults.data(forKey: "settings.colorThemes")
@@ -149,7 +171,7 @@ public final class SettingsPreferences {
             customColorThemes[index].dark = dark
             persistColorThemes()
         } else {
-            duplicateColorTheme(name: "\(selectedColorTheme.name) 사용자 지정",
+            duplicateColorTheme(name: AppLocalization.string("\(selectedColorTheme.name) 사용자 지정"),
                 light: light, dark: dark)
         }
     }

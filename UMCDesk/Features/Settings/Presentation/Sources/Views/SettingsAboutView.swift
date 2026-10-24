@@ -5,6 +5,7 @@
 //  Created by euijjang97 on 10/20/26.
 //
 
+import UMCFoundation
 import CoreDesignSystem
 import SwiftUI
 
@@ -25,29 +26,36 @@ struct SettingsAboutView: View {
                             .accessibilityHidden(true)
                         VStack(alignment: .leading, spacing: UMCSpacing.value4) {
                             Text(appName).umcTypography(.title3Bold)
-                            Text("버전 \(version) | 빌드 \(build)")
+                            Text(AppLocalization.string("버전 \(version) | 빌드 \(build)"))
                                 .textSelection(.enabled)
                                 .umcTypography(.bodyRegular)
                                 .foregroundStyle(palette.textNeutralWeak500)
                         }
                     }
                     SettingsDivider()
-                    Text("게시된 릴리스를 조회하며, 업데이트를 자동으로 설치하지 않아요.")
+                    Text(AppLocalization.string("게시된 릴리스를 조회하며, 업데이트를 자동으로 설치하지 않아요."))
                         .umcTypography(.bodyRegular)
                         .foregroundStyle(palette.textNeutralMedium600)
-                    SettingsRow(title: "업데이트", description: releaseDescription) {
-                        SettingsActionButton(title: viewModel.isCheckingRelease ? "확인 중" :
-                            "업데이트 확인", kind: .brand) {
+                    SettingsRow(
+                        title: AppLocalization.string("업데이트"), description: releaseDescription
+                    ) {
+                        SettingsActionButton(
+                            title: viewModel.isCheckingRelease
+                                ? AppLocalization.string("확인 중")
+                                :
+                            AppLocalization.string("업데이트 확인"), kind: .brand) {
                             Task { await viewModel.checkRelease() }
                         }
                         .disabled(viewModel.isCheckingRelease)
                     }
                     if let release = viewModel.release {
                         HStack {
-                            Text("게시된 릴리스: \(release.tag)")
+                            Text(AppLocalization.string("게시된 릴리스: \(release.tag)"))
                                 .umcTypography(.bodyRegular)
                             Spacer()
-                            SettingsActionButton(title: "릴리스 보기", symbol: "arrow.up.right") {
+                            SettingsActionButton(
+                                title: AppLocalization.string("릴리스 보기"), symbol: "arrow.up.right"
+                            ) {
                                 openURL(release.url)
                             }
                         }
@@ -58,21 +66,31 @@ struct SettingsAboutView: View {
                     }
                 }
             }
-            SettingsSection(title: "도움말 및 법적 정보") {
+            SettingsSection(title: AppLocalization.string("도움말 및 법적 정보")) {
                 SettingsCard {
                     VStack(spacing: UMCSpacing.value12) {
-                        unavailableLink("이용약관", description: "서비스 이용에 필요한 약관을 확인해요.")
+                        unavailableLink(
+                            AppLocalization.string("이용약관"),
+                            description: AppLocalization.string("서비스 이용에 필요한 약관을 확인해요."))
                         SettingsDivider()
-                        unavailableLink("개인정보 처리방침", description: "개인정보 처리와 보관 기준을 확인해요.")
+                        unavailableLink(
+                            AppLocalization.string("개인정보 처리방침"),
+                            description: AppLocalization.string("개인정보 처리와 보관 기준을 확인해요."))
                         SettingsDivider()
-                        SettingsRow(title: "오픈소스 라이선스", description: "앱에 사용한 오픈소스 정보를 확인해요.") {
-                            SettingsActionButton(title: "열기") {
+                        SettingsRow(
+                            title: AppLocalization.string("오픈소스 라이선스"),
+                            description: AppLocalization.string("앱에 사용한 오픈소스 정보를 확인해요.")
+                        ) {
+                            SettingsActionButton(title: AppLocalization.string("열기")) {
                                 viewModel.dialog = .licenses
                             }
                         }
                         SettingsDivider()
-                        SettingsRow(title: "문의하기(카카오톡)", description: "도움이 필요하거나 의견이 있나요?") {
-                            SettingsStatusText(text: "준비 중")
+                        SettingsRow(
+                            title: AppLocalization.string("문의하기(카카오톡)"),
+                            description: AppLocalization.string("도움이 필요하거나 의견이 있나요?")
+                        ) {
+                            SettingsStatusText(text: AppLocalization.string("준비 중"))
                         }
                     }
                 }
@@ -82,7 +100,7 @@ struct SettingsAboutView: View {
 
     private func unavailableLink(_ title: String, description: String) -> some View {
         SettingsRow(title: title, description: description) {
-            SettingsStatusText(text: "준비 중")
+            SettingsStatusText(text: AppLocalization.string("준비 중"))
         }
     }
 
@@ -100,9 +118,12 @@ struct SettingsAboutView: View {
 
     private var releaseDescription: String {
         if let checkedAt = viewModel.releaseCheckedAt {
-            return "마지막 확인: \(checkedAt.formatted(date: .abbreviated, time: .shortened))"
+            let dateText = checkedAt.formatted(Date.FormatStyle(
+                date: .abbreviated, time: .shortened,
+                locale: AppLocalization.shared.language.locale))
+            return AppLocalization.string("마지막 확인: \(dateText)")
         }
-        return "공개 GitHub Releases에서 게시된 버전을 확인해요."
+        return AppLocalization.string("공개 GitHub Releases에서 게시된 버전을 확인해요.")
     }
 }
 

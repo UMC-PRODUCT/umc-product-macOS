@@ -24,7 +24,7 @@ struct SettingsAppearanceTests {
         let preferences = SettingsPreferences(defaults: defaults)
         #expect(preferences.availableFontFamily == nil)
         #expect(preferences.font.design == nil)
-        preferences.fontFamily = NSFontManager.shared.availableFontFamilies.first
+        preferences.fontFamily = SettingsFontSupport.families(for: preferences.language).first
         #expect(preferences.availableFontFamily == preferences.fontFamily)
     }
 
@@ -73,6 +73,45 @@ struct SettingsAppearanceTests {
                 let frame = host.convert(field.bounds, from: field)
                 #expect(frame.minX >= 0 && frame.maxX <= size.width + 1)
             }
+            window.contentView = nil
+        }
+    }
+
+    @Test("Theme colors stay inside the rounded settings panel and never repaint app chrome",
+        arguments: [ColorScheme.light, .dark])
+    func themeDoesNotRepaintChrome(scheme: ColorScheme) throws {
+        let suite = "SettingsChromeTests.\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let preferences = SettingsPreferences(defaults: defaults)
+        for theme in SettingsColorTheme.presets {
+            preferences.selectedColorThemeID = theme.id
+            let model = try #require(SettingsDesignPreview.makeViewModel(id: "903:3596",
+                preferences: preferences))
+            let controller = NSHostingController(rootView: SettingsView(viewModel: model)
+                .environment(\.colorScheme, scheme))
+            let window = NSWindow(contentViewController: controller)
+            window.setContentSize(CGSize(width: 1040, height: 720))
+            let host = controller.view
+            host.layoutSubtreeIfNeeded()
+            window.displayIfNeeded()
+            let bitmap = try #require(host.bitmapImageRepForCachingDisplay(in: host.bounds))
+            host.cacheDisplay(in: host.bounds, to: bitmap)
+            let scale = CGFloat(bitmap.pixelsWide) / host.bounds.width
+            func pixel(_ x: CGFloat, _ y: CGFloat) throws -> NSColor {
+                try #require(bitmap.colorAt(x: Int(x * scale), y: Int(y * scale))?
+                    .usingColorSpace(.sRGB))
+            }
+            let shell = try pixel(2, 360)
+            let expected = SettingsThemeColor(UMCColor.Custom.backgroundAppShell, scheme: scheme)
+            #expect(abs(shell.redComponent - expected.red) < 0.02, "\(theme.id) shell red")
+            #expect(abs(shell.greenComponent - expected.green) < 0.02, "\(theme.id) shell green")
+            #expect(abs(shell.blueComponent - expected.blue) < 0.02, "\(theme.id) shell blue")
+            // The panel's top-left corner reveals the same fixed chrome through its clipping.
+            let corner = try pixel(53, 1)
+            #expect(abs(corner.redComponent - shell.redComponent) < 0.02)
+            #expect(abs(corner.greenComponent - shell.greenComponent) < 0.02)
+            #expect(abs(corner.blueComponent - shell.blueComponent) < 0.02)
             window.contentView = nil
         }
     }
@@ -129,7 +168,9 @@ struct SettingsAppearanceTests {
             #expect(size.width == (dialog == .editLinks ? 560 : 440))
             #expect(size.height <= 680)
             let fields = descendants(in: host, type: NSTextField.self).filter(\.isEditable)
-            #expect(fields.count == (dialog == .editLinks ? 5 : model.codeStep == .complete ? 0 : 1))
+                #expect(
+                    fields.count
+                        == (dialog == .editLinks ? 5 : model.codeStep == .complete ? 0 : 1))
             for field in fields {
                 let frame = host.convert(field.bounds, from: field)
                 #expect(frame.minX >= 0 && frame.maxX <= size.width + 1)

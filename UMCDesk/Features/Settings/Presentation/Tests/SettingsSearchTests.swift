@@ -5,12 +5,26 @@
 //  Created by euijjang97 on 10/20/26.
 //
 
+import UMCFoundation
 import CoreDesignSystem
 import SwiftUI
 import Testing
 @testable import SettingsPresentation
 
+@MainActor
 struct SettingsSearchTests {
+    @Test("Search uses the requested language and keeps stable identifiers")
+    func localizedSearch() {
+        #expect(SettingsPage.search("notification", language: .english)
+            .contains { $0.id == "notificationAccess" })
+        #expect(SettingsPage.search("알림", language: .korean)
+            .contains { $0.id == "notificationAccess" })
+        #expect(SettingsPage.search("language", language: .english).map(\.id) == ["language"])
+        #expect(SettingsPage.search("language", language: .korean).isEmpty)
+        #expect(SettingsSearchResult.items(language: .english).map(\.id) ==
+            SettingsSearchResult.items(language: .korean).map(\.id))
+    }
+
     @Test("Recommendations use existing searchable settings with stable order")
     func recommendations() {
         #expect(SettingsSearchResult.recommendations.map(\.id) == [
@@ -63,6 +77,7 @@ struct SettingsSearchTests {
 
 }
 
+@MainActor
 struct SettingsActivityRoleTests {
     @Test("Every server and supported display role has a readable title", arguments: [
         ("SCHOOL_PRESIDENT", "교내 회장"), ("SCHOOL_VICE_PRESIDENT", "교내 부회장"),
