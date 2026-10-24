@@ -7,11 +7,41 @@
 
 import Foundation
 import Testing
+import UMCFoundation
 @testable import SettingsDomain
 
 @Suite("Local settings")
 @MainActor
 struct SettingsPreferencesTests {
+    @Test("Preview language shares persisted app preferences without sharing appearance")
+    func sharesOnlyLanguageWithPreview() throws {
+        let appName = "settings.language.app.\(UUID().uuidString)"
+        let previewName = "settings.language.preview.\(UUID().uuidString)"
+        let appDefaults = try #require(UserDefaults(suiteName: appName))
+        let previewDefaults = try #require(UserDefaults(suiteName: previewName))
+        let original = AppLocalization.shared.language
+        defer {
+            appDefaults.removePersistentDomain(forName: appName)
+            previewDefaults.removePersistentDomain(forName: previewName)
+            AppLocalization.shared.language = original
+        }
+        let app = SettingsPreferences(defaults: appDefaults)
+        let preview = SettingsPreferences(
+            defaults: previewDefaults, languagePreferences: app
+        )
+        preview.language = .english
+        preview.theme = .dark
+        #expect(app.language == .english)
+        #expect(AppLocalization.shared.language == .english)
+        #expect(SettingsPreferences(defaults: appDefaults).language == .english)
+        #expect(app.theme == .system)
+        #expect(preview.theme == .dark)
+        #expect(previewDefaults.object(forKey: "settings.language") == nil)
+        app.language = .korean
+        #expect(preview.language == .korean)
+        #expect(SettingsPreferences(defaults: appDefaults).language == .korean)
+    }
+
     @Test("Defaults are restored after rebuilding preferences")
     func persistsPreferences() throws {
         let name = "settings.tests.\(UUID().uuidString)"

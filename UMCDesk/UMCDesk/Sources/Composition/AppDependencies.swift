@@ -64,6 +64,8 @@ final class AppDependencies {
         #else
         let preferences = SettingsPreferences()
         #endif
+        AppLocalization.shared.language = preferences.language
+        preferences.restoreSupportedFont()
         let useCase = DefaultSettingsUseCase(repository: LiveSettingsRepository(
             adapter: adapter, client: client, environment: environment
         ))
@@ -88,7 +90,10 @@ final class AppDependencies {
         let previewSuite = "com.umc.product.macos.settings-design-preview"
         let previewDefaults = UserDefaults(suiteName: previewSuite)!
         previewDefaults.removePersistentDomain(forName: previewSuite)
-        let previewPreferences = SettingsPreferences(defaults: previewDefaults)
+        let previewPreferences = SettingsPreferences(
+            defaults: previewDefaults, languagePreferences: preferences
+        )
+        previewPreferences.restoreSupportedFont()
         guard let preview = SettingsDesignPreview.makeViewModel(
             id: "activity_roles", preferences: previewPreferences
         ) else { preconditionFailure("The settings design preview must exist") }
@@ -108,13 +113,21 @@ final class AppDependencies {
         container.registerInstance(SettingsViewModel.self, instance: settingsViewModel)
     }
 
+    func restoreSupportedFonts() {
+        settingsPreferences.restoreSupportedFont()
+        #if DEBUG || UMC_PRERELEASE
+        previewSettingsViewModel.preferences.restoreSupportedFont()
+        #endif
+    }
+
     #if DEBUG
     static func makeSettingsPreview(
         arguments: [String], preferences: SettingsPreferences
     ) -> SettingsViewModel? {
         guard let index = arguments.firstIndex(of: "--settings-preview") else { return nil }
         let requested = arguments.indices.contains(index + 1) ? arguments[index + 1] : ""
-        let identifier = SettingsDesignPreview.ids.contains(requested) ? requested : "activity_roles"
+            let identifier =
+                SettingsDesignPreview.ids.contains(requested) ? requested : "activity_roles"
         guard let preview = SettingsDesignPreview.makeViewModel(
             id: identifier, preferences: preferences
         ) else { preconditionFailure("The default settings preview must exist") }

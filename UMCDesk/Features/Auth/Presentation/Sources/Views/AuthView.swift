@@ -7,6 +7,7 @@
 
 import CoreDesignSystem
 import SwiftUI
+import UMCFoundation
 
 public struct AuthView: View {
     // MARK: - Property
@@ -35,8 +36,10 @@ public struct AuthView: View {
     public var body: some View {
         HStack(spacing: 0) {
             AuthBrandPanel(
-                quote: viewModel.quoteOverride ?? viewModel.screen.copy.quote,
-                author: viewModel.authorOverride ?? viewModel.screen.copy.author,
+                quote: viewModel.quoteOverride.map { AppLocalization.string($0) }
+                    ?? viewModel.screen.copy.quote,
+                author: viewModel.authorOverride.map { AppLocalization.string($0) }
+                    ?? viewModel.screen.copy.author,
                 category: viewModel.screen.copy.category
             )
             // Figma pins the brand panel to Light in both screen appearances.

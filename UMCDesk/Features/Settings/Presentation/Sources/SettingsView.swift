@@ -5,6 +5,7 @@
 //  Created by euijjang97 on 10/20/26.
 //
 
+import UMCFoundation
 import AppKit
 import CoreDesignSystem
 import SettingsDomain
@@ -38,21 +39,28 @@ public struct SettingsView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var palette: SettingsAppearancePalette {
-        .init(colors: colorScheme == .dark ? viewModel.preferences.selectedColorTheme.dark?.content :
+        .init(
+            colors: colorScheme == .dark
+                ? viewModel.preferences.selectedColorTheme.dark?.content
+                :
             viewModel.preferences.selectedColorTheme.light?.content)
     }
     private var sidebarPalette: SettingsAppearancePalette {
-        .init(colors: colorScheme == .dark ? viewModel.preferences.selectedColorTheme.dark?.sidebar :
+        .init(
+            colors: colorScheme == .dark
+                ? viewModel.preferences.selectedColorTheme.dark?.sidebar
+                :
             viewModel.preferences.selectedColorTheme.light?.sidebar)
     }
 
     private var sidebarChromeForeground: Color {
-        sidebarPalette.colors?.foreground.color ?? UMCColor.Custom.backgroundTextWhite
+        UMCColor.Custom.backgroundTextWhite
     }
 
     fileprivate enum Constants {
         static let railWidth: CGFloat = 44
         static let sidebarWidth: CGFloat = 271
+        static let contentWidth: CGFloat = 760
     }
 
     public init(viewModel: SettingsViewModel) {
@@ -106,7 +114,7 @@ public struct SettingsView: View {
         }
         .padding(.leading, UMCSpacing.value4)
         .padding([.bottom, .trailing], UMCSpacing.value12)
-        .background(sidebarPalette.colors?.background.color ?? UMCColor.Custom.backgroundAppShell)
+        .background(UMCColor.Custom.backgroundAppShell)
         .disabled(showsProfileMenu)
         .accessibilityHidden(showsProfileMenu)
         .overlay(alignment: .bottomLeading) {
@@ -132,6 +140,7 @@ public struct SettingsView: View {
             if showsProfileMenu { dismissProfileMenu() }
             else { dismissSearchSuggestions() }
         }
+        .defaultFocus($searchFocus, nil)
         .onChange(of: searchFocus) { _, focus in
             if focus == .field { showsSearchSuggestions = true }
             else if focus == nil { showsSearchSuggestions = false }
@@ -146,10 +155,9 @@ public struct SettingsView: View {
             }
         }
         .toolbar { navigationToolbar }
-        .toolbarBackground(sidebarPalette.colors?.background.color ??
-            UMCColor.Custom.backgroundAppShell, for: .windowToolbar)
+        .toolbarBackground(UMCColor.Custom.backgroundAppShell, for: .windowToolbar)
         .toolbarBackgroundVisibility(.visible, for: .windowToolbar)
-        .toolbarColorScheme(sidebarPalette.colorScheme ?? .dark, for: .windowToolbar)
+        .toolbarColorScheme(.dark, for: .windowToolbar)
         .foregroundStyle(palette.textNeutralDefault)
         .tint(palette.textBrandDefault)
         .sheet(item: $viewModel.dialog, onDismiss: viewModel.dismissDialog) { dialog in
@@ -179,13 +187,13 @@ public struct SettingsView: View {
     private var appRail: some View {
         VStack(spacing: 0) {
             VStack(spacing: 0) {
-                railItem("홈", symbol: "house")
-                railItem("공지", symbol: "megaphone")
-                railItem("활동", symbol: "calendar.badge.checkmark")
-                railItem("스레드", symbol: "bubble.left")
-                railItem("프로젝트", symbol: "square.grid.2x2")
-                railItem("커뮤니티", symbol: "person.2")
-                railItem("도움말", symbol: "questionmark.circle")
+                railItem(AppLocalization.string("홈"), symbol: "house")
+                railItem(AppLocalization.string("공지"), symbol: "megaphone")
+                railItem(AppLocalization.string("활동"), symbol: "calendar.badge.checkmark")
+                railItem(AppLocalization.string("스레드"), symbol: "bubble.left")
+                railItem(AppLocalization.string("프로젝트"), symbol: "square.grid.2x2")
+                railItem(AppLocalization.string("커뮤니티"), symbol: "person.2")
+                railItem(AppLocalization.string("도움말"), symbol: "questionmark.circle")
             }
             Spacer(minLength: UMCSpacing.value24)
             Button { showsProfileMenu.toggle() } label: {
@@ -197,11 +205,14 @@ public struct SettingsView: View {
             .buttonStyle(SettingsPlainButtonStyle(
                 highlight: sidebarChromeForeground.opacity(0.1),
                 cornerRadius: UMCRadius.value12))
-            .accessibilityLabel("프로필 메뉴")
-            .accessibilityHint("마이페이지, 설정 및 계정 메뉴")
+            .accessibilityLabel(AppLocalization.string("프로필 메뉴"))
+            .accessibilityHint(AppLocalization.string("마이페이지, 설정 및 계정 메뉴"))
             .focused($profileMenuFocus, equals: .trigger)
             .accessibilityFocused($accessibleProfileMenuFocus, equals: .trigger)
-            .modifier(SettingsTooltip(title: "프로필 메뉴", isSuppressed: showsProfileMenu))
+            .modifier(
+                SettingsTooltip(
+                    title: AppLocalization.string("프로필 메뉴"), isSuppressed: showsProfileMenu)
+            )
             .padding(.bottom, UMCSpacing.value16)
         }
     }
@@ -212,8 +223,8 @@ public struct SettingsView: View {
             .foregroundStyle(sidebarChromeForeground.opacity(0.75))
             .frame(width: 44, height: 44)
             .contentShape(.rect)
-            .accessibilityLabel("\(title), 준비 중")
-            .accessibilityHint("\(title) 화면은 아직 제공하지 않아요.")
+            .accessibilityLabel(AppLocalization.string("\(title), 준비 중"))
+            .accessibilityHint(AppLocalization.string("\(title) 화면은 아직 제공하지 않아요."))
             .modifier(SettingsTooltip(title: title, isSuppressed: showsProfileMenu))
     }
 
@@ -240,16 +251,21 @@ public struct SettingsView: View {
                 SettingsDivider()
             }
             VStack(spacing: UMCSpacing.value4) {
-                profileMenuButton("마이페이지", symbol: "person.crop.circle", focus: .myPage) {
+                profileMenuButton(
+                    AppLocalization.string("마이페이지"), symbol: "person.crop.circle", focus: .myPage
+                ) {
                     viewModel.showProfile()
                 }
-                profileMenuButton("설정", symbol: "gearshape", focus: .settings) {
+                profileMenuButton(
+                    AppLocalization.string("설정"), symbol: "gearshape", focus: .settings
+                ) {
                     viewModel.showSettings()
                 }
             }
             if viewModel.profile != nil {
                 SettingsDivider()
-                profileMenuButton("로그아웃", symbol: "rectangle.portrait.and.arrow.right",
+                profileMenuButton(
+                    AppLocalization.string("로그아웃"), symbol: "rectangle.portrait.and.arrow.right",
                     focus: .logout) {
                     viewModel.dialogMessage = nil
                     viewModel.dialog = .logout
@@ -269,7 +285,7 @@ public struct SettingsView: View {
                 .strokeBorder(palette.borderNeutralWeak200)
         }
         .accessibilityElement(children: .contain)
-        .accessibilityLabel("프로필 메뉴")
+        .accessibilityLabel(AppLocalization.string("프로필 메뉴"))
         .onKeyPress(keys: [.tab, .upArrow, .downArrow]) { _ in
             showsProfileKeyboardFocus = true
             hoveredProfileMenuItem = nil
@@ -284,7 +300,9 @@ public struct SettingsView: View {
 
     private func profileMenuSummary(_ profile: SettingsProfile) -> String {
         var values: [String] = []
-        if let activity = profile.activities.first { values.append("\(activity.generation)기") }
+        if let activity = profile.activities.first {
+            values.append(AppLocalization.string("\(activity.generation)기"))
+        }
         if let school = profile.schoolName { values.append(school) }
         if let activity = profile.activities.first { values += activity.roles.map(roleTitle) }
         return values.joined(separator: " · ")
@@ -336,10 +354,16 @@ public struct SettingsView: View {
     private var navigationToolbar: some ToolbarContent {
         ToolbarItem(placement: .navigation) {
             SettingsToolbarHost(content: HStack(spacing: UMCSpacing.value4) {
-                navigationButton("뒤로", symbol: "chevron.left", isEnabled: viewModel.canGoBack) {
+                    navigationButton(
+                        AppLocalization.string("뒤로"), symbol: "chevron.left",
+                        isEnabled: viewModel.canGoBack
+                    ) {
                     viewModel.goBack()
                 }
-                navigationButton("앞으로", symbol: "chevron.right", isEnabled: viewModel.canGoForward) {
+                    navigationButton(
+                        AppLocalization.string("앞으로"), symbol: "chevron.right",
+                        isEnabled: viewModel.canGoForward
+                    ) {
                     viewModel.goForward()
                 }
             })
@@ -370,7 +394,7 @@ public struct SettingsView: View {
 
     private var settingsSidebar: some View {
         VStack(alignment: .leading, spacing: UMCSpacing.value16) {
-            Text("설정").umcTypography(.title3Bold)
+            Text(AppLocalization.string("설정")).umcTypography(.title3Bold)
                 .onTapGesture { dismissSearchSuggestions() }
             searchField
                 .zIndex(1)
@@ -408,7 +432,7 @@ public struct SettingsView: View {
                         }
                     }
                     if viewModel.isSearching && viewModel.searchResults.isEmpty {
-                        Text("검색 결과를 찾을 수 없어요")
+                        Text(AppLocalization.string("검색 결과를 찾을 수 없어요"))
                             .umcTypography(.headlineRegular)
                             .foregroundStyle(sidebarPalette.textNeutralWeak500)
                             .padding(.vertical, UMCSpacing.value16)
@@ -418,16 +442,13 @@ public struct SettingsView: View {
             .scrollIndicators(.hidden)
             .simultaneousGesture(TapGesture().onEnded { dismissSearchSuggestions() })
             Spacer(minLength: 0)
-            Text("변경 사항은 바로 적용돼요")
-                .umcTypography(.bodyRegular)
-                .foregroundStyle(sidebarPalette.textNeutralWeak500)
-                .onTapGesture { dismissSearchSuggestions() }
         }
         .padding(.horizontal, UMCSpacing.value20)
         .padding(.vertical, UMCSpacing.value24)
         .frame(width: Constants.sidebarWidth)
         .background {
-            sidebarPalette.backgroundSurfaceGreyWeaker
+            (sidebarPalette.colors?.background.color ??
+                UMCColor.Custom.backgroundSurfaceGreyWeaker)
                 .contentShape(.rect)
                 .onTapGesture { dismissSearchSuggestions() }
         }
@@ -439,9 +460,9 @@ public struct SettingsView: View {
     private var searchField: some View {
         HStack(spacing: UMCSpacing.value8) {
             Image(systemName: "magnifyingglass").accessibilityHidden(true)
-            TextField("검색", text: $viewModel.searchText)
+            TextField(AppLocalization.string("검색"), text: $viewModel.searchText)
                 .textFieldStyle(.plain)
-                .accessibilityLabel("설정 검색")
+                .accessibilityLabel(AppLocalization.string("설정 검색"))
                 .focused($searchFocus, equals: .field)
                 .onTapGesture { showsSearchSuggestions = true }
                 .onSubmit {
@@ -459,7 +480,7 @@ public struct SettingsView: View {
                     Image(systemName: "xmark.circle.fill")
                 }
                 .buttonStyle(SettingsPlainButtonStyle())
-                .accessibilityLabel("검색어 지우기")
+                .accessibilityLabel(AppLocalization.string("검색어 지우기"))
             }
         }
         .umcTypography(.headlineRegular)
@@ -489,11 +510,14 @@ public struct SettingsView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: UMCSpacing.value8) {
                     if !viewModel.recentSearchItems.isEmpty {
-                        suggestionSection("최근 항목", items: viewModel.recentSearchItems,
+                        suggestionSection(
+                            AppLocalization.string("최근 항목"), items: viewModel.recentSearchItems,
                             recent: true)
                         SettingsDivider()
                     }
-                    suggestionSection("추천 설정", items: SettingsSearchResult.recommendations,
+                    suggestionSection(
+                        AppLocalization.string("추천 설정"),
+                        items: SettingsSearchResult.recommendations,
                         recent: false)
                 }
                 .padding(UMCSpacing.value8)
@@ -516,7 +540,7 @@ public struct SettingsView: View {
                 .strokeBorder(sidebarPalette.borderNeutralWeak200)
         }
         .accessibilityElement(children: .contain)
-        .accessibilityLabel("설정 검색 제안")
+        .accessibilityLabel(AppLocalization.string("설정 검색 제안"))
     }
 
     private func suggestionSection(
@@ -633,7 +657,7 @@ public struct SettingsView: View {
                         Text(viewModel.page.title)
                             .umcTypography(.title1Bold)
                             .accessibilityAddTraits(.isHeader)
-                        Text("이 Mac에서 사용하는 앱의 환경을 설정하세요.")
+                        Text(AppLocalization.string("이 Mac에서 사용하는 앱의 환경을 설정하세요."))
                             .umcTypography(.bodyRegular)
                             .foregroundStyle(palette.textNeutralWeak500)
                     }
@@ -646,8 +670,9 @@ public struct SettingsView: View {
                     case .myPage: EmptyView()
                     }
                 }
+                .frame(maxWidth: Constants.contentWidth, alignment: .leading)
                 .padding(UMCSpacing.value32)
-                .frame(maxWidth: .infinity, alignment: .leading)
+                .frame(maxWidth: .infinity, alignment: .center)
             }
             .scrollBounceBehavior(.basedOnSize)
         }
@@ -659,7 +684,7 @@ public struct SettingsView: View {
             Text(toast.message).umcTypography(.title4Regular)
             Button { viewModel.toast = nil } label: { Image(systemName: "xmark") }
                 .buttonStyle(SettingsPlainButtonStyle())
-                .accessibilityLabel("안내 닫기")
+                .accessibilityLabel(AppLocalization.string("안내 닫기"))
         }
         .foregroundStyle(toast.isError ? UMCColor.Semantic.textError :
             palette.textNeutralStrong800)

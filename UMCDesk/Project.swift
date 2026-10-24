@@ -22,6 +22,8 @@ let project = Project(
             deploymentTargets: macOSDeploymentTargets,
             infoPlist: .extendingDefault(with: [
                 "CFBundleDisplayName": "UMC Desk",
+                "CFBundleLocalizations": ["ko", "en"],
+                "CFBundleDevelopmentRegion": "ko",
                 "CFBundleName": "UMC Desk",
                 "CFBundleShortVersionString": "$(MARKETING_VERSION)",
                 "CFBundleVersion": "$(CURRENT_PROJECT_VERSION)",
@@ -62,7 +64,8 @@ let project = Project(
                 .project(target: "MatchingPresentation", path: "Features/Matching"),
                 .project(target: "ProjectWorkspaceDomain", path: "Features/ProjectWorkspace"),
                 .project(target: "ProjectWorkspaceData", path: "Features/ProjectWorkspace"),
-                .project(target: "ProjectWorkspacePresentation", path: "Features/ProjectWorkspace"),
+                .project(
+                    target: "ProjectWorkspacePresentation", path: "Features/ProjectWorkspace"),
 
             ],
             settings: .settings(base: [

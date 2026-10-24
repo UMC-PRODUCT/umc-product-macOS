@@ -13,7 +13,8 @@ public func coreProject(
     bundleIdSuffix: String,
     dependencies: [TargetDependency] = [],
     resources: ResourceFileElements? = nil,
-    includesTests: Bool = false
+    includesTests: Bool = false,
+    settings: Settings? = nil
 ) -> Project {
     var targets: [Target] = [
         .target(
@@ -24,7 +25,8 @@ public func coreProject(
             deploymentTargets: macOSDeploymentTargets,
             sources: ["Sources/**"],
             resources: resources,
-            dependencies: dependencies
+            dependencies: dependencies,
+            settings: settings
         ),
     ]
     if includesTests {

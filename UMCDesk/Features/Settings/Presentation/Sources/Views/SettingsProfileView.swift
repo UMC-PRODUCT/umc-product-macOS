@@ -5,6 +5,7 @@
 //  Created by euijjang97 on 10/20/26.
 //
 
+import UMCFoundation
 import CoreDesignSystem
 import SettingsDomain
 import SwiftUI
@@ -36,10 +37,10 @@ struct SettingsProfileView: View {
                     }
                     HStack(spacing: UMCSpacing.value16) {
                         SettingsInlineMessage(
-                            message: "이름, 학교, 활동 정보가 다르면 운영진에게 문의해 주세요.",
+                            message: AppLocalization.string("이름, 학교, 활동 정보가 다르면 운영진에게 문의해 주세요."),
                             typography: .bodyRegular)
                         Spacer(minLength: 0)
-                        SettingsActionButton(title: "문의하기") {
+                        SettingsActionButton(title: AppLocalization.string("문의하기")) {
                             viewModel.navigate(to: .about)
                         }
                     }
@@ -70,10 +71,10 @@ struct SettingsProfileView: View {
                             SettingsPartTag(part: activity.part)
                         }
                     }
-                    Text(profile.schoolName ?? "학교 정보 없음")
+                    Text(profile.schoolName ?? AppLocalization.string("학교 정보 없음"))
                         .umcTypography(.headlineRegular)
                         .foregroundStyle(palette.textNeutralWeak500)
-                    Text(profile.email ?? "이메일 정보 없음")
+                    Text(profile.email ?? AppLocalization.string("이메일 정보 없음"))
                         .umcTypography(.headlineRegular)
                         .foregroundStyle(palette.textNeutralWeak500)
                 }
@@ -93,9 +94,15 @@ struct SettingsProfileView: View {
                 }
                 .buttonStyle(SettingsPlainButtonStyle())
                 .disabled(viewModel.isRefreshing || viewModel.isAccountBusy)
-                .accessibilityLabel(viewModel.isRefreshing ? "마이페이지 새로고침 중" : "마이페이지 새로고침")
+                .accessibilityLabel(
+                    viewModel.isRefreshing
+                        ? AppLocalization.string("마이페이지 새로고침 중")
+                        : AppLocalization.string("마이페이지 새로고침")
+                )
                 .help(viewModel.isRefreshing ?
-                    "프로필과 활동 정보를 불러오는 중" : "프로필과 활동 정보를 다시 불러오기")
+                        AppLocalization.string("프로필과 활동 정보를 불러오는 중")
+                        : AppLocalization.string("프로필과 활동 정보를 다시 불러오기")
+                )
                 .keyboardShortcut("r", modifiers: .command)
             }
         }
@@ -105,10 +112,12 @@ struct SettingsProfileView: View {
         SettingsCard(isSubtle: true, minimumHeight: 324) {
             VStack(alignment: .leading, spacing: UMCSpacing.value16) {
                 HStack(alignment: .top) {
-                    profileCardHeading("프로필 링크", description: "UMC 계정에 등록한 링크예요.")
+                    profileCardHeading(
+                        AppLocalization.string("프로필 링크"),
+                        description: AppLocalization.string("UMC 계정에 등록한 링크예요."))
                     Spacer(minLength: UMCSpacing.value8)
                     Button { viewModel.editLinks() } label: {
-                        Label("편집", systemImage: "pencil")
+                        Label(AppLocalization.string("편집"), systemImage: "pencil")
                             .umcTypography(.bodyRegular)
                             .padding(.horizontal, UMCSpacing.value8)
                             .frame(minHeight: 32)
@@ -116,7 +125,7 @@ struct SettingsProfileView: View {
                     .buttonStyle(SettingsPlainButtonStyle())
                     .padding(.top, UMCSpacing.value4)
                     .disabled(viewModel.isAccountBusy)
-                    .accessibilityLabel("프로필 링크 편집")
+                    .accessibilityLabel(AppLocalization.string("프로필 링크 편집"))
                 }
                 SettingsDivider()
                 VStack(alignment: .leading, spacing: UMCSpacing.value12) {
@@ -149,16 +158,20 @@ struct SettingsProfileView: View {
                                 .frame(maxWidth: .infinity, alignment: .leading)
                                 .foregroundStyle(palette.textBrandDefault)
                                 .help(profile.links[kind])
-                                .accessibilityLabel("\(kind.title) 링크 열기")
+                                .accessibilityLabel(AppLocalization.string("\(kind.title) 링크 열기"))
                                 .accessibilityValue(url.absoluteString)
-                                .accessibilityHint("기본 브라우저에서 열립니다.")
+                                .accessibilityHint(AppLocalization.string("기본 브라우저에서 열립니다."))
                             } else {
                                 let isEmpty = profile.links[kind]
                                     .trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                                 Button {
                                     viewModel.editLinks(focusing: kind)
                                 } label: {
-                                    Text(isEmpty ? "추가하기" : "링크 수정")
+                                    Text(
+                                        isEmpty
+                                            ? AppLocalization.string("추가하기")
+                                            : AppLocalization.string("링크 수정")
+                                    )
                                         .umcTypography(.bodyRegular)
                                         .padding(.horizontal, UMCSpacing.value8)
                                         .padding(.vertical, UMCSpacing.value4)
@@ -168,7 +181,11 @@ struct SettingsProfileView: View {
                                 .foregroundStyle(palette.textBrandDefault)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                                 .disabled(viewModel.isAccountBusy)
-                                .accessibilityLabel("\(kind.title) 링크 \(isEmpty ? "추가" : "수정")")
+                                .accessibilityLabel(
+                                    isEmpty
+                                        ? AppLocalization.string("\(kind.title) 링크 추가")
+                                        :
+                                    AppLocalization.string("\(kind.title) 링크 수정"))
                             }
                         }
                         .frame(minHeight: 30)
@@ -212,12 +229,15 @@ struct SettingsProfileView: View {
     private func activities(_ profile: SettingsProfile) -> some View {
         SettingsCard(isSubtle: true, minimumHeight: 324) {
             VStack(alignment: .leading, spacing: UMCSpacing.value16) {
-                profileCardHeading("내 활동", description: "참여한 기수와 파트, 맡은 역할을 확인하세요.")
+                profileCardHeading(
+                    AppLocalization.string("내 활동"),
+                    description: AppLocalization.string("참여한 기수와 파트, 맡은 역할을 확인하세요."))
                 SettingsDivider()
                 if profile.activities.isEmpty {
                     VStack(alignment: .leading, spacing: UMCSpacing.value8) {
-                        Text("아직 등록된 활동이 없어요.").umcTypography(.headlineBold)
-                        Text("운영진에게 받은 챌린저 코드로 활동을 등록해 주세요.")
+                        Text(AppLocalization.string("아직 등록된 활동이 없어요.")).umcTypography(
+                            .headlineBold)
+                        Text(AppLocalization.string("운영진에게 받은 챌린저 코드로 활동을 등록해 주세요."))
                             .umcTypography(.bodyRegular)
                             .foregroundStyle(palette.textNeutralWeak500)
                     }
@@ -229,7 +249,8 @@ struct SettingsProfileView: View {
                         }
                     }
                 }
-                SettingsActionButton(title: "활동 코드 등록", symbol: "plus", kind: .primary,
+                SettingsActionButton(
+                    title: AppLocalization.string("활동 코드 등록"), symbol: "plus", kind: .primary,
                     fillsWidth: true, action: viewModel.addPermission)
                     .environment(\.colorScheme, .light)
                     .disabled(viewModel.isAccountBusy)
@@ -251,7 +272,7 @@ struct SettingsProfileView: View {
     private var accountState: some View {
         switch viewModel.profileState {
         case .idle, .loading:
-            ProgressView("프로필을 불러오는 중이에요.")
+            ProgressView(AppLocalization.string("프로필을 불러오는 중이에요."))
                 .umcTypography(.title4Regular)
                 .padding(.top, UMCSpacing.value64)
         case .failed(let error):
@@ -260,20 +281,20 @@ struct SettingsProfileView: View {
                     .font(.system(size: 48))
                     .foregroundStyle(palette.iconNeutralMedium500)
                 Text(error as? SettingsError == .authenticationRequired ?
-                    "로그인이 필요해요" : "프로필을 불러오지 못했어요")
+                    AppLocalization.string("로그인이 필요해요") : AppLocalization.string("프로필을 불러오지 못했어요"))
                     .umcTypography(.largeTitle3Bold)
                 Text(error as? SettingsError == .authenticationRequired ?
-                    "로그인한 계정의 프로필과 활동을 여기에서 확인할 수 있어요." :
-                    "연결 상태를 확인한 뒤 다시 시도해 주세요.")
+                    AppLocalization.string("로그인한 계정의 프로필과 활동을 여기에서 확인할 수 있어요.") :
+                    AppLocalization.string("연결 상태를 확인한 뒤 다시 시도해 주세요."))
                     .umcTypography(.title4Regular)
                     .foregroundStyle(palette.textNeutralMedium600)
                 if error as? SettingsError == .authenticationRequired {
-                    SettingsActionButton(title: "로그인 화면으로", kind: .brand) {
+                    SettingsActionButton(title: AppLocalization.string("로그인 화면으로"), kind: .brand) {
                         viewModel.onOpenLogin?()
                     }
                     .disabled(viewModel.onOpenLogin == nil)
                 } else {
-                    SettingsActionButton(title: "다시 시도", kind: .brand) {
+                    SettingsActionButton(title: AppLocalization.string("다시 시도"), kind: .brand) {
                         Task { await viewModel.refreshProfile() }
                     }
                     .keyboardShortcut("r", modifiers: .command)
@@ -298,8 +319,8 @@ extension SettingsLinkKind {
         case .github: "GitHub"
         case .linkedIn: "LinkedIn"
         case .instagram: "Instagram"
-        case .blog: "블로그"
-        case .personal: "개인 링크"
+        case .blog: AppLocalization.string("블로그")
+        case .personal: AppLocalization.string("개인 링크")
         }
     }
 }
@@ -310,7 +331,8 @@ struct SettingsActivityRow: View {
 
     var body: some View {
         HStack(spacing: UMCSpacing.value12) {
-            Text(activity.generation.isEmpty ? "기수 미정" : "\(activity.generation)기")
+            Text(activity.generation.isEmpty ? AppLocalization.string("기수 미정") :
+                AppLocalization.string("\(activity.generation)기"))
                 .umcTypography(.bodyRegular)
                 .padding(.horizontal, 6)
                 .frame(minHeight: 24)
@@ -388,30 +410,32 @@ func partTitle(_ part: String) -> String {
     case "ADMIN": "Admin"
     case "WEB_PRODUCT_ENGINEER": "Web PE"
     case "MOBILE_PRODUCT_ENGINEER": "Mobile PE"
-    case "": "파트 미정"
+    case "": AppLocalization.string("파트 미정")
     default: part
     }
 }
 
 func roleTitle(_ role: String) -> String {
     switch role {
-    case "SCHOOL_PRESIDENT": "교내 회장"
-    case "SCHOOL_VICE_PRESIDENT": "교내 부회장"
-    case "SCHOOL_PART_LEADER": "교내 파트장"
-    case "SCHOOL_ETC_ADMIN": "기타 교내 운영진"
-    case "CENTRAL_PRESIDENT": "총괄"
-    case "CENTRAL_VICE_PRESIDENT": "부총괄"
-    case "CENTRAL_OPERATING_TEAM_MEMBER": "중앙 운영국원"
-    case "CENTRAL_EDUCATION_TEAM_MEMBER": "중앙 교육국원"
-    case "CHAPTER_PRESIDENT": "지부장"
+    case "SCHOOL_PRESIDENT": AppLocalization.string("교내 회장")
+    case "SCHOOL_VICE_PRESIDENT": AppLocalization.string("교내 부회장")
+    case "SCHOOL_PART_LEADER": AppLocalization.string("교내 파트장")
+    case "SCHOOL_ETC_ADMIN": AppLocalization.string("기타 교내 운영진")
+    case "CENTRAL_PRESIDENT": AppLocalization.string("총괄")
+    case "CENTRAL_VICE_PRESIDENT": AppLocalization.string("부총괄")
+    case "CENTRAL_OPERATING_TEAM_MEMBER": AppLocalization.string("중앙 운영국원")
+    case "CENTRAL_EDUCATION_TEAM_MEMBER": AppLocalization.string("중앙 교육국원")
+    case "CHAPTER_PRESIDENT": AppLocalization.string("지부장")
     case "SUPER_ADMIN": "Admin"
     case "PRODUCT": "Product"
-    case "CHALLENGER": "챌린저"
+    case "CHALLENGER": AppLocalization.string("챌린저")
     default: role
     }
 }
 
-func roleColors(_ role: String, palette: SettingsAppearancePalette = .init()) -> (foreground: Color, background: Color) {
+func roleColors(_ role: String, palette: SettingsAppearancePalette = .init()) -> (
+    foreground: Color, background: Color
+) {
     switch role {
     case "CENTRAL_PRESIDENT", "CENTRAL_VICE_PRESIDENT",
         "CENTRAL_OPERATING_TEAM_MEMBER", "CENTRAL_EDUCATION_TEAM_MEMBER":
@@ -438,7 +462,8 @@ private struct SettingsUsageCard: View {
         #if DEBUG || UMC_PRERELEASE
         if isDesignPreview {
             return [SettingsUsagePreview.totalDuration,
-                "\(SettingsUsagePreview.activeDays)일", "\(SettingsUsagePreview.currentStreak)일"]
+                AppLocalization.string("\(SettingsUsagePreview.activeDays)일"),
+                AppLocalization.string("\(SettingsUsagePreview.currentStreak)일")]
         }
         #endif
         return ["—", "—", "—"]
@@ -448,12 +473,12 @@ private struct SettingsUsageCard: View {
         SettingsCard(isSubtle: true) {
             VStack(alignment: .leading, spacing: UMCSpacing.value24) {
                 HStack(spacing: UMCSpacing.value8) {
-                    Text("앱 사용 기록")
+                    Text(AppLocalization.string("앱 사용 기록"))
                         .umcTypography(.title4Bold)
                         .accessibilityAddTraits(.isHeader)
                     #if DEBUG || UMC_PRERELEASE
                     if isDesignPreview {
-                        Text("미리보기 데이터")
+                        Text(AppLocalization.string("미리보기 데이터"))
                             .umcTypography(.captionRegular)
                             .foregroundStyle(palette.textNeutralMedium600)
                             .padding(.horizontal, UMCSpacing.value8)
@@ -491,7 +516,14 @@ private struct SettingsUsageStatistics: View {
     let values: [String]
 
     var body: some View {
-        ForEach(Array(zip(["누적 사용 시간", "사용 일수", "현재 연속일"], values)), id: \.0) {
+        ForEach(
+            Array(
+                zip(
+                    [
+                        AppLocalization.string("누적 사용 시간"), AppLocalization.string("사용 일수"),
+                        AppLocalization.string("현재 연속일"),
+                    ], values)), id: \.0
+        ) {
             title, value in
             VStack(alignment: .leading, spacing: UMCSpacing.value8) {
                 Text(title)
@@ -509,7 +541,7 @@ private struct SettingsUsageStatistics: View {
 private struct SettingsUsagePlaceholder: View {
     @Environment(\.settingsAppearancePalette) private var palette
     var body: some View {
-        Text("사용 기록 기능을 준비하고 있어요.")
+        Text(AppLocalization.string("사용 기록 기능을 준비하고 있어요."))
             .umcTypography(.bodyRegular)
             .foregroundStyle(palette.textNeutralWeak500)
             .frame(maxWidth: .infinity, minHeight: 140)
@@ -525,9 +557,12 @@ enum SettingsUsagePreview {
         var id: Date { date }
         var label: String {
             let dateText = date.formatted(Date.FormatStyle(date: .complete, time: .omitted,
-                locale: Locale(identifier: "ko_KR"), calendar: SettingsUsagePreview.calendar,
+                        locale: AppLocalization.shared.language.locale,
+                        calendar: SettingsUsagePreview.calendar,
                 timeZone: .gmt))
-            return "\(dateText), \(minutes == 0 ? "사용 기록 없음" : "\(minutes)분 사용")"
+            let usage = minutes == 0 ? AppLocalization.string("사용 기록 없음") :
+                AppLocalization.string("\(minutes)분 사용")
+            return "\(dateText), \(usage)"
         }
     }
 
@@ -551,15 +586,17 @@ enum SettingsUsagePreview {
                 minutes: minutes)
         }
     }()
-    static let weeks: [Week] = stride(from: 0, to: days.count, by: 7).map { start in
+    static var weeks: [Week] { stride(from: 0, to: days.count, by: 7).map { start in
         let month = calendar.component(.month, from: days[start].date)
         let previousMonth = start == 0 ?
             0 : calendar.component(.month, from: days[start - 7].date)
         return Week(days: Array(days[start..<(start + 7)]),
-            month: month == previousMonth ? "" : "\(month)월")
-    }
+            month: month == previousMonth ? "" : AppLocalization.string("\(month)월"))
+    } }
     static let totalMinutes = days.reduce(0) { $0 + $1.minutes }
-    static let totalDuration = "\(totalMinutes / 60)시간 \(totalMinutes % 60)분"
+    static var totalDuration: String {
+        AppLocalization.string("\(totalMinutes / 60)시간 \(totalMinutes % 60)분")
+    }
     static let activeDays = days.filter { $0.minutes > 0 }.count
     static let currentStreak = days.reversed().prefix { $0.minutes > 0 }.count
 
@@ -578,13 +615,20 @@ private struct SettingsUsageHeatmap: View {
     @Environment(\.settingsAppearancePalette) private var palette
     var body: some View {
         VStack(alignment: .leading, spacing: UMCSpacing.value12) {
-            Text("최근 12주 · 2026. 7. 27. – 10. 18.")
+            Text(AppLocalization.string("최근 12주 · 2026. 7. 27. – 10. 18."))
                 .umcTypography(.bodyRegular)
                 .foregroundStyle(palette.textNeutralWeak500)
             HStack(alignment: .top, spacing: UMCSpacing.value4) {
                 VStack(spacing: UMCSpacing.value4) {
                     Text(" ").frame(height: 16)
-                    ForEach(["월", "화", "수", "목", "금", "토", "일"], id: \.self) { day in
+                        ForEach(
+                            [
+                                AppLocalization.string("월"), AppLocalization.string("화"),
+                                AppLocalization.string("수"), AppLocalization.string("목"),
+                                AppLocalization.string("금"), AppLocalization.string("토"),
+                                AppLocalization.string("일"),
+                            ], id: \.self
+                        ) { day in
                         Text(day).frame(height: 16)
                     }
                 }
@@ -613,18 +657,19 @@ private struct SettingsUsageHeatmap: View {
             }
             HStack(spacing: UMCSpacing.value4) {
                 Spacer(minLength: 0)
-                Text("적음")
+                Text(AppLocalization.string("적음"))
                 ForEach([0, 15, 35, 65, 110], id: \.self) { minutes in
                     RoundedRectangle(cornerRadius: UMCRadius.value4)
                         .fill(SettingsUsagePreview.color(minutes: minutes))
                         .frame(width: 16, height: 16)
                 }
-                Text("많음")
+                Text(AppLocalization.string("많음"))
             }
             .umcTypography(.captionRegular)
             .foregroundStyle(palette.textNeutralWeak500)
             .accessibilityElement(children: .ignore)
-            .accessibilityLabel("사용 시간 색상: 기록 없음, 30분 미만, 1시간 미만, 1시간 30분 미만, 그 이상")
+                .accessibilityLabel(
+                    AppLocalization.string("사용 시간 색상: 기록 없음, 30분 미만, 1시간 미만, 1시간 30분 미만, 그 이상"))
         }
     }
 }

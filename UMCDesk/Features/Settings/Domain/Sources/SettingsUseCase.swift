@@ -5,6 +5,7 @@
 //  Created by euijjang97 on 10/20/26.
 //
 
+import UMCFoundation
 import Foundation
 
 public protocol SettingsRepository: Sendable {
@@ -29,10 +30,10 @@ public enum SettingsError: Error, Equatable, Sendable, LocalizedError {
 
     public var errorDescription: String? {
         switch self {
-        case .authenticationRequired: "로그인이 필요해요."
-        case .invalidLink: "사용자 정보가 없는 올바른 HTTP(S) 주소를 입력해 주세요."
-        case .invalidChallengerCode: "발급받은 6자리 코드를 입력해 주세요."
-        case .serverLogoutFailed: "이 Mac에서 로그아웃했지만 서버의 토큰 폐기는 확인하지 못했어요."
+        case .authenticationRequired: AppLocalization.string("로그인이 필요해요.")
+        case .invalidLink: AppLocalization.string("사용자 정보가 없는 올바른 HTTP(S) 주소를 입력해 주세요.")
+        case .invalidChallengerCode: AppLocalization.string("발급받은 6자리 코드를 입력해 주세요.")
+        case .serverLogoutFailed: AppLocalization.string("이 Mac에서 로그아웃했지만 서버의 토큰 폐기는 확인하지 못했어요.")
         }
     }
 }

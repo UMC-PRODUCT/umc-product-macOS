@@ -12,11 +12,12 @@ struct SettingsCard<Content: View>: View {
     @Environment(\.settingsAppearancePalette) private var palette
     var isSubtle = false
     var minimumHeight: CGFloat?
+    var contentPadding: CGFloat = UMCSpacing.value24
     @ViewBuilder let content: Content
 
     var body: some View {
         content
-            .padding(UMCSpacing.value24)
+            .padding(contentPadding)
             .frame(maxWidth: .infinity, alignment: .leading)
             .frame(minHeight: minimumHeight, alignment: .topLeading)
             .background(
@@ -177,7 +178,8 @@ struct SettingsPlainButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .background(
-                isEnabled && (isHovered || isFocused || configuration.isPressed) ? (highlight ?? palette.fillNeutralWeakerHoverPressed) : .clear,
+                isEnabled && (isHovered || isFocused || configuration.isPressed)
+                    ? (highlight ?? palette.fillNeutralWeakerHoverPressed) : .clear,
                 in: .rect(cornerRadius: cornerRadius))
             .contentShape(.rect(cornerRadius: cornerRadius))
             .onHover { hovering in
@@ -255,5 +257,33 @@ struct SettingsAvatar: View {
                     .foregroundStyle(palette.iconNeutralMedium500)
             }
         }
+    }
+}
+
+/// Shared field geometry for settings selections, including the theme popover.
+struct SettingsSelectionField<Content: View>: View {
+    @Environment(\.settingsAppearancePalette) private var palette
+    @ViewBuilder var content: Content
+
+    var body: some View {
+        HStack(spacing: UMCSpacing.value8) {
+            content
+            Spacer(minLength: UMCSpacing.value8)
+            Image(systemName: "chevron.up.chevron.down")
+                .font(.system(size: 10, weight: .medium))
+                .foregroundStyle(palette.iconNeutralMedium500)
+                .accessibilityHidden(true)
+        }
+        .umcTypography(.headlineRegular)
+        .foregroundStyle(palette.textNeutralStrong800)
+        .padding(.horizontal, UMCSpacing.value12)
+        .frame(width: 268, height: 32)
+        .background(palette.backgroundSurfaceGreyWeaker,
+            in: .rect(cornerRadius: UMCRadius.value8))
+        .overlay {
+            RoundedRectangle(cornerRadius: UMCRadius.value8)
+                .strokeBorder(palette.borderNeutralWeak200, lineWidth: 1)
+        }
+        .contentShape(.rect)
     }
 }

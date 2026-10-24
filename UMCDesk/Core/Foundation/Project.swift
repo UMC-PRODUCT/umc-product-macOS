@@ -10,5 +10,8 @@ import ProjectDescriptionHelpers
 
 let project = coreProject(
     name: "UMCFoundation",
-    bundleIdSuffix: "foundation"
+    bundleIdSuffix: "foundation",
+    resources: ["Resources/**"],
+    includesTests: true,
+    settings: .settings(base: ["STRING_CATALOG_GENERATE_SYMBOLS": "NO"])
 )

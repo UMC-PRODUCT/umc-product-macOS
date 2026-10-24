@@ -5,6 +5,7 @@
 //  Created by euijjang97 on 10/6/26.
 //
 
+import UMCFoundation
 import SwiftUI
 import AppKit
 import AuthPresentation
@@ -30,6 +31,10 @@ struct UMCDeskApp: App {
         WindowGroup("UMC Desk", id: "main") {
             AppRootView(dependencies: dependencies)
                 .toggleStyle(UMCCheckboxStyle())
+                .environment(\.locale, AppLocalization.shared.language.locale)
+                .onChange(of: preferences.language) {
+                    dependencies.restoreSupportedFonts()
+                }
                 .preferredColorScheme(preferences.theme.colorScheme)
                 .environment(\.umcBodyTextScale, preferences.bodyTextSize.scale)
                 .environment(\.umcFontDesign, preferences.font.design)
@@ -53,6 +58,10 @@ struct UMCDeskApp: App {
         Settings {
             SettingsSceneView(dependencies: dependencies)
                 .toggleStyle(UMCCheckboxStyle())
+                .environment(\.locale, AppLocalization.shared.language.locale)
+                .onChange(of: preferences.language) {
+                    dependencies.restoreSupportedFonts()
+                }
                 .preferredColorScheme(preferences.theme.colorScheme)
                 .environment(\.umcBodyTextScale, preferences.bodyTextSize.scale)
                 .environment(\.umcFontDesign, preferences.font.design)
@@ -67,9 +76,13 @@ struct UMCDeskApp: App {
         .windowToolbarStyle(.unifiedCompact(showsTitle: false))
 
         #if DEBUG || UMC_PRERELEASE
-        Window("마이페이지·설정 프리뷰", id: "settings-design-preview") {
+        Window(AppLocalization.string("마이페이지·설정 프리뷰"), id: "settings-design-preview") {
             SettingsView(viewModel: dependencies.previewSettingsViewModel)
                 .toggleStyle(UMCCheckboxStyle())
+                .environment(\.locale, AppLocalization.shared.language.locale)
+                .onChange(of: preferences.language) {
+                    dependencies.restoreSupportedFonts()
+                }
                 .preferredColorScheme(previewPreferences.theme.colorScheme)
                 .environment(\.umcBodyTextScale, previewPreferences.bodyTextSize.scale)
                 .environment(\.umcFontDesign, previewPreferences.font.design)
@@ -81,7 +94,7 @@ struct UMCDeskApp: App {
         .windowStyle(.titleBar)
         .windowToolbarStyle(.unifiedCompact(showsTitle: false))
 
-        Window("타이포그래피 조절", id: "typography-preview") {
+        Window(AppLocalization.string("타이포그래피 조절"), id: "typography-preview") {
             AppTypographyPreviewControls(settings: $typographyPreview)
         }
         .windowResizability(.contentSize)
@@ -91,6 +104,10 @@ struct UMCDeskApp: App {
             "UMC Desk", systemImage: "square.grid.2x2", isInserted: $preferences.showsMenuBar
         ) {
             AppMenuBarContent(dependencies: dependencies)
+                .environment(\.locale, AppLocalization.shared.language.locale)
+                .onChange(of: preferences.language) {
+                    dependencies.restoreSupportedFonts()
+                }
         }
     }
 }
@@ -161,22 +178,24 @@ private struct AppMenuBarContent: View {
     @Environment(\.openSettings) private var openSettings
 
     var body: some View {
-        Button("UMC Desk 열기") {
+        Button(AppLocalization.string("UMC Desk 열기")) {
             openWindow(id: "main")
             NSApplication.shared.activate()
         }
-        Button("마이페이지") {
+        Button(AppLocalization.string("마이페이지")) {
             dependencies.settingsViewModel.showProfile()
             dependencies.navigation.showsSettings = true
             openWindow(id: "main")
             NSApplication.shared.activate()
         }
-        Button("설정…") {
+        Button(AppLocalization.string("설정…")) {
             dependencies.settingsViewModel.showSettings()
             openSettings()
         }
         Divider()
-        Button("UMC Desk 종료", role: .destructive) { NSApplication.shared.terminate(nil) }
+        Button(AppLocalization.string("UMC Desk 종료"), role: .destructive) {
+            NSApplication.shared.terminate(nil)
+        }
     }
 }
 
@@ -191,7 +210,7 @@ private struct AppSettingsCommands: Commands {
         @Bindable var preferences = dependencies.settingsPreferences
 
         CommandGroup(replacing: .appSettings) {
-            Button("설정…") {
+            Button(AppLocalization.string("설정…")) {
                 dependencies.settingsViewModel.showSettings()
                 openSettings()
             }
@@ -199,25 +218,25 @@ private struct AppSettingsCommands: Commands {
         }
         #if DEBUG || UMC_PRERELEASE
         CommandGroup(after: .sidebar) {
-            Button("마이페이지 프리뷰…") {
+            Button(AppLocalization.string("마이페이지 프리뷰…")) {
                 SettingsDesignPreview.prepareViewModel(
                     dependencies.previewSettingsViewModel, page: .myPage
                 )
                 openWindow(id: "settings-design-preview")
             }
-            Button("설정 프리뷰…") {
+            Button(AppLocalization.string("설정 프리뷰…")) {
                 SettingsDesignPreview.prepareViewModel(
                     dependencies.previewSettingsViewModel, page: .general
                 )
                 openWindow(id: "settings-design-preview")
             }
             Divider()
-            Picker("화면 모드", selection: $preferences.theme) {
-                Text("시스템 설정").tag(SettingsTheme.system)
-                Text("라이트").tag(SettingsTheme.light)
-                Text("다크").tag(SettingsTheme.dark)
+            Picker(AppLocalization.string("화면 모드"), selection: $preferences.theme) {
+                Text(AppLocalization.string("시스템 설정")).tag(SettingsTheme.system)
+                Text(AppLocalization.string("라이트")).tag(SettingsTheme.light)
+                Text(AppLocalization.string("다크")).tag(SettingsTheme.dark)
             }
-            Button("타이포그래피 조절…") { openWindow(id: "typography-preview") }
+            Button(AppLocalization.string("타이포그래피 조절…")) { openWindow(id: "typography-preview") }
         }
         #endif
     }

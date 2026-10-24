@@ -7,6 +7,7 @@
 
 #if DEBUG || UMC_PRERELEASE
 import SwiftUI
+import UMCFoundation
 
 enum AuthPreviewScenario: String, CaseIterable, Identifiable {
     case success = "정상 진행"
@@ -23,6 +24,24 @@ enum AuthPreviewScenario: String, CaseIterable, Identifiable {
     case updateInstallationError = "업데이트 설치 실패"
 
     var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .success: AppLocalization.string("정상 진행")
+        case .offline: AppLocalization.string("인터넷 연결 실패")
+        case .loginFailure: AppLocalization.string("소셜 로그인 실패")
+        case .credentialsError: AppLocalization.string("이메일·비밀번호 불일치")
+        case .memberFailure: AppLocalization.string("회원 정보 확인 실패")
+        case .sessionExpired: AppLocalization.string("세션 만료")
+        case .signupLoginFailure: AppLocalization.string("가입 후 로그인 실패")
+        case .challengerCodeError: AppLocalization.string("챌린저 코드 오류")
+        case .challengerPending: AppLocalization.string("챌린저 승인 대기")
+        case .updateDownloadError: AppLocalization.string("다운로드 실패")
+        case .updateVerificationError: AppLocalization.string("업데이트 파일 확인 실패")
+        case .updateInstallationError: AppLocalization.string("업데이트 설치 실패")
+        }
+    }
+
 
     func destination(after screen: AuthScreen) -> AuthScreen? {
         switch (screen, self) {
@@ -91,26 +110,32 @@ struct AuthPreviewFlowMenu: View {
     @Bindable var viewModel: AuthViewModel
 
     var body: some View {
-        Menu("흐름 미리보기", systemImage: "play.rectangle") {
-            Picker("다음 실행 결과", selection: $viewModel.previewScenario) {
+        Menu(AppLocalization.string("흐름 미리보기"), systemImage: "play.rectangle") {
+            Picker(AppLocalization.string("다음 실행 결과"), selection: $viewModel.previewScenario) {
                 ForEach(AuthPreviewScenario.allCases) { scenario in
-                    Text(scenario.rawValue).tag(scenario)
+                    Text(scenario.title).tag(scenario)
                 }
             }
             Divider()
             if !viewModel.playsPreviewFlow {
-                Button("현재 화면 이어서 재생") { viewModel.navigate(to: viewModel.screen) }
+                    Button(AppLocalization.string("현재 화면 이어서 재생")) {
+                        viewModel.navigate(to: viewModel.screen)
+                    }
             }
-            Button("로그인 처음부터") {
+            Button(AppLocalization.string("로그인 처음부터")) {
                 viewModel.navigate(to: .loginSelection, resetsForm: true)
             }
-            Button("저장된 로그인 확인") { viewModel.navigate(to: .sessionChecking) }
-            Button("업데이트 흐름") { viewModel.navigate(to: .updateAvailable) }
-            Button("서비스 점검") { viewModel.navigate(to: .maintenance) }
-            Button("로그아웃") { viewModel.navigate(to: .logoutConfirmation) }
-            Button("회원 탈퇴") { viewModel.navigate(to: .withdrawalConfirmation) }
+                Button(AppLocalization.string("저장된 로그인 확인")) {
+                    viewModel.navigate(to: .sessionChecking)
+                }
+            Button(AppLocalization.string("업데이트 흐름")) { viewModel.navigate(to: .updateAvailable) }
+            Button(AppLocalization.string("서비스 점검")) { viewModel.navigate(to: .maintenance) }
+            Button(AppLocalization.string("로그아웃")) { viewModel.navigate(to: .logoutConfirmation) }
+                Button(AppLocalization.string("회원 탈퇴")) {
+                    viewModel.navigate(to: .withdrawalConfirmation)
+                }
         }
-        .help("UI 흐름 재생 · 이메일 인증번호 123456 · 오류는 재시도로 복구됩니다.")
+        .help(AppLocalization.string("UI 흐름 재생 · 이메일 인증번호 123456 · 오류는 재시도로 복구됩니다."))
     }
 }
 #endif

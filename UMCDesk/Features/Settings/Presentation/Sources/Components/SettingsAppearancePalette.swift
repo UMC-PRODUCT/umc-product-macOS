@@ -26,12 +26,13 @@ struct SettingsAppearancePalette: Equatable {
     }
     var backgroundDefault: Color { colors == nil ? UMCColor.Custom.backgroundDefault : background }
     var backgroundSurfaceWhite: Color {
-        colors == nil ? UMCColor.Custom.backgroundSurfaceWhite :
-            background
+        guard let colors else { return UMCColor.Custom.backgroundSurfaceWhite }
+        return mixedBackground(with: .init(red: 1, green: 1, blue: 1),
+            amount: colors.background.luminance > 0.179 ? 0.65 : 0.08)
     }
     var backgroundSurfaceGreyWeaker: Color {
-        colors == nil ? UMCColor.Custom.backgroundSurfaceGreyWeaker :
-            background
+        guard let colors else { return UMCColor.Custom.backgroundSurfaceGreyWeaker }
+        return mixedBackground(with: colors.foreground, amount: 0.05)
     }
     var backgroundSurfaceGreyWeak: Color {
         colors == nil ? UMCColor.Custom.backgroundSurfaceGreyWeak :
@@ -97,6 +98,19 @@ struct SettingsAppearancePalette: Equatable {
     var iconNeutralMedium500: Color {
         colors == nil ? UMCColor.Semantic.iconNeutralMedium500 :
             foreground
+    }
+
+    private func mixedBackground(with tint: SettingsThemeColor, amount: Double) -> Color {
+        guard let colors else { return background }
+        let base = colors.background
+        let surface = SettingsThemeColor(
+            red: base.red + (tint.red - base.red) * amount,
+            green: base.green + (tint.green - base.green) * amount,
+            blue: base.blue + (tint.blue - base.blue) * amount
+        )
+        let minimumContrast = min(colors.contrast, 4.5)
+        return surface.contrast(with: colors.foreground) >= minimumContrast ?
+            surface.color : base.color
     }
 }
 

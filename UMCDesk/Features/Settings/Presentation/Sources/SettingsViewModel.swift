@@ -36,9 +36,15 @@ public final class SettingsViewModel {
     public private(set) var page: SettingsPage = .general
     public private(set) var profile: SettingsProfile?
     var profileState: Loadable<SettingsProfile> = .idle
-    var searchText = "" { didSet { searchResults = SettingsPage.search(searchText) } }
-    private(set) var searchResults: [SettingsSearchResult] = []
-    private(set) var recentSearchItems: [SettingsSearchResult] = []
+    var searchText = ""
+    var searchResults: [SettingsSearchResult] { SettingsPage.search(searchText) }
+    private var recentSearchIdentifiers: [String] = []
+    var recentSearchItems: [SettingsSearchResult] {
+        let items = SettingsSearchResult.items
+        return recentSearchIdentifiers.compactMap { identifier in
+            items.first { $0.id == identifier }
+        }
+    }
     var isSearching: Bool {
         !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
@@ -116,13 +122,13 @@ public final class SettingsViewModel {
         (cacheBytes ?? 0) > 0 && !isRefreshingCache && !isClearingCache && !cacheLoadFailed
     }
     var cacheSizeText: String {
-        if isRefreshingCache { return "확인 중" }
-        if isClearingCache { return "삭제 중" }
-        if cacheLoadFailed { return "확인 실패" }
+        if isRefreshingCache { return AppLocalization.string("확인 중") }
+        if isClearingCache { return AppLocalization.string("삭제 중") }
+        if cacheLoadFailed { return AppLocalization.string("확인 실패") }
         if cacheBytes == 0 { return "0 KB" }
         return cacheBytes.map {
             ByteCountFormatter.string(fromByteCount: $0, countStyle: .file)
-        } ?? "확인 전"
+        } ?? AppLocalization.string("확인 전")
     }
 
     // MARK: - Function
@@ -137,9 +143,9 @@ public final class SettingsViewModel {
     }
 
     func selectSearchResult(_ result: SettingsSearchResult) {
-        recentSearchItems.removeAll { $0.id == result.id }
-        recentSearchItems.insert(result, at: 0)
-        recentSearchItems = Array(recentSearchItems.prefix(5))
+        recentSearchIdentifiers.removeAll { $0 == result.id }
+        recentSearchIdentifiers.insert(result.id, at: 0)
+        recentSearchIdentifiers = Array(recentSearchIdentifiers.prefix(5))
         navigate(to: result.page)
     }
 
@@ -187,7 +193,7 @@ public final class SettingsViewModel {
             }
             profile = updated
             profileState = .loaded(updated)
-            if showsToast { toast = .init(message: "최신 정보로 업데이트했어요.") }
+            if showsToast { toast = .init(message: AppLocalization.string("최신 정보로 업데이트했어요.")) }
         } catch {
             guard generation == accountGeneration else { return }
             if Task.isCancelled {
@@ -197,7 +203,8 @@ public final class SettingsViewModel {
             if await handleAuthentication(error) { return }
             profileState = .failed(error)
             if showsToast {
-                toast = .init(message: "새로고침하지 못했어요. 다시 시도해 주세요.", isError: true)
+                toast = .init(
+                    message: AppLocalization.string("새로고침하지 못했어요. 다시 시도해 주세요."), isError: true)
             }
         }
     }
@@ -229,8 +236,8 @@ public final class SettingsViewModel {
             let value = linkDraft[kind].trimmingCharacters(in: .whitespacesAndNewlines)
             linkDraft[kind] = value
             if !value.isEmpty, DefaultSettingsUseCase.validatedWebURL(value) == nil {
-                linkErrors[kind] = "https:// 또는 http://로 시작하는 링크를 입력해 주세요. "
-                    + "로그인 정보가 포함된 주소는 사용할 수 없어요."
+                linkErrors[kind] = AppLocalization.string(
+                    "https:// 또는 http://로 시작하는 링크를 입력해 주세요. 로그인 정보가 포함된 주소는 사용할 수 없어요.")
             }
         }
         guard linkErrors.isEmpty else { return }
@@ -247,11 +254,11 @@ public final class SettingsViewModel {
             profileState = .loaded(updated)
             dialog = nil
             linkDraft = .init()
-            toast = .init(message: "프로필 링크를 저장했어요.")
+            toast = .init(message: AppLocalization.string("프로필 링크를 저장했어요."))
         } catch {
             guard generation == accountGeneration, !Task.isCancelled else { return }
             if !(await handleAuthentication(error)) {
-                dialogMessage = "저장하지 못했어요. 입력한 내용은 유지되니 다시 시도해 주세요."
+                dialogMessage = AppLocalization.string("저장하지 못했어요. 입력한 내용은 유지되니 다시 시도해 주세요.")
             }
         }
     }
@@ -279,8 +286,8 @@ public final class SettingsViewModel {
             guard generation == accountGeneration else { return }
             codeStep = .registeredNeedsRefresh
             guard !Task.isCancelled else {
-                dialogMessage = "코드는 등록됐어요. 활동 정보를 불러오지 못했어요. "
-                    + "코드를 다시 등록할 필요 없이 다시 불러와 주세요."
+                dialogMessage = AppLocalization.string(
+                    "코드는 등록됐어요. 활동 정보를 불러오지 못했어요. 코드를 다시 등록할 필요 없이 다시 불러와 주세요.")
                 return
             }
             await fetchRegisteredProfile(generation: generation)
@@ -313,7 +320,7 @@ public final class SettingsViewModel {
             try await useCase.logout()
             guard generation == accountGeneration else { return }
             await finishLogout()
-            toast = .init(message: "로그아웃했어요.")
+            toast = .init(message: AppLocalization.string("로그아웃했어요."))
         } catch SettingsError.serverLogoutFailed {
             guard generation == accountGeneration else { return }
             await finishLogout()
@@ -321,7 +328,7 @@ public final class SettingsViewModel {
                 isError: true)
         } catch {
             guard generation == accountGeneration else { return }
-            dialogMessage = "로그아웃하지 못했어요. 다시 시도해 주세요."
+            dialogMessage = AppLocalization.string("로그아웃하지 못했어요. 다시 시도해 주세요.")
         }
     }
 
@@ -334,7 +341,9 @@ public final class SettingsViewModel {
         isChangingLoginItem = true
         defer { isChangingLoginItem = false }
         do { try await systemActions.setLaunchAtLogin(enabled) }
-        catch { toast = .init(message: "로그인 항목을 변경하지 못했어요.", isError: true) }
+        catch {
+            toast = .init(message: AppLocalization.string("로그인 항목을 변경하지 못했어요."), isError: true)
+        }
         await refreshSystemStatus()
     }
 
@@ -345,13 +354,15 @@ public final class SettingsViewModel {
         isRequestingNotifications = true
         defer { isRequestingNotifications = false }
         do { try await systemActions.requestNotificationAuthorization() }
-        catch { toast = .init(message: "알림 권한을 요청하지 못했어요.", isError: true) }
+        catch {
+            toast = .init(message: AppLocalization.string("알림 권한을 요청하지 못했어요."), isError: true)
+        }
         await refreshSystemStatus()
     }
 
     func openSystemSettings(_ destination: SettingsSystemDestination) {
         if !systemActions.openSystemSettings(destination) {
-            toast = .init(message: "시스템 설정을 열지 못했어요.", isError: true)
+            toast = .init(message: AppLocalization.string("시스템 설정을 열지 못했어요."), isError: true)
         }
     }
 
@@ -383,18 +394,18 @@ public final class SettingsViewModel {
         do {
             try await systemActions.clearCache()
         } catch {
-            dialogMessage = "캐시를 정리하지 못했어요. 다시 시도해 주세요."
+            dialogMessage = AppLocalization.string("캐시를 정리하지 못했어요. 다시 시도해 주세요.")
             return
         }
         dialog = nil
         do {
             cacheBytes = try await systemActions.cacheSize()
             cacheLoadFailed = false
-            toast = .init(message: "임시 캐시를 삭제했어요.")
+            toast = .init(message: AppLocalization.string("임시 캐시를 삭제했어요."))
         } catch {
             cacheBytes = nil
             cacheLoadFailed = true
-            toast = .init(message: "캐시를 삭제했지만 용량을 확인하지 못했어요. 다시 확인해 주세요.",
+            toast = .init(message: AppLocalization.string("캐시를 삭제했지만 용량을 확인하지 못했어요. 다시 확인해 주세요."),
                 isError: true)
         }
     }
@@ -408,10 +419,10 @@ public final class SettingsViewModel {
         do {
             release = try await systemActions.latestRelease()
             releaseCheckedAt = .now
-            releaseMessage = release == nil ? "아직 게시된 릴리스가 없어요." : nil
+            releaseMessage = release == nil ? AppLocalization.string("아직 게시된 릴리스가 없어요.") : nil
         } catch {
             releaseFailed = true
-            releaseMessage = "업데이트를 확인하지 못했어요. 다시 시도해 주세요."
+            releaseMessage = AppLocalization.string("업데이트를 확인하지 못했어요. 다시 시도해 주세요.")
         }
     }
 
@@ -429,8 +440,8 @@ public final class SettingsViewModel {
         } catch {
             guard generation == accountGeneration, !Task.isCancelled else { return }
             if !(await handleAuthentication(error)) {
-                dialogMessage = "코드는 등록됐어요. 활동 정보를 불러오지 못했어요. "
-                    + "코드를 다시 등록할 필요 없이 다시 불러와 주세요."
+                dialogMessage = AppLocalization.string(
+                    "코드는 등록됐어요. 활동 정보를 불러오지 못했어요. 코드를 다시 등록할 필요 없이 다시 불러와 주세요.")
             }
         }
     }
@@ -468,6 +479,6 @@ public final class SettingsViewModel {
 
     private func codeErrorMessage(_ error: any Error) -> String {
         if let repositoryError = error as? RepositoryError { return repositoryError.userMessage }
-        return "코드를 등록하지 못했어요. 코드를 확인한 뒤 다시 시도해 주세요."
+        return AppLocalization.string("코드를 등록하지 못했어요. 코드를 확인한 뒤 다시 시도해 주세요.")
     }
 }

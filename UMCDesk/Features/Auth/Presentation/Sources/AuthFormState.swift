@@ -5,6 +5,7 @@
 //  Created by euijjang97 on 10/10/26.
 //
 
+import UMCFoundation
 import Foundation
 import Observation
 
@@ -92,10 +93,10 @@ enum AuthField: Hashable {
 final class AuthViewModel {
     var screen: AuthScreen = .loginSelection
     var form = AuthFormState()
-    var socialProvider = "카카오"
+    var socialProvider = "Kakao"
     var downloadProgress = 0.0
-    var quoteOverride: String?
-    var authorOverride: String?
+    var quoteOverride: String.LocalizationValue?
+    var authorOverride: String.LocalizationValue?
     private(set) var navigationID = UUID()
     private var accountReturnScreen: AuthScreen = .challengerIntro
 
