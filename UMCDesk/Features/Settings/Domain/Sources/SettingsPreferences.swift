@@ -30,6 +30,11 @@ public enum SettingsLaunchPage: String, CaseIterable, Identifiable, Sendable {
     public var id: String { rawValue }
 }
 
+public enum SettingsWindowCloseBehavior: String, CaseIterable, Identifiable, Sendable {
+    case keepRunning, quit
+    public var id: String { rawValue }
+}
+
 @MainActor
 @Observable
 public final class SettingsPreferences {
@@ -40,6 +45,9 @@ public final class SettingsPreferences {
     }
     public var launchPage: SettingsLaunchPage {
         didSet { save(launchPage.rawValue, key: "launchPage") }
+    }
+    public var windowCloseBehavior: SettingsWindowCloseBehavior {
+        didSet { save(windowCloseBehavior.rawValue, key: "windowCloseBehavior") }
     }
     public var showsMenuBar: Bool { didSet { save(showsMenuBar, key: "showsMenuBar") } }
     public var attendanceNotifications: Bool {
@@ -62,7 +70,18 @@ public final class SettingsPreferences {
             .flatMap(SettingsBodyTextSize.init) ?? .standard
         launchPage = defaults.string(forKey: "settings.launchPage")
             .flatMap(SettingsLaunchPage.init) ?? .login
-        showsMenuBar = defaults.object(forKey: "settings.showsMenuBar") as? Bool ?? true
+        let storedShowsMenuBar = defaults.object(forKey: "settings.showsMenuBar") as? Bool ?? true
+        showsMenuBar = storedShowsMenuBar
+        let storedWindowCloseBehavior = defaults.string(forKey: "settings.windowCloseBehavior")
+            .flatMap(SettingsWindowCloseBehavior.init)
+        let resolvedWindowCloseBehavior = storedWindowCloseBehavior ??
+            (storedShowsMenuBar ? .keepRunning : .quit)
+        windowCloseBehavior = resolvedWindowCloseBehavior
+        if storedWindowCloseBehavior == nil {
+            defaults.set(
+                resolvedWindowCloseBehavior.rawValue, forKey: "settings.windowCloseBehavior"
+            )
+        }
         attendanceNotifications = defaults.object(forKey: "settings.attendanceNotifications")
             as? Bool ?? true
         noticeNotifications = defaults.object(forKey: "settings.noticeNotifications")

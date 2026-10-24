@@ -60,6 +60,8 @@ public final class SettingsViewModel {
     private(set) var isRequestingNotifications = false
     private(set) var cacheBytes: Int64?
     private(set) var isClearingCache = false
+    private(set) var isRefreshingCache = false
+    private(set) var cacheLoadFailed = false
     private(set) var isCheckingRelease = false
     private(set) var release: SettingsRelease?
     private(set) var releaseCheckedAt: Date?
@@ -105,10 +107,20 @@ public final class SettingsViewModel {
         challengerCode.trimmingCharacters(in: .whitespacesAndNewlines).count == 6
             && !isRegistering && codeStep == .entry
     }
+    var isDefaultAppearance: Bool {
+        preferences.theme == .system && preferences.bodyTextSize == .standard
+    }
+    var canClearCache: Bool {
+        (cacheBytes ?? 0) > 0 && !isRefreshingCache && !isClearingCache && !cacheLoadFailed
+    }
     var cacheSizeText: String {
-        cacheBytes.map {
+        if isRefreshingCache { return "확인 중" }
+        if isClearingCache { return "삭제 중" }
+        if cacheLoadFailed { return "확인 실패" }
+        if cacheBytes == 0 { return "0 KB" }
+        return cacheBytes.map {
             ByteCountFormatter.string(fromByteCount: $0, countStyle: .file)
-        } ?? "확인 중"
+        } ?? "확인 전"
     }
 
     // MARK: - Function
@@ -341,26 +353,44 @@ public final class SettingsViewModel {
         }
     }
 
+    func resetAppearance() {
+        preferences.theme = .system
+        preferences.bodyTextSize = .standard
+    }
+
     func refreshCacheSize() async {
+        guard !isRefreshingCache, !isClearingCache else { return }
+        isRefreshingCache = true
+        cacheLoadFailed = false
+        defer { isRefreshingCache = false }
         do { cacheBytes = try await systemActions.cacheSize() }
         catch {
             cacheBytes = nil
-            toast = .init(message: "캐시 용량을 확인하지 못했어요.", isError: true)
+            cacheLoadFailed = true
         }
     }
 
     func clearCache() async {
-        guard !isClearingCache else { return }
+        guard canClearCache else { return }
         isClearingCache = true
         dialogMessage = nil
         defer { isClearingCache = false }
         do {
             try await systemActions.clearCache()
-            cacheBytes = try await systemActions.cacheSize()
-            dialog = nil
-            toast = .init(message: "임시 캐시를 삭제했어요.")
         } catch {
             dialogMessage = "캐시를 정리하지 못했어요. 다시 시도해 주세요."
+            return
+        }
+        dialog = nil
+        do {
+            cacheBytes = try await systemActions.cacheSize()
+            cacheLoadFailed = false
+            toast = .init(message: "임시 캐시를 삭제했어요.")
+        } catch {
+            cacheBytes = nil
+            cacheLoadFailed = true
+            toast = .init(message: "캐시를 삭제했지만 용량을 확인하지 못했어요. 다시 확인해 주세요.",
+                isError: true)
         }
     }
 

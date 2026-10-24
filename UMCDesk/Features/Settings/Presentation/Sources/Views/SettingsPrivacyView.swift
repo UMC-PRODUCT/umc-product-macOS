@@ -29,15 +29,15 @@ struct SettingsPrivacyView: View {
                     VStack(spacing: UMCSpacing.value12) {
                         SettingsRow(title: "임시 캐시", description: "앱 전용 임시 캐시 폴더의 파일만 정리해요.") {
                             SettingsStatusText(text: viewModel.cacheSizeText)
+                            SettingsActionButton(title: "다시 확인") {
+                                Task { await viewModel.refreshCacheSize() }
+                            }
+                            .disabled(viewModel.isRefreshingCache || viewModel.isClearingCache)
                             SettingsActionButton(title: "삭제") {
                                 viewModel.dialogMessage = nil
                                 viewModel.dialog = .clearCache
                             }
-                            .disabled(viewModel.cacheBytes == nil || viewModel.isClearingCache)
-                        }
-                        SettingsDivider()
-                        SettingsRow(title: "개인 프로젝트", description: "개인 프로젝트는 아직 제공하지 않아요.") {
-                            SettingsStatusText(text: "준비 중")
+                            .disabled(!viewModel.canClearCache)
                         }
                     }
                 }

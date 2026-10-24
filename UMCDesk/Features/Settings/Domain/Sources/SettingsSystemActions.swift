@@ -36,7 +36,7 @@ public struct SettingsSystemStatus: Equatable, Sendable {
 }
 
 public enum SettingsSystemDestination: Sendable {
-    case loginItems, notifications, location, accessibility
+    case loginItems, notifications, location, accessibility, defaultBrowser
 }
 
 public struct SettingsRelease: Equatable, Sendable {
