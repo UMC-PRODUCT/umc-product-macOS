@@ -149,3 +149,12 @@ graph.png
 
 # The checked-in app configuration contains defaults only.
 !UMCDesk/Secrets/Shared.xcconfig
+
+# UI verification captures belong in an external temporary directory.
+/docs/screenshots/
+/docs/images/
+/docs/assets/auth*.png
+/docs/assets/auth-figma-refresh/
+/docs/assets/auth-responsive/
+/docs/assets/profile-links/
+/docs/assets/settings-figma/
