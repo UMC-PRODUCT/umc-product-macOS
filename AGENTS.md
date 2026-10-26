@@ -91,6 +91,8 @@ View ←→ ViewModel(@Observable) → UseCase(Protocol) → Repository → Data
     사진을 포함해 Figma에서 내려받는 앱 이미지 에셋은 PNG 대신 PDF로 Export한다.
     원본이 벡터면 벡터 정보를 유지하고 Asset Catalog의 `preserves-vector-representation`을 켠다.
     PNG의 확장자만 PDF로 바꾸지 않는다. AppIcon·문서·스크린샷·DMG 그래픽은 각 용도에 맞는 포맷을 따른다.
+    UI 검증용 스크린샷·화면 녹화는 저장소 안에 저장하거나 Git에 추가하지 않는다.
+    캡처가 필요하면 `/tmp` 등 저장소 밖의 임시 디렉터리를 사용한다.
 
 12. **`GeometryReader` 사용 금지** — 화면·컴포넌트의 크기 계산과 배치를 위해 사용하지 않는다.
     `background`·`overlay`에 숨겨 크기를 측정하는 방식도 금지한다. 창·스크롤 컨테이너에
