@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import MatchingDomain
 import Testing
 import SettingsDomain
 @testable import SettingsPresentation
@@ -24,10 +25,54 @@ struct AppDependenciesTests {
         ))
         #expect(viewModel.profile != nil)
         let relay = AppSessionResetRelay()
+        let navigation = AppNavigation(launchPage: .myPage)
+        navigation.openMatching(.applications)
+        relay.navigation = navigation
         relay.settingsViewModel = viewModel
         await relay.reset()
         #expect(viewModel.profile == nil)
+        #expect(navigation.matchingDestination == nil)
         #expect(preferences.showsMenuBar)
+    }
+
+    @Test("Elapsed publication time and stale responses never reveal a personal decision")
+    func progressRequiresFreshPersonalResult() {
+        let now = Date()
+        let round = MatchingRound(
+            id: "7", name: "1차", type: "PLAN_DESIGN", phase: "FIRST", chapterId: "2",
+            startsAt: "2020-01-01T00:00:00Z", endsAt: "2020-01-02T00:00:00Z",
+            decisionDeadline: "2020-01-03T00:00:00Z", resultPublishAt: "2020-01-04T00:00:00Z"
+        )
+        func progress(status: String?, unavailable: Bool = false) -> MatchingProgressStage {
+            let card = MatchingApplication(
+                applicationId: "15", projectId: "9", project: nil, matchingRound: nil, status: status
+            )
+            return .init(signedIn: true, unavailable: unavailable, lastChecked: now,
+                         card: card, round: round, now: now)
+        }
+        #expect(progress(status: nil).title == "발표 대기")
+        #expect(progress(status: nil).next == nil)
+        #expect(progress(status: "APPROVED").title == "합격")
+        #expect(progress(status: "APPROVED", unavailable: true).title == "연결 확인 중")
+    }
+
+    @Test("Published team membership overrides a past rejection even without a stored round")
+    func legacyAssignedMember() {
+        let assigned = MatchingApplication(
+            applicationId: nil, projectId: "9", project: nil, matchingRound: nil, status: "APPROVED"
+        )
+        let rejected = MatchingApplication(
+            applicationId: "15", projectId: "2", project: nil,
+            matchingRound: .init(id: "7", type: "PLAN_DESIGN", phase: "THIRD"), status: "REJECTED"
+        )
+        let round = MatchingRound(
+            id: "7", name: "3차", type: "PLAN_DESIGN", phase: "THIRD", chapterId: "2",
+            startsAt: "2026-11-01T00:00:00Z", endsAt: "2026-11-02T00:00:00Z",
+            decisionDeadline: nil, resultPublishAt: nil
+        )
+        #expect(MatchingProgressController.currentCard(
+            [rejected, assigned], rounds: ["7": round]
+        ) == assigned)
     }
 
     @Test("Missing or invalid preview arguments show all parts and roles in isolation")

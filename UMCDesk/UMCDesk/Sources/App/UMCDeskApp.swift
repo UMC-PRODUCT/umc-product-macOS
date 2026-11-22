@@ -11,6 +11,8 @@ import AppKit
 import AuthPresentation
 import CoreDesignSystem
 import CoreUIComponents
+import MatchingDomain
+import MatchingPresentation
 import SettingsDomain
 import SettingsPresentation
 
@@ -118,13 +120,66 @@ private struct AppRootView: View {
 
     var body: some View {
         Group {
-            if dependencies.navigation.showsSettings {
-                SettingsView(viewModel: dependencies.settingsViewModel)
+            #if DEBUG
+            if ProcessInfo.processInfo.arguments.contains("--matching-preview") {
+                let args = ProcessInfo.processInfo.arguments
+                let pages: [(String, MatchingDestination)] = [
+                    ("--matching-applications", .applications), ("--matching-schedule", .schedule),
+                    ("--matching-management", .management), ("--matching-status", .status)
+                ]
+                let page = pages.first { args.contains($0.0) }?.1 ?? .explore
+                SettingsView(
+                    viewModel: dependencies.previewSettingsViewModel,
+                    onOpenMatching: {},
+                    matchingContent: AnyView(MatchingDesignPreview.view(
+                        destination: page, showsDetail: args.contains("--matching-detail")
+                    ))
+                )
+                .environment(\.colorScheme, args.contains("--matching-dark") ? .dark : .light)
             } else {
-                AuthView()
+                liveRoot
+            }
+            #else
+            liveRoot
+            #endif
+        }
+        .onAppear {
+            configureLoginAction()
+            dependencies.matchingProgress.openApplications = {
+                dependencies.navigation.openMatching(.applications)
+                openWindow(id: "main")
+                NSApplication.shared.activate()
             }
         }
-        .onAppear { configureLoginAction() }
+        .onChange(of: progressAccount, initial: true) {
+            dependencies.matchingProgress.setAccount(progressAccount)
+        }
+    }
+
+    @ViewBuilder private var liveRoot: some View {
+        if dependencies.navigation.showsSettings {
+            SettingsView(
+                viewModel: dependencies.settingsViewModel,
+                onOpenMatching: { dependencies.navigation.openMatching() },
+                onOpenSettingsPage: { dependencies.navigation.matchingDestination = nil },
+                matchingContent: dependencies.navigation.matchingDestination.map { destination in
+                    AnyView(MatchingWorkspace(
+                        repository: dependencies.matchingUseCase, destination: destination,
+                        memberId: dependencies.settingsViewModel.profile?.id
+                    )
+                    .id(dependencies.navigation.matchingNavigationID)
+                    .id(dependencies.settingsViewModel.profile?.id))
+                }
+            )
+        } else {
+            AuthView()
+        }
+    }
+
+    private var progressAccount: String? {
+        guard dependencies.navigation.showsSettings, dependencies.settingsPreferences.showsMenuBar,
+              !dependencies.isSettingsPreview else { return nil }
+        return dependencies.settingsViewModel.profile?.id
     }
 
     private func configureLoginAction() {
@@ -136,12 +191,54 @@ private struct AppRootView: View {
     }
 }
 
+private struct MatchingWorkspace: View {
+    let repository: any MatchingUseCase
+    let destination: MatchingDestination
+    let memberId: String?
+    @State private var gisuId: String?
+    @State private var errorMessage: String?
+    @State private var attempt = 0
+
+    var body: some View {
+        Group {
+            if let gisuId {
+                MatchingView(repository: repository, gisuId: gisuId,
+                             initialDestination: destination, memberId: memberId)
+            } else if let errorMessage {
+                ContentUnavailableView {
+                    Label("활동 기수를 불러올 수 없어요", systemImage: "calendar")
+                } description: {
+                    Text(errorMessage)
+                } actions: {
+                    Button("다시 시도") { attempt += 1 }
+                }
+            } else {
+                ProgressView("활동 기수 확인 중")
+            }
+        }
+        .task(id: attempt) {
+            errorMessage = nil
+            do {
+                let activeId = try await repository.activeGisuId()
+                try Task.checkCancellation()
+                gisuId = activeId
+            } catch {
+                if !Task.isCancelled { errorMessage = error.localizedDescription }
+            }
+        }
+    }
+}
+
 private struct SettingsSceneView: View {
     let dependencies: AppDependencies
     @Environment(\.openWindow) private var openWindow
 
     var body: some View {
-        SettingsView(viewModel: dependencies.settingsViewModel)
+        SettingsView(viewModel: dependencies.settingsViewModel, onOpenMatching: {
+            dependencies.navigation.openMatching()
+            openWindow(id: "main")
+            NSApplication.shared.activate()
+        })
             .background(SettingsWindowToolbar())
             .onAppear {
                 dependencies.settingsViewModel.showSettings()
@@ -182,7 +279,16 @@ private struct AppMenuBarContent: View {
             openWindow(id: "main")
             NSApplication.shared.activate()
         }
+        Button("매칭 진행 현황") {
+            dependencies.matchingProgress.showExpanded()
+        }
+        Button("내 매칭 지원") {
+            dependencies.navigation.openMatching(.applications)
+            openWindow(id: "main")
+            NSApplication.shared.activate()
+        }
         Button(AppLocalization.string("마이페이지")) {
+            dependencies.navigation.matchingDestination = nil
             dependencies.settingsViewModel.showProfile()
             dependencies.navigation.showsSettings = true
             openWindow(id: "main")
