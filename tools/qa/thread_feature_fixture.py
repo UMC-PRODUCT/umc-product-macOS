@@ -47,7 +47,8 @@ def handle(handler, method, path, query, body, member_id):
     prepare = path == "/api/v1/storage/prepare-upload" and body.get("category") == "POST_IMAGE"
     confirm = re.fullmatch(r"/api/v1/storage/([a-f0-9-]{36})/confirm", path)
     if not (path == _THREADS or path.startswith(_THREADS + "/")
-            or re.fullmatch(r"/api/v1/member/profile/\d+", path) or prepare or confirm):
+            or management.safety_route(path) or re.fullmatch(r"/api/v1/member/profile/\d+", path)
+            or prepare or confirm):
         return False
     if not member_id:
         return send(401)

@@ -17,15 +17,18 @@ public struct ThreadConversationView: View {
     private let accountID: String
     private let repository: any ThreadConversationRepository
 
+    private let management: (any ThreadManagementRepository)?
     private let defaults: UserDefaults
 
     public init(
         thread: CommunityThread, accountID: String,
-        repository: any ThreadConversationRepository, defaults: UserDefaults = .standard
+        repository: any ThreadConversationRepository, management: (any ThreadManagementRepository)? = nil,
+        defaults: UserDefaults = .standard
     ) {
         self.thread = thread
         self.accountID = accountID
         self.repository = repository
+        self.management = management
         self.defaults = defaults
     }
 
@@ -36,7 +39,7 @@ public struct ThreadConversationView: View {
             ContentUnavailableView("참여자만 대화를 볼 수 있어요", systemImage: "lock")
         } else {
             ConversationTimeline(thread: thread, accountID: accountID, repository: repository,
-                                 defaults: defaults)
+                                 management: management, defaults: defaults)
                 .id(ObjectIdentifier(defaults))
                 .id([accountID, thread.id, thread.membershipState ?? "", String(thread.isJoined)])
         }
@@ -50,6 +53,8 @@ private struct ConversationTimeline: View {
     @State private var mentioning = false
     @State private var unavailableSummary = false
     @State private var confirmingPhotos = false
+    let management: (any ThreadManagementRepository)?
+    @State private var reporting: ThreadConversationMessage?
     @State private var editing: ThreadConversationMessage?
     @State private var deleting: ThreadConversationMessage?
     @State private var preview: ThreadConversationFile?
@@ -57,7 +62,8 @@ private struct ConversationTimeline: View {
     @State private var summaryRequested = false
 
     init(thread: CommunityThread, accountID: String, repository: any ThreadConversationRepository,
-         defaults: UserDefaults) {
+         management: (any ThreadManagementRepository)?, defaults: UserDefaults) {
+        self.management = management
         self.thread = thread
         _model = State(
             initialValue: ThreadConversationModel(
@@ -163,6 +169,11 @@ private struct ConversationTimeline: View {
         ) { message in
             Button("삭제", role: .destructive) { model.perform(.delete(message: message.id)) }
         }
+        .sheet(item: $reporting) { message in
+            if let management {
+                ThreadReportSheet(target: .message(message.id), repository: management)
+            }
+        }
         .sheet(item: $editing) { message in
             VStack(alignment: .leading) {
                 Text("메시지 수정").umcTypography(.title1Bold)
@@ -190,6 +201,9 @@ private struct ConversationTimeline: View {
             }.padding(24).frame(minWidth: 400, minHeight: 300)
         }
         .onChange(of: model.messages) { _, messages in
+            if let reporting, !messages.contains(where: { $0.id == reporting.id && !$0.isHidden }) {
+                self.reporting = nil
+            }
             if let preview, !messages.contains(where: { $0.files.contains(preview) }) {
                 self.preview = nil
             }
@@ -281,6 +295,11 @@ private struct ConversationTimeline: View {
                                 }
                                 Button("답장") { model.selectReply(message.id) }
                             }.labelStyle(.iconOnly).fixedSize().disabled(model.busy)
+                            if !own, management != nil {
+                                Menu("메시지 더보기", systemImage: "ellipsis") {
+                                    reportButton(message)
+                                }.labelStyle(.iconOnly).fixedSize()
+                            }
                         }
                     }
                 }
@@ -297,11 +316,17 @@ private struct ConversationTimeline: View {
                             editing = message
                         }
                         Button("삭제", role: .destructive) { deleting = message }
+                    } else if management != nil {
+                        reportButton(message)
                     }
                 }
             }
             if !own { Spacer(minLength: 32) }
         }
+    }
+
+    private func reportButton(_ message: ThreadConversationMessage) -> some View {
+        Button("메시지 신고", systemImage: "flag", role: .destructive) { reporting = message }
     }
 
     private func date(_ value: String?) -> Date? {

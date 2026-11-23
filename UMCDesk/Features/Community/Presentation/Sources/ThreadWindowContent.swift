@@ -203,7 +203,8 @@ struct ThreadDestination: View {
                 }
             } else {
                 ThreadConversationView(thread: item, accountID: accountID,
-                                       repository: conversations, defaults: defaults)
+                                       repository: conversations, management: management,
+                                       defaults: defaults)
             }
         }
         .frame(minWidth: 0, maxWidth: .infinity, minHeight: 0, maxHeight: .infinity,

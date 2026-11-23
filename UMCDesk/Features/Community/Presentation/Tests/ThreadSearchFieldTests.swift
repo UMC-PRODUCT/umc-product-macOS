@@ -118,6 +118,10 @@ private actor ThreadSearchRepository:
     func people(threadID: String, invitable: Bool, query: String, offset: String?) async throws
         -> ThreadManagementPage { throw CancellationError() }
     func profile(memberID: String) async throws -> ThreadManagementProfile { throw CancellationError() }
+    func report(_ target: ThreadReportTarget, reasons: [ThreadReportReason], detail: String)
+        async throws -> String { throw CancellationError() }
+    func isBlocked(memberID: String) async throws -> Bool { false }
+    func setBlocked(_ blocked: Bool, memberID: String) async throws { throw CancellationError() }
     func currentMemberID() async throws -> String { "101" }
     func apply(_ action: ThreadManagementAction, threadID: String) async throws {}
 }
