@@ -89,9 +89,9 @@ private struct DetachedThread: View {
                     failure = "이 대화를 연 계정으로 로그인해 주세요."
                     return
                 }
-                let fresh = try await repository.thread(id: key.threadID)
-                try Task.checkCancellation()
-                thread = fresh
+                let store = ThreadConversationModel.WindowStore.shared(
+                    defaults: defaults, accountID: key.accountID, threadID: key.threadID)
+                thread = try await store.refreshDetail(using: repository.thread(id:))
             } catch {
                 if !Task.isCancelled {
                     thread = nil
@@ -126,7 +126,22 @@ struct ThreadDestination: View {
     @State private var accessFailure: String?
     @State private var refresh = 0
 
-    private var item: CommunityThread { updated ?? thread }
+    private let windowStore: ThreadConversationModel.WindowStore
+
+    init(accountID: String, thread: CommunityThread, detached: Bool,
+         repository: any CommunityThreadRepository, conversations: any ThreadConversationRepository,
+         management: any ThreadManagementRepository, defaults: UserDefaults) {
+        self.accountID = accountID
+        self.thread = thread
+        self.detached = detached
+        self.repository = repository
+        self.conversations = conversations
+        self.management = management
+        self.defaults = defaults
+        windowStore = .shared(defaults: defaults, accountID: accountID, threadID: thread.id)
+    }
+
+    private var item: CommunityThread { windowStore.kickedDetail ?? updated ?? thread }
     private var active: Bool { item.isJoined && item.membershipState == "ACTIVE" }
     private var key: ThreadWindowKey { .init(accountID: accountID, threadID: thread.id) }
 
@@ -199,17 +214,18 @@ struct ThreadDestination: View {
                                  onChanged: { broadcast(exit: false) },
                                  onExit: { broadcast(exit: true) })
         }
-        .onChange(of: thread) { _, fresh in updated = fresh }
+        .onChange(of: thread, initial: true) { _, fresh in
+            windowStore.receive(fresh)
+            updated = fresh
+        }
+        .onChange(of: windowStore.kickedDetail) { _, kicked in
+            if kicked != nil, destination != .acknowledgeKick { destination = nil }
+        }
         .task(id: refresh) {
             while !Task.isCancelled {
                 do {
-                    let fresh = try await repository.thread(id: thread.id)
-                    try Task.checkCancellation()
-                    updated = fresh
+                    updated = try await windowStore.refreshDetail(using: repository.thread(id:))
                     accessFailure = nil
-                    if fresh.membershipState == "KICKED", destination != .acknowledgeKick {
-                        destination = nil
-                    }
                 } catch {
                     if !Task.isCancelled {
                         accessFailure = error.localizedDescription
@@ -227,7 +243,9 @@ struct ThreadDestination: View {
         Task { @MainActor in
             defer { mutating = false }
             do {
-                updated = try await repository.update(preference, enabled: enabled, id: thread.id)
+                let fresh = try await repository.update(preference, enabled: enabled, id: thread.id)
+                windowStore.receive(fresh)
+                updated = fresh
                 failure = nil
                 broadcast(exit: false)
             } catch { failure = error.localizedDescription }
