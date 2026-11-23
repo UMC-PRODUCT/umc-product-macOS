@@ -15,20 +15,23 @@ public struct CommunityThreadsView: View {
     private let repository: any CommunityThreadRepository
     private let conversations: any ThreadConversationRepository
     private let management: any ThreadManagementRepository
+    private let defaults: UserDefaults
 
     public init(
         accountID: String, repository: any CommunityThreadRepository,
-        conversations: any ThreadConversationRepository, management: any ThreadManagementRepository
+        conversations: any ThreadConversationRepository, management: any ThreadManagementRepository,
+        defaults: UserDefaults = .standard
     ) {
         self.accountID = accountID
         self.repository = repository
         self.conversations = conversations
         self.management = management
+        self.defaults = defaults
     }
 
     public var body: some View {
         ThreadBrowser(accountID: accountID, repository: repository,
-                      conversations: conversations, management: management)
+                      conversations: conversations, management: management, defaults: defaults)
             .id(accountID)
     }
 }
@@ -38,6 +41,7 @@ private struct ThreadBrowser: View {
     let repository: any CommunityThreadRepository
     let conversations: any ThreadConversationRepository
     let management: any ThreadManagementRepository
+    let defaults: UserDefaults
 
     @FocusState private var resultsFocused: Bool
     @State private var query = ""
@@ -97,7 +101,7 @@ private struct ThreadBrowser: View {
             if let item = threads.first(where: { $0.id == selection }) {
                 ThreadDestination(accountID: accountID, thread: item, detached: false,
                                   repository: repository, conversations: conversations,
-                                  management: management)
+                                  management: management, defaults: defaults)
                     .id(item.id)
             } else {
                 ContentUnavailableView(threads.isEmpty && !loading && failure == nil

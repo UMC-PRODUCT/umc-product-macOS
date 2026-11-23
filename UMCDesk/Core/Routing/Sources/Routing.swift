@@ -8,6 +8,7 @@
 import Foundation
 
 public enum DeskWindow {
+    public static let updates = "updates"
     public static let support = "support"
 }
 

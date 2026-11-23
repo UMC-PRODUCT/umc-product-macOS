@@ -8,6 +8,7 @@
 import UMCFoundation
 import CoreDesignSystem
 import CoreRouting
+import CoreUIComponents
 import SwiftUI
 
 struct AuthLoginSelection: View {
@@ -212,8 +213,9 @@ struct AuthSupportButton: View {
     @Environment(\.openWindow) private var openWindow
 
     var body: some View {
-        Button { openWindow(id: DeskWindow.support) } label: {
-            Text(isInline ? AppLocalization.string("고객센터") : AppLocalization.string("고객센터 문의"))
+        let title = isInline ? AppLocalization.string("고객센터") : AppLocalization.string("고객센터 문의")
+        UMCWindowOpeningButton(title, action: { openWindow(id: DeskWindow.support) }) { _ in
+            Text(title)
                 .underline(isInline)
                 .umcTypography(isInline ? .headlineRegular : .title3Regular)
                 .foregroundStyle(
@@ -222,7 +224,5 @@ struct AuthSupportButton: View {
                 )
                 .frame(minHeight: isInline ? 20 : 50)
         }
-        .buttonStyle(.plain)
-
     }
 }

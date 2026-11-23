@@ -28,20 +28,23 @@ public struct ThreadWindowContent: View {
     private let repository: any CommunityThreadRepository
     private let conversations: any ThreadConversationRepository
     private let management: any ThreadManagementRepository
+    private let defaults: UserDefaults
 
     public init(
         key: ThreadWindowKey, repository: any CommunityThreadRepository,
-        conversations: any ThreadConversationRepository, management: any ThreadManagementRepository
+        conversations: any ThreadConversationRepository, management: any ThreadManagementRepository,
+        defaults: UserDefaults = .standard
     ) {
         self.key = key
         self.repository = repository
         self.conversations = conversations
         self.management = management
+        self.defaults = defaults
     }
 
     public var body: some View {
         DetachedThread(key: key, repository: repository, conversations: conversations,
-                       management: management).id(key)
+                       management: management, defaults: defaults).id(key)
     }
 }
 
@@ -50,6 +53,7 @@ private struct DetachedThread: View {
     let repository: any CommunityThreadRepository
     let conversations: any ThreadConversationRepository
     let management: any ThreadManagementRepository
+    let defaults: UserDefaults
 
     @Environment(\.dismissWindow) private var dismissWindow
     @State private var thread: CommunityThread?
@@ -61,7 +65,7 @@ private struct DetachedThread: View {
             if let thread {
                 ThreadDestination(accountID: key.accountID, thread: thread, detached: true,
                                   repository: repository, conversations: conversations,
-                                  management: management)
+                                  management: management, defaults: defaults)
             } else if let failure {
                 ContentUnavailableView {
                     Label("대화를 열 수 없어요", systemImage: "lock")
@@ -112,6 +116,7 @@ struct ThreadDestination: View {
     let repository: any CommunityThreadRepository
     let conversations: any ThreadConversationRepository
     let management: any ThreadManagementRepository
+    let defaults: UserDefaults
 
     @Environment(\.openWindow) private var openWindow
     @State private var destination: ThreadManagementDestination?
@@ -180,7 +185,8 @@ struct ThreadDestination: View {
                     Button("다시 시도") { refresh += 1 }
                 }
             } else {
-                ThreadConversationView(thread: item, accountID: accountID, repository: conversations)
+                ThreadConversationView(thread: item, accountID: accountID,
+                                       repository: conversations, defaults: defaults)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)

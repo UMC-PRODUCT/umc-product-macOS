@@ -8,6 +8,7 @@
 import UMCFoundation
 import CoreDesignSystem
 import CoreRouting
+import CoreUIComponents
 import SwiftUI
 
 struct SettingsAboutView: View {
@@ -39,33 +40,20 @@ struct SettingsAboutView: View {
                         .umcTypography(.bodyRegular)
                         .foregroundStyle(palette.textNeutralMedium600)
                     SettingsRow(
-                        title: AppLocalization.string("업데이트"), description: releaseDescription
+                        title: AppLocalization.string("업데이트"), description: AppLocalization.string("공개 GitHub Releases에서 게시된 버전을 확인해요.")
                     ) {
-                        SettingsActionButton(
-                            title: viewModel.isCheckingRelease
-                                ? AppLocalization.string("확인 중")
-                                :
-                            AppLocalization.string("업데이트 확인"), kind: .brand) {
-                            Task { await viewModel.checkRelease() }
-                        }
-                        .disabled(viewModel.isCheckingRelease)
-                    }
-                    if let release = viewModel.release {
-                        HStack {
-                            Text(AppLocalization.string("게시된 릴리스: \(release.tag)"))
-                                .umcTypography(.bodyRegular)
-                            Spacer()
-                            SettingsActionButton(
-                                title: AppLocalization.string("릴리스 보기"), symbol: "arrow.up.right"
-                            ) {
-                                openURL(release.url)
-                            }
+                        UMCWindowOpeningButton(AppLocalization.string("업데이트 확인"),
+                                               cornerRadius: UMCRadius.value12) {
+                            openWindow(id: DeskWindow.updates)
+                        } label: { _ in
+                            Text(AppLocalization.string("업데이트 확인"))
+                                .umcTypography(.headlineRegular)
+                                .padding(.horizontal, UMCSpacing.value16)
+                                .frame(minHeight: 40)
+                                .foregroundStyle(palette.textBrandDefault)
                         }
                     }
-                    if let message = viewModel.releaseMessage {
-                        SettingsInlineMessage(message: message,
-                            isError: viewModel.releaseFailed)
-                    }
+
                 }
             }
             SettingsSection(title: AppLocalization.string("도움말 및 법적 정보")) {
@@ -92,8 +80,23 @@ struct SettingsAboutView: View {
                             title: AppLocalization.string("고객센터"),
                             description: AppLocalization.string("도움이 필요하거나 의견이 있나요?")
                         ) {
-                            SettingsActionButton(title: AppLocalization.string("열기")) {
-                                openWindow(id: DeskWindow.support)
+                            UMCWindowOpeningButton(
+                                AppLocalization.string("열기"), identifier: "settings.openSupport",
+                                cornerRadius: UMCRadius.value12,
+                                action: { openWindow(id: DeskWindow.support) }
+                            ) { hovered in
+                                Text(AppLocalization.string("열기"))
+                                    .umcTypography(.headlineRegular)
+                                    .foregroundStyle(palette.textNeutralMedium600)
+                                    .padding(.horizontal, UMCSpacing.value16)
+                                    .frame(minWidth: 64, minHeight: 40)
+                                    .background(hovered ? palette.fillNeutralWeakerHoverPressed :
+                                        palette.backgroundSurfaceWhite,
+                                        in: .rect(cornerRadius: UMCRadius.value12))
+                                    .overlay {
+                                        RoundedRectangle(cornerRadius: UMCRadius.value12)
+                                            .strokeBorder(palette.borderNeutralWeak200)
+                                    }
                             }
                         }
                     }
@@ -120,15 +123,7 @@ struct SettingsAboutView: View {
         Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "—"
     }
 
-    private var releaseDescription: String {
-        if let checkedAt = viewModel.releaseCheckedAt {
-            let dateText = checkedAt.formatted(Date.FormatStyle(
-                date: .abbreviated, time: .shortened,
-                locale: AppLocalization.shared.language.locale))
-            return AppLocalization.string("마지막 확인: \(dateText)")
-        }
-        return AppLocalization.string("공개 GitHub Releases에서 게시된 버전을 확인해요.")
-    }
+
 }
 
 struct SettingsLicenseList: View {

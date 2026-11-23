@@ -112,6 +112,7 @@ final class AuthViewModel {
     var login: (@MainActor (String, String) async throws -> Void)?
     var repository: (any AuthFlowRepository)?
     var entry: AuthEntry = .login
+    var onCloseAccount: (() -> Void)?
     var onSignOut: (@MainActor () async throws -> Void)?
     var onMemberRefresh: (@MainActor () async throws -> Void)?
     var notice: String?
@@ -177,7 +178,11 @@ final class AuthViewModel {
             confirmAccountAction()
             return
         }
-        navigate(to: accountReturnScreen)
+        if entry == .withdrawal, let onCloseAccount {
+            onCloseAccount()
+        } else {
+            navigate(to: accountReturnScreen)
+        }
     }
 
     func cancelLogin() {
