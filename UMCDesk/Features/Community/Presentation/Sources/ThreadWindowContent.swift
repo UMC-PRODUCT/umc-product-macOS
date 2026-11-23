@@ -167,7 +167,9 @@ struct ThreadDestination: View {
                         }
                     }.labelStyle(.iconOnly).fixedSize().disabled(mutating)
                 }
-            }.padding(.horizontal, 20).padding(.vertical, 12)
+            }
+            .fixedSize(horizontal: false, vertical: true)
+            .padding(.horizontal, 20).padding(.vertical, 12)
             Divider()
             if let failure {
                 Text(failure).font(.callout).padding(.horizontal, 16)
@@ -189,7 +191,8 @@ struct ThreadDestination: View {
                                        repository: conversations, defaults: defaults)
             }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .frame(minWidth: 0, maxWidth: .infinity, minHeight: 0, maxHeight: .infinity,
+               alignment: .topLeading)
         .background(UMCColor.Custom.backgroundDefault)
         .sheet(item: $destination) { target in
             ThreadManagementView(threadID: item.id, destination: target, repository: management,
