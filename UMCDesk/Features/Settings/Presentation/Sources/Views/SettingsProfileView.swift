@@ -14,6 +14,7 @@ import SwiftUI
 struct SettingsProfileView: View {
     @Environment(\.settingsAppearancePalette) private var palette
     @Environment(\.openWindow) private var openWindow
+    @FocusState private var focusesRegistration: Bool
     @Bindable var viewModel: SettingsViewModel
     @Environment(\.openURL) private var openURL
 
@@ -232,9 +233,26 @@ struct SettingsProfileView: View {
     private func activities(_ profile: SettingsProfile) -> some View {
         SettingsCard(isSubtle: true, minimumHeight: 324) {
             VStack(alignment: .leading, spacing: UMCSpacing.value16) {
-                profileCardHeading(
-                    AppLocalization.string("내 활동"),
-                    description: AppLocalization.string("참여한 기수와 파트, 맡은 역할을 확인하세요."))
+                VStack(alignment: .leading, spacing: UMCSpacing.value4) {
+                    if profile.activities.isEmpty {
+                        activitiesTitle
+                    } else {
+                        ViewThatFits(in: .horizontal) {
+                            HStack {
+                                activitiesTitle
+                                Spacer(minLength: UMCSpacing.value12)
+                                registrationButton(primary: false)
+                            }
+                            VStack(alignment: .leading, spacing: UMCSpacing.value4) {
+                                activitiesTitle
+                                registrationButton(primary: false)
+                            }
+                        }
+                    }
+                    Text(AppLocalization.string("참여한 기수와 파트, 맡은 역할을 확인하세요."))
+                        .umcTypography(.bodyRegular)
+                        .foregroundStyle(palette.textNeutralMedium600)
+                }
                 SettingsDivider()
                 if profile.activities.isEmpty {
                     VStack(alignment: .leading, spacing: UMCSpacing.value8) {
@@ -248,13 +266,30 @@ struct SettingsProfileView: View {
                 } else {
                     SettingsActivityList(activities: profile.activities)
                 }
-                SettingsActionButton(
-                    title: AppLocalization.string("활동 코드 등록"), symbol: "plus", kind: .primary,
-                    fillsWidth: true, action: viewModel.addPermission)
-                    .environment(\.colorScheme, .light)
-                    .disabled(viewModel.isAccountBusy)
+                if profile.activities.isEmpty { registrationButton(primary: true) }
             }
         }
+        .onChange(of: viewModel.dialog) { previous, current in
+            if previous == .addPermission, current == nil { focusesRegistration = true }
+        }
+    }
+
+    private var activitiesTitle: some View {
+        Text(AppLocalization.string("내 활동")).umcTypography(.title4Bold)
+            .fixedSize()
+            .accessibilityAddTraits(.isHeader)
+    }
+
+    private func registrationButton(primary: Bool) -> some View {
+        SettingsActionButton(
+            title: AppLocalization.string("활동 코드 등록"), symbol: "plus",
+            kind: primary ? .primary : .quiet, fillsWidth: primary,
+            action: viewModel.addPermission
+        )
+        .fixedSize(horizontal: !primary, vertical: true)
+        .disabled(viewModel.isAccountBusy)
+        .focused($focusesRegistration)
+        .accessibilityLabel(AppLocalization.string("활동 코드 등록"))
     }
 
     private func profileCardHeading(_ title: String, description: String) -> some View {
