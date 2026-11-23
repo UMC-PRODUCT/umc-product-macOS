@@ -27,6 +27,12 @@ public struct AuthView: View {
         _viewModel = State(initialValue: AuthViewModel())
     }
 
+    public init(login: @escaping @MainActor (String, String) async throws -> Void) {
+        let model = AuthViewModel()
+        model.login = login
+        _viewModel = State(initialValue: model)
+    }
+
     init(viewModel: AuthViewModel) {
         _viewModel = State(initialValue: viewModel)
     }
@@ -74,6 +80,9 @@ public struct AuthView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
         .background(UMCColor.Custom.backgroundDefault)
         .tint(UMCColor.Semantic.textBrandDefault)
+        .disabled(viewModel.isSigningIn)
+        .overlay { if viewModel.isSigningIn { ProgressView() } }
+        .onDisappear { viewModel.cancelLogin() }
         #if DEBUG || UMC_PRERELEASE
         .focusedSceneValue(\.authPreviewModel, $viewModel)
         .task(id: viewModel.navigationID) { await viewModel.runPreviewFlow() }

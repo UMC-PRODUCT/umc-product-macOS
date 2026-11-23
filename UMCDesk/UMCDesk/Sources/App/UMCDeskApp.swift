@@ -133,10 +133,11 @@ private struct AppRootView: View {
             if dependencies.navigation.showsSettings {
                 SettingsView(viewModel: dependencies.settingsViewModel)
             } else {
-                AuthView()
+                AuthView(login: dependencies.login)
             }
         }
         .onAppear { configureLoginAction() }
+        .task { await dependencies.restoreSession() }
     }
 
     private func configureLoginAction() {
@@ -153,11 +154,11 @@ private struct SettingsSceneView: View {
     @Environment(\.openWindow) private var openWindow
 
     var body: some View {
-        SettingsView(viewModel: dependencies.settingsViewModel)
+        SettingsView(viewModel: dependencies.windowSettingsViewModel)
             .background(SettingsWindowToolbar())
             .onAppear {
-                dependencies.settingsViewModel.showSettings()
-                dependencies.settingsViewModel.onOpenLogin = {
+                dependencies.windowSettingsViewModel.showSettings()
+                dependencies.windowSettingsViewModel.onOpenLogin = {
                     dependencies.navigation.showsSettings = false
                     openWindow(id: "main")
                     NSApplication.shared.activate()
@@ -201,7 +202,7 @@ private struct AppMenuBarContent: View {
             NSApplication.shared.activate()
         }
         Button(AppLocalization.string("설정…")) {
-            dependencies.settingsViewModel.showSettings()
+            dependencies.windowSettingsViewModel.showSettings()
             openSettings()
         }
         Divider()
@@ -223,7 +224,7 @@ private struct AppSettingsCommands: Commands {
 
         CommandGroup(replacing: .appSettings) {
             Button(AppLocalization.string("설정…")) {
-                dependencies.settingsViewModel.showSettings()
+                dependencies.windowSettingsViewModel.showSettings()
                 openSettings()
             }
             .keyboardShortcut(",", modifiers: .command)

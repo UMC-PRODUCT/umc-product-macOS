@@ -178,7 +178,7 @@ public final class SettingsViewModel {
         await refreshCacheSize()
     }
 
-    func refreshProfile(showsToast: Bool = true) async {
+    public func refreshProfile(showsToast: Bool = true) async {
         guard !isRefreshing, !isAccountBusy else { return }
         let generation = accountGeneration
         isRefreshing = true

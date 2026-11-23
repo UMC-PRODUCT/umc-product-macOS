@@ -100,7 +100,7 @@ private struct AuthStatusActions: View {
                 }
             case .loginFailure:
                 AuthButton(title: AppLocalization.string("다시 확인")) {
-                    viewModel.navigate(to: .sessionChecking)
+                    viewModel.navigate(to: .emailLogin)
                 }
                 AuthButton(title: AppLocalization.string("다른 로그인 방법 선택"), kind: .secondary) {
                     viewModel.navigate(to: .loginSelection)

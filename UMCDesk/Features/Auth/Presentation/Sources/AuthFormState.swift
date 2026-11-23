@@ -5,6 +5,7 @@
 //  Created by euijjang97 on 10/10/26.
 //
 
+import AuthDomain
 import UMCFoundation
 import Foundation
 import Observation
@@ -91,6 +92,10 @@ enum AuthField: Hashable {
 @MainActor
 @Observable
 final class AuthViewModel {
+    var login: (@MainActor (String, String) async throws -> Void)?
+    private(set) var isSigningIn = false
+    private var loginTask: Task<Void, Never>?
+
     var screen: AuthScreen = .loginSelection
     var form = AuthFormState()
     var socialProvider = "Kakao"
@@ -135,7 +140,31 @@ final class AuthViewModel {
         navigate(to: accountReturnScreen)
     }
 
+    func cancelLogin() {
+        loginTask?.cancel()
+    }
+
     func submitLogin() {
+        if let login {
+            guard !isSigningIn, form.canRequestCode, !form.password.isEmpty else { return }
+            isSigningIn = true
+            let email = form.email
+            let password = form.password
+            loginTask = Task {
+                defer { isSigningIn = false; loginTask = nil }
+                do {
+                    try await login(email, password)
+                    form.password = ""
+                } catch is CancellationError {
+                    return
+                } catch EmailLoginError.invalidCredentials {
+                    navigate(to: .credentialsError)
+                } catch {
+                    navigate(to: .loginFailure)
+                }
+            }
+            return
+        }
         #if DEBUG || UMC_PRERELEASE
         if previewScenario == .credentialsError {
             previewScenario = .success

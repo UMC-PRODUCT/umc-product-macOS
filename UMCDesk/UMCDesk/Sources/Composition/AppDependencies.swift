@@ -5,6 +5,8 @@
 //  Created by euijjang97 on 10/6/26.
 //
 
+import AuthData
+import AuthDomain
 import Foundation
 import CoreDI
 import CoreDomain
@@ -17,11 +19,14 @@ import SettingsPresentation
 /// One composition root for every window and app-level scene.
 @MainActor
 final class AppDependencies {
+    let loginRepository: any EmailLoginRepository
     let container: DIContainer
     let userSession: UserSessionManager
     let settingsPreferences: SettingsPreferences
     let settingsViewModel: SettingsViewModel
+    let windowSettingsViewModel: SettingsViewModel
     let navigation: AppNavigation
+    private let client: NetworkClient
     #if DEBUG || UMC_PRERELEASE
     let previewSettingsViewModel: SettingsViewModel
     #endif
@@ -37,11 +42,25 @@ final class AppDependencies {
     init() {
         let container = DIContainer()
         let userSession = UserSessionManager()
-        let tokenStore = KeychainTokenStore()
+        let tokenStore: any TokenStore
+        #if DEBUG
+        let fixturePort = Self.fixturePort(arguments: ProcessInfo.processInfo.arguments)
+        tokenStore = fixturePort == nil ? KeychainTokenStore() : FixtureTokenStore()
+        #else
+        tokenStore = KeychainTokenStore()
+        #endif
         let resetRelay = AppSessionResetRelay()
         let environment: NetworkEnvironment
         do {
+            #if DEBUG
+            if let fixturePort {
+                environment = NetworkEnvironment(baseURL: URL(string: "http://127.0.0.1:\(fixturePort)")!)
+            } else {
+                environment = NetworkEnvironment(baseURL: try APIConfig.baseURL())
+            }
+            #else
             environment = NetworkEnvironment(baseURL: try APIConfig.baseURL())
+            #endif
         } catch {
             preconditionFailure("Missing or invalid app BASE_URL configuration")
         }
@@ -54,7 +73,11 @@ final class AppDependencies {
                 await resetRelay.reset()
             }
         )
+        self.client = client
         let adapter = MoyaNetworkAdapter(networkClient: client)
+        self.loginRepository = LiveEmailLoginRepository(
+            client: client, adapter: adapter, environment: environment
+        )
         self.container = container
         self.userSession = userSession
         #if DEBUG
@@ -99,6 +122,16 @@ final class AppDependencies {
         ) else { preconditionFailure("The settings design preview must exist") }
         self.previewSettingsViewModel = preview
         #endif
+        #if DEBUG
+        let separatePreview = Self.makeSettingsPreview(arguments: arguments, preferences: preferences)
+        #else
+        let separatePreview: SettingsViewModel? = nil
+        #endif
+        self.windowSettingsViewModel = separatePreview ?? SettingsViewModel(
+            useCase: useCase, preferences: preferences, systemActions: systemActions
+        )
+        resetRelay.windowSettingsViewModel = windowSettingsViewModel
+        resetRelay.navigation = navigation
         resetRelay.settingsViewModel = settingsViewModel
         if !isSettingsPreview, preferences.launchPage == .myPage {
             settingsViewModel.showProfile()
@@ -113,6 +146,20 @@ final class AppDependencies {
         container.registerInstance(SettingsViewModel.self, instance: settingsViewModel)
     }
 
+    func login(email: String, password: String) async throws {
+        try await loginRepository.login(email: email, password: password)
+        await settingsViewModel.refreshProfile(showsToast: false)
+        guard await client.isLoggedIn() else { throw NetworkError.unauthorized }
+        settingsViewModel.showProfile()
+        navigation.showsSettings = true
+    }
+
+    func restoreSession() async {
+        guard !isSettingsPreview, await client.isLoggedIn() else { return }
+        settingsViewModel.showProfile()
+        navigation.showsSettings = true
+    }
+
     func restoreSupportedFonts() {
         settingsPreferences.restoreSupportedFont()
         #if DEBUG || UMC_PRERELEASE
@@ -121,6 +168,13 @@ final class AppDependencies {
     }
 
     #if DEBUG
+    static func fixturePort(arguments: [String]) -> UInt16? {
+        guard let index = arguments.firstIndex(of: "--local-api-port") else { return nil }
+        guard arguments.indices.contains(index + 1), let port = UInt16(arguments[index + 1]),
+              port > 0 else { preconditionFailure("Invalid local fixture port") }
+        return port
+    }
+
     static func makeSettingsPreview(
         arguments: [String], preferences: SettingsPreferences
     ) -> SettingsViewModel? {
@@ -135,6 +189,10 @@ final class AppDependencies {
     }
 
     static func makeSettingsPreferences(arguments: [String]) -> SettingsPreferences {
+        if let port = fixturePort(arguments: arguments) {
+            let name = "com.umc.product.macos.local-api.\(port)"
+            return SettingsPreferences(defaults: UserDefaults(suiteName: name)!)
+        }
         guard arguments.contains("--settings-preview") else { return SettingsPreferences() }
         let suite = "com.umc.product.macos.settings-preview"
         let defaults = UserDefaults(suiteName: suite)!
@@ -149,3 +207,16 @@ final class AppDependencies {
     }
     #endif
 }
+
+
+#if DEBUG
+private actor FixtureTokenStore: TokenStore {
+    private var tokens: TokenPair?
+    func getAccessToken() -> String? { tokens?.accessToken }
+    func getRefreshToken() -> String? { tokens?.refreshToken }
+    func save(accessToken: String, refreshToken: String) {
+        tokens = TokenPair(accessToken: accessToken, refreshToken: refreshToken)
+    }
+    func clear() { tokens = nil }
+}
+#endif

@@ -5,7 +5,10 @@
 //  Created by euijjang97 on 10/6/26.
 //
 
-import Foundation
-import CoreDomain
+public protocol EmailLoginRepository: Sendable {
+    func login(email: String, password: String) async throws
+}
 
-// Feature models and Repository protocols belong to this module.
+public enum EmailLoginError: Error {
+    case invalidCredentials
+}

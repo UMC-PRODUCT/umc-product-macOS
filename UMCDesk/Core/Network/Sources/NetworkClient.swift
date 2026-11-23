@@ -14,6 +14,7 @@ public actor NetworkClient {
 
     nonisolated let aquilaClient: Aquila.NetworkClient
     private let logoutTokens: LogoutTokenStore
+    private var loginTask: Task<Void, Error>?
     private var logoutTask: Task<String?, Error>?
     nonisolated static let logger = Aquila.VerboseLogger(redactedKeys: [
         "authorizationCode", "oAuthVerificationToken", "emailVerificationToken",
@@ -70,13 +71,42 @@ public actor NetworkClient {
         }
     }
 
+    public func signIn(_ authenticate: @escaping @Sendable () async throws -> TokenPair) async throws {
+        guard loginTask == nil, logoutTask == nil else { throw CancellationError() }
+        let task = Task {
+            guard !(await aquilaClient.hasAccessToken()) else { throw CancellationError() }
+            let pair = try await authenticate()
+            try Task.checkCancellation()
+            guard !pair.accessToken.isEmpty, !pair.refreshToken.isEmpty else {
+                throw UMCFoundation.NetworkError.invalidResponse
+            }
+            do {
+                try await logoutTokens.save(accessToken: pair.accessToken, refreshToken: pair.refreshToken)
+                try Task.checkCancellation()
+            } catch {
+                try await logoutTokens.clear()
+                throw error
+            }
+        }
+        loginTask = task
+        defer { loginTask = nil }
+        try await withTaskCancellationHandler {
+            try await task.value
+        } onCancel: {
+            task.cancel()
+        }
+    }
+
     public func logout() async throws {
         _ = try await logoutReturningRefreshToken()
     }
 
     public func logoutReturningRefreshToken() async throws -> String? {
         if let logoutTask { return try await logoutTask.value }
+        let pendingLogin = loginTask
+        pendingLogin?.cancel()
         let task = Task<String?, Error> {
+            _ = await pendingLogin?.result
             defer { logoutTask = nil }
             do {
                 try await aquilaClient.logout()
