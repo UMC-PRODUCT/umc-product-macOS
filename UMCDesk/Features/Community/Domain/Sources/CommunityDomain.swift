@@ -19,10 +19,11 @@ public struct CommunityThread: Identifiable, Equatable, Sendable {
     public let myRole: ThreadManagementRole?
     public let memberCount: String?
     public let unread: String
+    public let shareURL: URL?
 
     public init(id: String, title: String, description: String?, icon: String,
                 isPinned: Bool, isMuted: Bool, isJoined: Bool, membershipState: String?, unread: String,
-                myRole: ThreadManagementRole? = nil, memberCount: String? = nil) {
+                myRole: ThreadManagementRole? = nil, memberCount: String? = nil, shareURL: URL? = nil) {
         self.id = id
         self.title = title
         self.description = description
@@ -34,6 +35,15 @@ public struct CommunityThread: Identifiable, Equatable, Sendable {
         self.myRole = myRole
         self.memberCount = memberCount
         self.unread = unread
+        if let shareURL, let parts = URLComponents(url: shareURL, resolvingAgainstBaseURL: false),
+           parts.scheme?.lowercased() == "https", let host = parts.host, !host.isEmpty,
+           parts.user == nil, parts.password == nil, parts.query == nil, parts.fragment == nil,
+           let numericID = Int64(id), numericID > 0, String(numericID) == id,
+           parts.percentEncodedPath == "/community/threads/" + id {
+            self.shareURL = shareURL
+        } else {
+            self.shareURL = nil
+        }
     }
 }
 

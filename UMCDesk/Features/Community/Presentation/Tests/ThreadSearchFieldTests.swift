@@ -13,17 +13,23 @@ import Testing
 
 @MainActor
 struct ThreadSearchFieldTests {
-    @Test func pressingReturnWhileSearchingSelectsTheFetchedRow() async throws {
+    @Test(arguments: [1040, 1440], [ColorScheme.light, .dark])
+    func pressingReturnWhileSearchingSelectsTheFetchedRow(width: Int, scheme: ColorScheme) async throws {
         let fixture = ThreadSearchRepository()
         let view = CommunityThreadsView(accountID: "101", repository: fixture,
                                         conversations: fixture, management: fixture)
-        let host = NSHostingView(rootView: view)
-        let window = NSWindow(contentRect: .init(x: 0, y: 0, width: 960, height: 640),
+        let host = NSHostingView(rootView: view.environment(\.colorScheme, scheme))
+        let window = NSWindow(contentRect: .init(x: 0, y: 0, width: width, height: 720),
                               styleMask: [.titled, .resizable], backing: .buffered, defer: false)
+        window.appearance = NSAppearance(named: scheme == .dark ? .darkAqua : .aqua)
         window.contentView = host
         host.layoutSubtreeIfNeeded()
         let field = try #require(find(NSSearchField.self, in: host))
-        #expect(window.makeFirstResponder(field))
+        let findKey = try #require(NSEvent.keyEvent(with: .keyDown, location: .zero,
+            modifierFlags: .command, timestamp: 0, windowNumber: window.windowNumber,
+            context: nil, characters: "f", charactersIgnoringModifiers: "f",
+            isARepeat: false, keyCode: 3))
+        #expect(window.performKeyEquivalent(with: findKey))
         let editor = try #require(field.currentEditor() as? NSTextView)
         editor.insertText("한글", replacementRange: .init(location: NSNotFound, length: 0))
         editor.doCommand(by: #selector(NSResponder.insertNewline(_:)))
@@ -36,6 +42,54 @@ struct ThreadSearchFieldTests {
         #expect(window.firstResponder !== editor)
         #expect(find(NSTableView.self, in: host)?.selectedRow == 0)
         window.contentView = nil
+    }
+
+    @Test func toolsAndSharingUseNativeMenuActionsAndServerPayload() throws {
+        var activated: [String] = []
+        var filter = ThreadListFilter.all
+        var participation = ThreadParticipationFilter.all
+        let tools = ThreadBrowserTools(filter: .init(get: { filter }, set: { filter = $0 }),
+            participation: .init(get: { participation }, set: { participation = $0 }),
+            focusSearch: { activated.append("search") }, create: { activated.append("create") },
+            showAll: { activated.append("all") })
+        let root = NSHostingMenu(rootView: tools)
+        let menu = try #require(root.item(withTitle: "스레드 도구")?.submenu)
+        for title in ["제목·소개 검색", "스레드 만들기", "전체 스레드"] {
+            let action = try #require(menu.item(withTitle: title))
+            menu.performActionForItem(at: menu.index(of: action))
+        }
+        #expect(activated == ["search", "create", "all"])
+        let search = try #require(menu.item(withTitle: "제목·소개 검색"))
+        #expect(search.keyEquivalent == "f" && search.keyEquivalentModifierMask.contains(.command))
+        let filters = try #require(menu.item(withTitle: "분류 · 참여 상태 필터")?.submenu)
+        for title in ["프로젝트", "미참여"] {
+            let action = try #require(filters.item(withTitle: title))
+            filters.performActionForItem(at: filters.index(of: action))
+        }
+        #expect(filter == .project && participation == .unjoined)
+
+        func share(_ url: URL?) -> ThreadShareMenu {
+            .init(thread: .init(id: "42", title: "스터디", description: "이번 주 소개", icon: "💬",
+                                isPinned: false, isMuted: false, isJoined: true,
+                                membershipState: "ACTIVE", unread: "0", shareURL: url))
+        }
+        let url = try #require(URL(string: "https://threads.example.org/community/threads/42"))
+        let linked = NSHostingMenu(rootView: share(url))
+        let sharing = try #require(linked.item(withTitle: "공유")?.submenu)
+        #expect(sharing.item(withTitle: "링크 복사") != nil)
+        #expect(sharing.item(withTitle: "다른 앱으로 공유…") != nil)
+        let pasteboard = NSPasteboard.withUniqueName()
+        defer { pasteboard.releaseGlobally() }
+        ThreadShareMenu.copy(url, to: pasteboard)
+        #expect(pasteboard.string(forType: .URL) == url.absoluteString)
+        #expect(pasteboard.string(forType: .string) == url.absoluteString)
+        let fallback = share(nil)
+        #expect(fallback.summary == "스터디\n이번 주 소개")
+        let unlinked = NSHostingMenu(rootView: fallback)
+        let textSharing = try #require(unlinked.item(withTitle: "공유")?.submenu)
+        #expect(textSharing.item(withTitle: "링크 복사") == nil)
+        #expect(textSharing.item(withTitle: "스레드 소개 공유…") != nil)
+        #expect(textSharing.item(withTitle: "공유 링크가 제공되지 않았어요") != nil)
     }
 
     private func find<T: NSView>(_ type: T.Type, in root: NSView) -> T? {

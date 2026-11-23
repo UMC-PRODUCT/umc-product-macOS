@@ -45,7 +45,9 @@ private struct ThreadBrowser: View {
 
     @FocusState private var resultsFocused: Bool
     @State private var query = ""
-    @State private var filter = "all"
+    @State private var filter = ThreadListFilter.all
+    @State private var participation = ThreadParticipationFilter.all
+    @State private var focusRequest = 0
     @State private var threads: [CommunityThread] = []
     @State private var next: String?
     @State private var selection: String?
@@ -56,7 +58,7 @@ private struct ThreadBrowser: View {
     @State private var loadedSearch: [String]?
     @State private var pendingSelection: [String]?
 
-    private var search: [String] { [query, filter] }
+    private var search: [String] { [query, filter.rawValue, participation.rawValue] }
 
     var body: some View {
         HSplitView {
@@ -64,18 +66,19 @@ private struct ThreadBrowser: View {
                 HStack {
                     Text("스레드").umcTypography(.title1Bold)
                     Spacer()
-                    Button("새 스레드", systemImage: "plus") { creating = true }
-                        .labelStyle(.iconOnly)
+                    ThreadBrowserTools(filter: $filter, participation: $participation,
+                                       focusSearch: { focusRequest += 1 },
+                                       create: { creating = true }, showAll: showAll)
+                        .fixedSize()
                 }
-                ThreadSearchField(query: $query, selectResult: selectFirst)
+                ThreadSearchField(query: $query, focusRequest: focusRequest, selectResult: selectFirst)
                     .frame(height: 28)
-                Picker("스레드 필터", selection: $filter) {
-                    Text("전체").tag("all")
-                    Text("읽지 않음").tag("unread")
-                    Text("스터디").tag("STUDY")
-                    Text("질문").tag("QNA")
-                    Text("프로젝트").tag("PROJECT")
-                    Text("자유").tag("FREE")
+                if filter != .all || participation != .all {
+                    Text([filter == .all ? nil : filter.title,
+                          participation == .all ? nil : participation.rawValue]
+                        .compactMap { $0 }.joined(separator: " · "))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
                 if let failure {
                     Text(failure).foregroundStyle(.secondary)
@@ -130,7 +133,8 @@ private struct ThreadBrowser: View {
         }
         .sheet(isPresented: $creating) {
             ThreadComposer(repository: repository) { item in
-                filter = "all"
+                filter = .all
+                participation = .all
                 query = ""
                 threads.removeAll { $0.id == item.id }
                 threads.insert(item, at: 0)
@@ -163,6 +167,14 @@ private struct ThreadBrowser: View {
         }
     }
 
+    private func showAll() {
+        query = ""
+        filter = .all
+        participation = .all
+        selection = nil
+        pendingSelection = nil
+    }
+
     private func selectFirst() {
         guard loadedSearch == search && !loading else { pendingSelection = search; return }
         guard let id = threads.first?.id else { return }
@@ -180,13 +192,22 @@ private struct ThreadBrowser: View {
         }
         do {
             if !query.isEmpty, offset == nil { try await Task.sleep(for: .milliseconds(200)) }
-            let page = try await repository.threads(query: String(query.unicodeScalars.prefix(80)),
-                                                    filter: filter, offset: offset)
-            guard !Task.isCancelled, expected == search, generation == reload else { return }
             let previous = offset == nil ? [] : threads
             var ids = Set(previous.map(\.id))
-            threads = previous + page.values.filter { ids.insert($0.id).inserted }
-            next = page.cursor
+            var cursor = offset
+            var visited = Set<String>()
+            var matches: [CommunityThread] = []
+            repeat {
+                if let cursor { visited.insert(cursor) }
+                let page = try await repository.threads(query: String(query.unicodeScalars.prefix(80)),
+                                                        filter: filter.rawValue, offset: cursor)
+                try Task.checkCancellation()
+                guard expected == search, generation == reload else { return }
+                matches = page.values.filter { participation.includes($0) && ids.insert($0.id).inserted }
+                cursor = page.cursor.flatMap { visited.contains($0) ? nil : $0 }
+            } while matches.isEmpty && cursor != nil
+            threads = previous + matches
+            next = cursor
             loadedSearch = expected
             if pendingSelection == expected, let first = threads.first {
                 selection = first.id
@@ -197,6 +218,73 @@ private struct ThreadBrowser: View {
             if !Task.isCancelled, expected == search, generation == reload {
                 failure = error.localizedDescription
             }
+        }
+    }
+}
+
+struct ThreadBrowserTools: View {
+    @Binding var filter: ThreadListFilter
+    @Binding var participation: ThreadParticipationFilter
+    let focusSearch: () -> Void
+    let create: () -> Void
+    let showAll: () -> Void
+
+    var body: some View {
+        Menu("스레드 도구", systemImage: "slider.horizontal.3") {
+            Button("제목·소개 검색", systemImage: "magnifyingglass") {
+                focusSearch()
+            }.keyboardShortcut("f")
+            Button("스레드 만들기", systemImage: "plus") { create() }
+            Divider()
+            Menu("분류 · 참여 상태 필터") {
+                Picker("분류", selection: $filter) {
+                    ForEach(ThreadListFilter.allCases, id: \.self) { value in
+                        Text(value.title).tag(value)
+                    }
+                }.pickerStyle(.inline)
+                Divider()
+                Picker("참여 상태", selection: $participation) {
+                    ForEach(ThreadParticipationFilter.allCases, id: \.self) { value in
+                        Text(value.rawValue).tag(value)
+                    }
+                }.pickerStyle(.inline)
+            }
+            Button("전체 스레드") {
+                showAll()
+            }
+        }
+    }
+}
+
+enum ThreadListFilter: String, CaseIterable {
+    case all, unread
+    case study = "STUDY"
+    case question = "QNA"
+    case project = "PROJECT"
+    case free = "FREE"
+
+    var title: String {
+        switch self {
+        case .all: "모든 분류"
+        case .unread: "읽지 않음"
+        case .study: "스터디"
+        case .question: "질문"
+        case .project: "프로젝트"
+        case .free: "자유"
+        }
+    }
+}
+
+enum ThreadParticipationFilter: String, CaseIterable {
+    case all = "모든 참여 상태"
+    case joined = "참여 중"
+    case unjoined = "미참여"
+
+    func includes(_ thread: CommunityThread) -> Bool {
+        switch self {
+        case .all: true
+        case .joined: thread.isJoined
+        case .unjoined: !thread.isJoined
         }
     }
 }
@@ -257,5 +345,41 @@ extension View {
         frame(minWidth: 0, maxWidth: .infinity, minHeight: 0, maxHeight: .infinity,
               alignment: .topLeading)
             .padding(.top, UMCSpacing.value16)
+    }
+}
+
+struct ThreadShareMenu: View {
+    let thread: CommunityThread
+
+    var body: some View {
+        Menu("공유", systemImage: "square.and.arrow.up") {
+            if let url = thread.shareURL {
+                Button("링크 복사", systemImage: "document.on.document") {
+                    Self.copy(url, to: .general)
+                }
+                ShareLink(item: url) {
+                    Label("다른 앱으로 공유…", systemImage: "square.and.arrow.up")
+                }
+            } else {
+                Text("공유 링크가 제공되지 않았어요")
+                ShareLink(item: summary) {
+                    Label("스레드 소개 공유…", systemImage: "square.and.arrow.up")
+                }
+            }
+        }
+    }
+
+    var summary: String {
+        [thread.title, thread.description ?? ""]
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }.joined(separator: "\n")
+    }
+
+    static func copy(_ url: URL, to pasteboard: NSPasteboard) {
+        let item = NSPasteboardItem()
+        item.setString(url.absoluteString, forType: .URL)
+        item.setString(url.absoluteString, forType: .string)
+        pasteboard.clearContents()
+        pasteboard.writeObjects([item])
     }
 }

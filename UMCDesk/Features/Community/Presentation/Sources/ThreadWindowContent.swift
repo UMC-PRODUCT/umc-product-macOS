@@ -124,6 +124,7 @@ struct ThreadDestination: View {
     @State private var mutating = false
     @State private var failure: String?
     @State private var accessFailure: String?
+    @State private var shareDetail: CommunityThread?
     @State private var refresh = 0
 
     private let windowStore: ThreadConversationModel.WindowStore
@@ -161,24 +162,31 @@ struct ThreadDestination: View {
                         openWindow(value: key)
                     }.labelStyle(.iconOnly)
                 }
-                if active && accessFailure == nil {
+                if accessFailure == nil, item.membershipState != "KICKED",
+                   item.membershipState != "KICKED_ACKNOWLEDGED", active || shareDetail != nil {
                     Menu("스레드 설정", systemImage: "ellipsis.circle") {
-                        Button("참여자") { destination = .members }
-                        if item.myRole == .owner || item.myRole == .admin {
-                            Button("참여자 초대") { destination = .invite }
-                            Button("스레드 편집") { destination = .edit }
+                        if let shareDetail {
+                            ThreadShareMenu(thread: shareDetail)
+                            if active { Divider() }
                         }
-                        Divider()
-                        Button(item.isPinned ? "고정 해제" : "스레드 고정") {
-                            change(.pin, !item.isPinned)
-                        }
-                        Button(item.isMuted ? "알림 켜기" : "알림 끄기") {
-                            change(.mute, !item.isMuted)
-                        }
-                        Divider()
-                        Button("스레드 나가기") { destination = .leave }
-                        if item.myRole == .owner || item.myRole == .admin {
-                            Button("스레드 삭제", role: .destructive) { destination = .delete }
+                        if active {
+                            Button("참여자") { destination = .members }
+                            if item.myRole == .owner || item.myRole == .admin {
+                                Button("참여자 초대") { destination = .invite }
+                                Button("스레드 편집") { destination = .edit }
+                            }
+                            Divider()
+                            Button(item.isPinned ? "고정 해제" : "스레드 고정") {
+                                change(.pin, !item.isPinned)
+                            }
+                            Button(item.isMuted ? "알림 켜기" : "알림 끄기") {
+                                change(.mute, !item.isMuted)
+                            }
+                            Divider()
+                            Button("스레드 나가기") { destination = .leave }
+                            if item.myRole == .owner || item.myRole == .admin {
+                                Button("스레드 삭제", role: .destructive) { destination = .delete }
+                            }
                         }
                     }.labelStyle(.iconOnly).fixedSize().disabled(mutating)
                 }
@@ -225,10 +233,13 @@ struct ThreadDestination: View {
         .task(id: refresh) {
             while !Task.isCancelled {
                 do {
-                    updated = try await windowStore.refreshDetail(using: repository.thread(id:))
+                    let fresh = try await windowStore.refreshDetail(using: repository.thread(id:))
+                    shareDetail = fresh
+                    updated = fresh
                     accessFailure = nil
                 } catch {
                     if !Task.isCancelled {
+                        shareDetail = nil
                         accessFailure = error.localizedDescription
                         if item.membershipState != "KICKED" { destination = nil }
                     }

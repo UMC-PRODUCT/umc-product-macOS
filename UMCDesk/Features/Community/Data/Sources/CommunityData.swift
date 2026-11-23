@@ -92,7 +92,7 @@ private struct CreateThread: Encodable {
     let icon: String
 }
 
-private struct ThreadResponse: Codable {
+struct ThreadResponse: Codable {
     let threadId: String
     let title: String
     let description: String?
@@ -104,9 +104,10 @@ private struct ThreadResponse: Codable {
     let unreadCount: String
     let myRole: ThreadManagementRole?
     let memberCount: String?
+    let shareUrl: String?
     enum CodingKeys: CodingKey {
         case threadId, title, description, icon, isPinned, isMuted, isJoined, membershipState
-        case unreadCount, myRole, memberCount
+        case unreadCount, myRole, memberCount, shareUrl
     }
 
     init(from decoder: Decoder) throws {
@@ -121,6 +122,7 @@ private struct ThreadResponse: Codable {
         membershipState = try values.decodeIfPresent(String.self, forKey: .membershipState)
         myRole = try values.decodeIfPresent(ThreadManagementRole.self, forKey: .myRole)
         memberCount = try values.decodeFlexibleStringIfPresent(forKey: .memberCount)
+        shareUrl = try? values.decode(String.self, forKey: .shareUrl)
         unreadCount = try values.decodeFlexibleString(forKey: .unreadCount)
     }
 
@@ -136,13 +138,15 @@ private struct ThreadResponse: Codable {
         try values.encodeIfPresent(membershipState, forKey: .membershipState)
         try values.encodeIfPresent(myRole, forKey: .myRole)
         try values.encodeIfPresent(memberCount, forKey: .memberCount)
+        try values.encodeIfPresent(shareUrl, forKey: .shareUrl)
         try values.encode(unreadCount, forKey: .unreadCount)
     }
 
     var model: CommunityThread {
         CommunityThread(id: threadId, title: title, description: description, icon: icon,
             isPinned: isPinned, isMuted: isMuted, isJoined: isJoined, membershipState: membershipState,
-            unread: unreadCount, myRole: myRole, memberCount: memberCount)
+            unread: unreadCount, myRole: myRole, memberCount: memberCount,
+            shareURL: shareUrl.flatMap { URL(string: $0, encodingInvalidCharacters: false) })
     }
 }
 
