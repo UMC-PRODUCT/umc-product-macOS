@@ -133,6 +133,26 @@ class SessionFixture(BaseHTTPRequestHandler):
             return True
         result = home_activity_fixture.handle(self.command, path, query, body, member)
         if result is not None:
+            if path.startswith("/api/v1/challenger/") and result[0] == 200:
+                control = self.server.control
+                if self.command == "POST" and path.endswith("/points"):
+                    try:
+                        (control / "drop-point-receipt-once").unlink()
+                    except FileNotFoundError:
+                        pass
+                    else:
+                        (control / "point-ledger-unavailable").touch()
+                        with self.server.log_lock:
+                            with (control / "events").open("a") as log:
+                                print(self.command, path, "committed; receipt dropped", file=log)
+                        self.send_response(200)
+                        self.send_header("Content-Length", "1")
+                        self.end_headers()
+                        self.close_connection = True
+                        return True
+                if self.command == "GET" and (control / "point-ledger-unavailable").exists():
+                    self.send_result(503)
+                    return True
             self.send_result(*result)
             return True
         return matching_fixture.handle(self, self.command, path, query, body, member)
