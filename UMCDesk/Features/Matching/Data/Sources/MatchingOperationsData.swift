@@ -1117,6 +1117,13 @@ extension LiveMatchingRepository {
     }
 
     public func perform(_ operation: ProjectOperation, projectId: String) async throws {
+        let generation = await client.sessionGeneration
+        try await MatchingOperationSession.$generation.withValue(generation) {
+            try await performInSession(operation, projectId: projectId)
+        }
+    }
+
+    private func performInSession(_ operation: ProjectOperation, projectId: String) async throws {
         let path = "/api/v1/projects/\(try operationId(projectId))"
         let admin = "/api/v1/projects/admin/\(projectId)/members"
         switch operation {

@@ -13,6 +13,7 @@ import CoreNetwork
 import SettingsDomain
 import MatchingData
 import MatchingDomain
+import MatchingPresentation
 import SettingsData
 import SettingsPresentation
 
@@ -59,7 +60,7 @@ final class AppDependencies {
             }
         )
         let adapter = MoyaNetworkAdapter(networkClient: client)
-        let matchingRepository = LiveMatchingRepository(adapter: adapter, environment: environment)
+        let matchingRepository = LiveMatchingRepository(adapter: adapter, client: client, environment: environment)
         matchingUseCase = DefaultMatchingUseCase(repository: matchingRepository)
         matchingProgress = MatchingProgressController(repository: matchingUseCase)
         resetRelay.matchingProgress = matchingProgress
@@ -109,7 +110,7 @@ final class AppDependencies {
         #endif
         resetRelay.navigation = navigation
         liveSettings.onLogout = { [weak navigation, weak matchingProgress] in
-            navigation?.matchingDestination = nil
+            navigation?.resetAccount()
             matchingProgress?.setAccount(nil)
         }
         resetRelay.settingsViewModel = settingsViewModel
@@ -126,6 +127,14 @@ final class AppDependencies {
         container.registerInstance(SettingsUseCase.self, instance: useCase)
         container.registerInstance(SettingsSystemActions.self, instance: systemActions)
         container.registerInstance(SettingsViewModel.self, instance: settingsViewModel)
+    }
+
+    var verifiedMatchingMemberId: String? {
+        isSettingsPreview ? nil : settingsViewModel.profile?.id
+    }
+
+    func openMatching(_ destination: MatchingDestination = .explore) {
+        navigation.openMatching(destination, memberId: verifiedMatchingMemberId)
     }
 
     func restoreSupportedFonts() {

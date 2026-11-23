@@ -12,11 +12,13 @@ import Moya
 import UMCFoundation
 
 public struct LiveMatchingRepository: MatchingRepository {
+    let client: NetworkClient
     private let adapter: MoyaNetworkAdapter
     private let environment: NetworkEnvironment
     private let projectsPath = "/api/v1/projects"
 
-    public init(adapter: MoyaNetworkAdapter, environment: NetworkEnvironment) {
+    public init(adapter: MoyaNetworkAdapter, client: NetworkClient, environment: NetworkEnvironment) {
+        self.client = client
         self.adapter = adapter
         self.environment = environment
     }
@@ -167,6 +169,10 @@ public struct LiveMatchingRepository: MatchingRepository {
         var request = URLRequest(url: destination)
         request.httpMethod = "PUT"
         request.allHTTPHeaderFields = upload.headers
+        try _Concurrency.Task.checkCancellation()
+        if let expected = MatchingOperationSession.generation, await client.sessionGeneration != expected {
+            throw CancellationError()
+        }
         let (_, response) = try await URLSession.shared.upload(for: request, fromFile: file)
         guard let http = response as? HTTPURLResponse, 200..<300 ~= http.statusCode else {
             throw URLError(.badServerResponse)
@@ -206,6 +212,11 @@ public struct LiveMatchingRepository: MatchingRepository {
     private func request<T: Codable>(
         _ path: String, method: Moya.Method, task: Moya.Task
     ) async throws -> T {
+        try _Concurrency.Task.checkCancellation()
+        let generation = await client.sessionGeneration
+        if let expected = MatchingOperationSession.generation, generation != expected {
+            throw CancellationError()
+        }
         let target = MatchingTarget(environment: environment, path: path, method: method, task: task)
         do {
             let result = try await adapter.request(target)
@@ -214,6 +225,12 @@ public struct LiveMatchingRepository: MatchingRepository {
             }
             return try JSONDecoder().decode(APIResponse<T>.self, from: result.data).unwrap()
         } catch let failure as NetworkError {
+            switch failure {
+            case .unauthorized, .noRefreshToken, .tokenRefreshFailed, .maxRetryExceeded:
+                try await client.invalidateSession(generation: generation)
+            default:
+                break
+            }
             if case .requestFailed(_, let data) = failure, let data, let error = try? JSONDecoder().decode(APIResponse<EmptyResult>.self, from: data),
                !error.isSuccess {
                 throw RepositoryError.serverError(code: error.code, message: error.message)
@@ -221,6 +238,10 @@ public struct LiveMatchingRepository: MatchingRepository {
             throw failure
         }
     }
+}
+
+enum MatchingOperationSession {
+    @TaskLocal static var generation: UUID?
 }
 
 private struct MatchingTarget: BaseTargetType {

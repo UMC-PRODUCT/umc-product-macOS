@@ -146,9 +146,15 @@ private struct AppRootView: View {
         .onAppear {
             configureLoginAction()
             dependencies.matchingProgress.openApplications = {
-                dependencies.navigation.openMatching(.applications)
+                dependencies.openMatching(.applications)
                 openWindow(id: "main")
                 NSApplication.shared.activate()
+            }
+        }
+        .onChange(of: dependencies.verifiedMatchingMemberId) { old, current in
+            if old != nil { dependencies.navigation.matchingDestination = nil }
+            if current != nil, let pending = dependencies.navigation.pendingMatching {
+                dependencies.openMatching(pending)
             }
         }
         .onChange(of: progressAccount, initial: true) {
@@ -160,7 +166,7 @@ private struct AppRootView: View {
         if dependencies.navigation.showsSettings {
             SettingsView(
                 viewModel: dependencies.settingsViewModel,
-                onOpenMatching: { dependencies.navigation.openMatching() },
+                onOpenMatching: { dependencies.openMatching() },
                 onOpenSettingsPage: { dependencies.navigation.matchingDestination = nil },
                 matchingContent: dependencies.navigation.matchingDestination.map { destination in
                     AnyView(MatchingWorkspace(
@@ -235,7 +241,7 @@ private struct SettingsSceneView: View {
 
     var body: some View {
         SettingsView(viewModel: dependencies.settingsViewModel, onOpenMatching: {
-            dependencies.navigation.openMatching()
+            dependencies.openMatching()
             openWindow(id: "main")
             NSApplication.shared.activate()
         })
@@ -283,7 +289,7 @@ private struct AppMenuBarContent: View {
             dependencies.matchingProgress.showExpanded()
         }
         Button("내 매칭 지원") {
-            dependencies.navigation.openMatching(.applications)
+            dependencies.openMatching(.applications)
             openWindow(id: "main")
             NSApplication.shared.activate()
         }

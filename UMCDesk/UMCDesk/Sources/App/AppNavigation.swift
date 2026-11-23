@@ -14,6 +14,7 @@ import SettingsDomain
 @Observable
 final class AppNavigation {
     private(set) var matchingNavigationID = UUID()
+    private(set) var pendingMatching: MatchingDestination?
     var matchingDestination: MatchingDestination?
     var showsSettings: Bool {
         didSet {
@@ -21,10 +22,21 @@ final class AppNavigation {
         }
     }
 
-    func openMatching(_ destination: MatchingDestination = .explore) {
+    func openMatching(_ destination: MatchingDestination = .explore, memberId: String?) {
+        guard let memberId, !memberId.isEmpty else {
+            pendingMatching = destination
+            showsSettings = false
+            return
+        }
+        pendingMatching = nil
         showsSettings = true
         matchingNavigationID = UUID()
         matchingDestination = destination
+    }
+
+    func resetAccount() {
+        pendingMatching = nil
+        showsSettings = false
     }
 
     init(launchPage: SettingsLaunchPage) {

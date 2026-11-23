@@ -26,6 +26,7 @@ struct ProjectOperationsView: View {
     @State private var page = ProjectPage.posting
     @State private var revision = 0
     @State private var pending: ProjectConfirmation?
+    @State private var operationTask: Task<Void, Never>?
     @State private var busy = false
     @State private var failure: String?
 
@@ -88,6 +89,7 @@ struct ProjectOperationsView: View {
                 }
             }
         }
+        .onDisappear { operationTask?.cancel() }
         .disabled(busy)
         .overlay { if busy { ProgressView("저장 중") } }
         .alert(item: $pending) { request in
@@ -111,11 +113,14 @@ struct ProjectOperationsView: View {
     private func perform(_ operation: ProjectOperation) {
         guard !busy else { return }
         busy = true
-        Task {
+        operationTask = Task {
             defer { busy = false }
             do {
                 try await service.perform(operation, projectId: projectId)
+                try Task.checkCancellation()
                 if case .delete = operation { close() } else { revision += 1 }
+            } catch is CancellationError {
+                return
             } catch let MatchingFormSaveError.answeredSectionDeletion(message) {
                 if case let .form(form, false) = operation {
                     pending = .init(title: "제출된 답변까지 삭제할까요?", message: message,

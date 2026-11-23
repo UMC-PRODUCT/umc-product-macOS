@@ -26,7 +26,12 @@ struct AppDependenciesTests {
         #expect(viewModel.profile != nil)
         let relay = AppSessionResetRelay()
         let navigation = AppNavigation(launchPage: .myPage)
-        navigation.openMatching(.applications)
+        navigation.openMatching(.applications, memberId: nil)
+        #expect(navigation.pendingMatching == .applications)
+        #expect(!navigation.showsSettings)
+        #expect(navigation.matchingDestination == nil)
+        navigation.openMatching(.applications, memberId: viewModel.profile?.id)
+        #expect(navigation.matchingDestination == .applications)
         relay.navigation = navigation
         relay.settingsViewModel = viewModel
         await relay.reset()

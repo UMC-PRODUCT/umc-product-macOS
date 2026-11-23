@@ -148,7 +148,7 @@ struct MatchingTransportTests {
         configuration.protocolClasses = [MatchingHTTPStub.self]
         let client = NetworkClient(session: URLSession(configuration: configuration),
                                    tokenStore: MatchingTestSession(), refreshService: MatchingTestSession())
-        return LiveMatchingRepository(adapter: MoyaNetworkAdapter(networkClient: client),
+        return LiveMatchingRepository(adapter: MoyaNetworkAdapter(networkClient: client), client: client,
             environment: .init(baseURL: URL(string: "https://matching.example.test")!))
     }
 }

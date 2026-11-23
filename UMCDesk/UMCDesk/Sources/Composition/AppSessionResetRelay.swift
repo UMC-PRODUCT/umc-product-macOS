@@ -15,7 +15,7 @@ final class AppSessionResetRelay {
     weak var matchingProgress: MatchingProgressController?
 
     func reset() async {
-        navigation?.matchingDestination = nil
+        navigation?.resetAccount()
         matchingProgress?.setAccount(nil)
         await settingsViewModel?.invalidateAccount()
     }
