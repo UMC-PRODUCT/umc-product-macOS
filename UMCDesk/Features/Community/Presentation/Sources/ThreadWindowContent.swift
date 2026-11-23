@@ -58,11 +58,14 @@ private struct DetachedThread: View {
     @Environment(\.dismissWindow) private var dismissWindow
     @State private var thread: CommunityThread?
     @State private var failure: String?
+    @State private var deleted = false
     @State private var reload = 0
 
     var body: some View {
         Group {
-            if let thread {
+            if deleted {
+                DeletedThreadView(actionTitle: "창 닫기") { dismissWindow(value: key) }
+            } else if let thread {
                 ThreadDestination(accountID: key.accountID, thread: thread, detached: true,
                                   repository: repository, conversations: conversations,
                                   management: management, defaults: defaults)
@@ -92,6 +95,8 @@ private struct DetachedThread: View {
                 let store = ThreadConversationModel.WindowStore.shared(
                     defaults: defaults, accountID: key.accountID, threadID: key.threadID)
                 thread = try await store.refreshDetail(using: repository.thread(id:))
+            } catch ThreadDetailError.deleted {
+                if !Task.isCancelled { deleted = true }
             } catch {
                 if !Task.isCancelled {
                     thread = nil
@@ -123,6 +128,7 @@ struct ThreadDestination: View {
     @State private var updated: CommunityThread?
     @State private var mutating = false
     @State private var failure: String?
+    @State private var deleted = false
     @State private var accessFailure: String?
     @State private var shareDetail: CommunityThread?
     @State private var refresh = 0
@@ -203,6 +209,10 @@ struct ThreadDestination: View {
                 } actions: {
                     Button("내보내짐 확인") { destination = .acknowledgeKick }
                 }
+            } else if deleted {
+                DeletedThreadView(actionTitle: detached ? "창 닫기" : "목록으로 돌아가기") {
+                    broadcast(exit: true)
+                }
             } else if let accessFailure {
                 ContentUnavailableView {
                     Label("대화를 불러올 수 없어요", systemImage: "bubble.left")
@@ -237,6 +247,12 @@ struct ThreadDestination: View {
                     shareDetail = fresh
                     updated = fresh
                     accessFailure = nil
+                } catch ThreadDetailError.deleted {
+                    guard !Task.isCancelled else { return }
+                    deleted = true
+                    accessFailure = ThreadDetailError.deleted.localizedDescription
+                    destination = nil
+                    return
                 } catch {
                     if !Task.isCancelled {
                         shareDetail = nil
@@ -268,5 +284,20 @@ struct ThreadDestination: View {
         if !exit { refresh += 1 }
         NotificationCenter.default.post(name: .threadBrowserChanged, object: key,
                                         userInfo: ["exit": exit])
+    }
+}
+
+private struct DeletedThreadView: View {
+    let actionTitle: String
+    let action: () -> Void
+
+    var body: some View {
+        ContentUnavailableView {
+            Label("삭제된 스레드예요", systemImage: "bubble.left")
+        } description: {
+            Text("이 스레드의 대화를 더 이상 볼 수 없어요.")
+        } actions: {
+            Button(actionTitle, action: action)
+        }
     }
 }

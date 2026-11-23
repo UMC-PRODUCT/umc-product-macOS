@@ -7,10 +7,23 @@
 
 import Foundation
 
+public enum ThreadDetailError: LocalizedError {
+    case accessDenied
+    case deleted
+
+    public var errorDescription: String? {
+        switch self {
+        case .accessDenied: "대화에 접근할 수 없어요."
+        case .deleted: "삭제된 스레드예요"
+        }
+    }
+}
+
 public struct CommunityThread: Identifiable, Equatable, Sendable {
     public let id: String
     public let title: String
     public let description: String?
+    public let category: String?
     public let icon: String
     public let isPinned: Bool
     public let isMuted: Bool
@@ -23,10 +36,11 @@ public struct CommunityThread: Identifiable, Equatable, Sendable {
 
     public init(id: String, title: String, description: String?, icon: String,
                 isPinned: Bool, isMuted: Bool, isJoined: Bool, membershipState: String?, unread: String,
-                myRole: ThreadManagementRole? = nil, memberCount: String? = nil, shareURL: URL? = nil) {
+                category: String? = nil, myRole: ThreadManagementRole? = nil, memberCount: String? = nil, shareURL: URL? = nil) {
         self.id = id
         self.title = title
         self.description = description
+        self.category = category
         self.icon = icon
         self.isPinned = isPinned
         self.isMuted = isMuted
