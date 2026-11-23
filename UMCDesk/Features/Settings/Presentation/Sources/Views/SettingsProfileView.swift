@@ -56,6 +56,7 @@ struct SettingsProfileView: View {
             }
         }
         .scrollBounceBehavior(.basedOnSize)
+        .focusable()
     }
 
     private func profileSummary(_ profile: SettingsProfile) -> some View {
@@ -73,10 +74,10 @@ struct SettingsProfileView: View {
                     }
                     Text(profile.schoolName ?? AppLocalization.string("학교 정보 없음"))
                         .umcTypography(.headlineRegular)
-                        .foregroundStyle(palette.textNeutralWeak500)
+                        .foregroundStyle(palette.textNeutralMedium600)
                     Text(profile.email ?? AppLocalization.string("이메일 정보 없음"))
                         .umcTypography(.headlineRegular)
-                        .foregroundStyle(palette.textNeutralWeak500)
+                        .foregroundStyle(palette.textNeutralMedium600)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 Button {
@@ -239,15 +240,11 @@ struct SettingsProfileView: View {
                             .headlineBold)
                         Text(AppLocalization.string("운영진에게 받은 챌린저 코드로 활동을 등록해 주세요."))
                             .umcTypography(.bodyRegular)
-                            .foregroundStyle(palette.textNeutralWeak500)
+                            .foregroundStyle(palette.textNeutralMedium600)
                     }
                     .padding(.vertical, UMCSpacing.value16)
                 } else {
-                    VStack(spacing: UMCSpacing.value8) {
-                        ForEach(profile.activities) { activity in
-                            SettingsActivityRow(activity: activity)
-                        }
-                    }
+                    SettingsActivityList(activities: profile.activities)
                 }
                 SettingsActionButton(
                     title: AppLocalization.string("활동 코드 등록"), symbol: "plus", kind: .primary,
@@ -263,7 +260,7 @@ struct SettingsProfileView: View {
             Text(title).umcTypography(.title4Bold).accessibilityAddTraits(.isHeader)
             Text(description)
                 .umcTypography(.bodyRegular)
-                .foregroundStyle(palette.textNeutralWeak500)
+                .foregroundStyle(palette.textNeutralMedium600)
                 .fixedSize(horizontal: false, vertical: true)
         }
     }
@@ -325,12 +322,34 @@ extension SettingsLinkKind {
     }
 }
 
-struct SettingsActivityRow: View {
+struct SettingsActivityList: View {
+    @Environment(\.settingsAppearancePalette) private var palette
+    let activities: [SettingsActivity]
+
+    var body: some View {
+        Grid(alignment: .leading, horizontalSpacing: UMCSpacing.value12,
+             verticalSpacing: UMCSpacing.value8) {
+            GridRow {
+                Text(AppLocalization.string("기수"))
+                Text(AppLocalization.string("파트"))
+                Text(AppLocalization.string("직책"))
+            }
+            .umcTypography(.captionRegular)
+            .foregroundStyle(palette.textNeutralMedium600)
+            ForEach(activities) { activity in
+                SettingsActivityRow(activity: activity)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+private struct SettingsActivityRow: View {
     @Environment(\.settingsAppearancePalette) private var palette
     let activity: SettingsActivity
 
     var body: some View {
-        HStack(spacing: UMCSpacing.value12) {
+        GridRow {
             Text(activity.generation.isEmpty ? AppLocalization.string("기수 미정") :
                 AppLocalization.string("\(activity.generation)기"))
                 .umcTypography(.bodyRegular)
@@ -345,7 +364,6 @@ struct SettingsActivityRow: View {
                 VStack(alignment: .leading, spacing: UMCSpacing.value4) { roleTags }
             }
         }
-        .frame(maxWidth: .infinity, minHeight: 32, alignment: .leading)
         .accessibilityElement(children: .combine)
     }
 
@@ -528,7 +546,7 @@ private struct SettingsUsageStatistics: View {
             VStack(alignment: .leading, spacing: UMCSpacing.value8) {
                 Text(title)
                     .umcTypography(.bodyRegular)
-                    .foregroundStyle(palette.textNeutralWeak500)
+                    .foregroundStyle(palette.textNeutralMedium600)
                 Text(value).umcTypography(.title2Bold)
             }
             .fixedSize(horizontal: true, vertical: true)
@@ -543,7 +561,7 @@ private struct SettingsUsagePlaceholder: View {
     var body: some View {
         Text(AppLocalization.string("사용 기록 기능을 준비하고 있어요."))
             .umcTypography(.bodyRegular)
-            .foregroundStyle(palette.textNeutralWeak500)
+            .foregroundStyle(palette.textNeutralMedium600)
             .frame(maxWidth: .infinity, minHeight: 140)
     }
 }
@@ -617,7 +635,7 @@ private struct SettingsUsageHeatmap: View {
         VStack(alignment: .leading, spacing: UMCSpacing.value12) {
             Text(AppLocalization.string("최근 12주 · 2026. 7. 27. – 10. 18."))
                 .umcTypography(.bodyRegular)
-                .foregroundStyle(palette.textNeutralWeak500)
+                .foregroundStyle(palette.textNeutralMedium600)
             HStack(alignment: .top, spacing: UMCSpacing.value4) {
                 VStack(spacing: UMCSpacing.value4) {
                     Text(" ").frame(height: 16)
@@ -633,14 +651,14 @@ private struct SettingsUsageHeatmap: View {
                     }
                 }
                 .umcTypography(.captionRegular)
-                .foregroundStyle(palette.textNeutralWeak500)
+                .foregroundStyle(palette.textNeutralMedium600)
                 .padding(.trailing, UMCSpacing.value4)
                 .accessibilityHidden(true)
                 ForEach(SettingsUsagePreview.weeks) { week in
                     VStack(spacing: UMCSpacing.value4) {
                         Text(week.month)
                             .umcTypography(.captionRegular)
-                            .foregroundStyle(palette.textNeutralWeak500)
+                            .foregroundStyle(palette.textNeutralMedium600)
                             .frame(height: 16)
                             .accessibilityHidden(true)
                         ForEach(week.days) { day in
@@ -666,7 +684,7 @@ private struct SettingsUsageHeatmap: View {
                 Text(AppLocalization.string("많음"))
             }
             .umcTypography(.captionRegular)
-            .foregroundStyle(palette.textNeutralWeak500)
+            .foregroundStyle(palette.textNeutralMedium600)
             .accessibilityElement(children: .ignore)
                 .accessibilityLabel(
                     AppLocalization.string("사용 시간 색상: 기록 없음, 30분 미만, 1시간 미만, 1시간 30분 미만, 그 이상"))

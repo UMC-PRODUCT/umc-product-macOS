@@ -155,11 +155,7 @@ struct SettingsDialogContent: View {
                     .umcTypography(.title4Regular)
                     .foregroundStyle(palette.textBrandDefault)
                 ScrollView {
-                    VStack(spacing: UMCSpacing.value8) {
-                        ForEach(viewModel.registeredActivities) { activity in
-                            SettingsActivityRow(activity: activity)
-                        }
-                    }
+                    SettingsActivityList(activities: viewModel.registeredActivities)
                 }
                 .scrollBounceBehavior(.basedOnSize)
                 .frame(idealHeight: 80, maxHeight: 240)
