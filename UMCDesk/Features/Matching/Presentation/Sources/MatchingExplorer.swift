@@ -170,20 +170,14 @@ struct MatchingApplicationRoute: Identifiable {
     let isDraft: Bool
 }
 
-enum MatchingDetailRoundState {
-    case chooseChapter, loading, failed(String), ready
-}
-
-struct MatchingProjectDetail<ChapterPicker: View, Tabs: View>: View {
+struct MatchingProjectDetail<Tabs: View>: View {
     let summary: MatchingProject
     let repository: any MatchingUseCase
     let gisuId: String
-    let rounds: [MatchingRound]
-    let roundState: MatchingDetailRoundState
-    let retry: () -> Void
+    let applicantParts: [String]
+    @State private var eligibleRounds = MatchingRequest<[MatchingRound]>()
     let openApplications: () -> Void
     let back: () -> Void
-    @ViewBuilder let chapterPicker: () -> ChapterPicker
     @ViewBuilder let tabs: () -> Tabs
 
     @State private var detail = MatchingRequest<MatchingProject>()
@@ -210,7 +204,7 @@ struct MatchingProjectDetail<ChapterPicker: View, Tabs: View>: View {
                 Button("목록으로", action: back)
                     .buttonStyle(MatchingActionStyle(appearance: .text))
                 if case .loaded(let access) = permission.phase, access.allowed,
-                   case .ready = roundState {
+                   case .loaded = eligibleRounds.phase {
                     TimelineView(.periodic(from: .now, by: 15)) { tick in
                         let open = rounds.filter { $0.isOpen(at: tick.date) }
                         let selected = open.count == 1 ? open[0] : open.first { $0.id == chosenRoundId }
@@ -275,6 +269,15 @@ struct MatchingProjectDetail<ChapterPicker: View, Tabs: View>: View {
         .task(id: attempt) {
             await detail.load { try await repository.project(id: summary.id) }
             await permission.load { try await repository.applicationCapability(projectId: summary.id) }
+            if case .loaded(let capability) = permission.phase, capability.allowed {
+                await eligibleRounds.load {
+                    guard let chapter = try await repository.matchingChapterId(gisuId: gisuId)
+                    else { return [] }
+                    return try await repository.rounds(chapterId: chapter).filter { round in
+                        round.isEligible(chapterId: chapter, parts: applicantParts)
+                    }
+                }
+            }
             let access = try? await repository.permissions(projectId: summary.id)
             if !Task.isCancelled { canReadTeam = access?[.team]?.allowed == true }
         }
@@ -286,6 +289,11 @@ struct MatchingProjectDetail<ChapterPicker: View, Tabs: View>: View {
         .sheet(isPresented: $viewingTeam) {
             MatchingTeamSheet(repository: repository, projectId: summary.id)
         }
+    }
+
+    private var rounds: [MatchingRound] {
+        if case .loaded(let rounds) = eligibleRounds.phase { return rounds }
+        return []
     }
 
     private var descriptionLines: [Substring] {
@@ -300,18 +308,13 @@ struct MatchingProjectDetail<ChapterPicker: View, Tabs: View>: View {
     @ViewBuilder private func applicationAction(_ project: MatchingProject, at now: Date) -> some View {
         let open = rounds.filter { $0.isOpen(at: now) }
         MatchingRequestView(request: permission, retry: { attempt += 1 }) { capability in
-            if capability.allowed {
-                chapterPicker()
-            }
             if !capability.allowed {
                 Text(capability.reason ?? "이 프로젝트에 지원할 수 없어요.").foregroundStyle(.secondary)
-            } else if case .chooseChapter = roundState {
-                Text("지원할 프로젝트의 지부를 선택해 주세요.").foregroundStyle(.secondary)
-            } else if case .loading = roundState {
+            } else if case .loading = eligibleRounds.phase {
                 ProgressView("지원 가능한 차수 확인 중")
-            } else if case .failed(let failure) = roundState {
+            } else if case .failed(let failure) = eligibleRounds.phase {
                 Text(failure).foregroundStyle(UMCColor.Semantic.textError)
-                Button("일정 다시 불러오기", action: retry)
+                Button("일정 다시 불러오기") { attempt += 1 }
             } else if !open.isEmpty {
                 let roundId = open.count == 1 ? open[0].id
                     : open.first(where: { $0.id == chosenRoundId })?.id

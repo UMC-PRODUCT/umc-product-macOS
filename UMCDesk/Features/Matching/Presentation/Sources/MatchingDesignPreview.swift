@@ -22,7 +22,7 @@ public enum MatchingDesignPreview {
                 logoImageUrl: nil, externalLink: nil, applicationFormId: nil)
             MatchingView(repository: useCase, gisuId: "10", previewProject: project)
         } else {
-            MatchingView(repository: useCase, gisuId: "10", initialDestination: destination)
+            MatchingView(repository: useCase, gisuId: "10", initialDestination: destination, applicantParts: ["WEB"])
         }
     }
 }

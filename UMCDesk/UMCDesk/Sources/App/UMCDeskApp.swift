@@ -171,7 +171,8 @@ private struct AppRootView: View {
                 matchingContent: dependencies.navigation.matchingDestination.map { destination in
                     AnyView(MatchingWorkspace(
                         repository: dependencies.matchingUseCase, destination: destination,
-                        memberId: dependencies.settingsViewModel.profile?.id
+                        memberId: dependencies.settingsViewModel.profile?.id,
+                        activities: dependencies.settingsViewModel.profile?.activities ?? []
                     )
                     .id(dependencies.navigation.matchingNavigationID)
                     .id(dependencies.settingsViewModel.profile?.id))
@@ -201,6 +202,7 @@ private struct MatchingWorkspace: View {
     let repository: any MatchingUseCase
     let destination: MatchingDestination
     let memberId: String?
+    let activities: [SettingsActivity]
     @State private var gisuId: String?
     @State private var errorMessage: String?
     @State private var attempt = 0
@@ -209,7 +211,8 @@ private struct MatchingWorkspace: View {
         Group {
             if let gisuId {
                 MatchingView(repository: repository, gisuId: gisuId,
-                             initialDestination: destination, memberId: memberId)
+                             initialDestination: destination, memberId: memberId,
+                             applicantParts: activities.filter { $0.gisuId == gisuId }.map(\.part))
             } else if let errorMessage {
                 ContentUnavailableView {
                     Label("활동 기수를 불러올 수 없어요", systemImage: "calendar")

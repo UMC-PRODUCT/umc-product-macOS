@@ -15,6 +15,17 @@ import Testing
 
 @Suite("Matching server contracts")
 struct MatchingResponseTests {
+    @Test("Applicants see only rounds in their matching chapter and part")
+    func eligibleRounds() {
+        let round = MatchingRound(id: "11", name: "디자인 1차", type: "PLAN_DESIGN",
+            phase: "FIRST", chapterId: "23", startsAt: "", endsAt: "",
+            decisionDeadline: nil, resultPublishAt: nil)
+        #expect(round.isEligible(chapterId: "23", parts: ["DESIGN"]))
+        #expect(!round.isEligible(chapterId: "24", parts: ["DESIGN"]))
+        #expect(!round.isEligible(chapterId: "23", parts: ["IOS"]))
+        #expect(!round.isEligible(chapterId: "23", parts: []))
+    }
+
     @Test("A masked result and a random assignment without an application ID both survive decoding")
     func personalCards() throws {
         let json = """

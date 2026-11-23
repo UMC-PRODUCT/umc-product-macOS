@@ -126,6 +126,12 @@ public struct MatchingRound: Equatable, Sendable {
     public let description: String?
     public let autoDecisionExecutedAt: String?
 
+    public func isEligible(chapterId: String, parts: [String]) -> Bool {
+        guard self.chapterId == chapterId, let roster = MatchingRosterType(rawValue: type),
+              roster != .all else { return false }
+        return parts.contains { roster.includes(part: $0) }
+    }
+
     public init(
         id: String,
         name: String,

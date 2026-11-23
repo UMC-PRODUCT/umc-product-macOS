@@ -75,6 +75,7 @@ struct MatchingRequestView<Value, Content: View>: View {
 public struct MatchingView: View {
     private let repository: any MatchingUseCase
     private let gisuId: String
+    private let applicantParts: [String]
     private let memberId: String?
     @State private var destination: MatchingDestination
     @State private var organization = MatchingRequest<MatchingOrganization>()
@@ -99,10 +100,12 @@ public struct MatchingView: View {
 
     public init(
         repository: any MatchingUseCase, gisuId: String,
-        initialDestination: MatchingDestination = .explore, memberId: String? = nil
+        initialDestination: MatchingDestination = .explore, memberId: String? = nil,
+        applicantParts: [String] = []
     ) {
         self.repository = repository
         self.gisuId = gisuId
+        self.applicantParts = applicantParts
         self.memberId = memberId
         _destination = State(initialValue: initialDestination)
     }
@@ -111,6 +114,7 @@ public struct MatchingView: View {
     init(repository: any MatchingUseCase, gisuId: String, previewProject: MatchingProject) {
         self.repository = repository
         self.gisuId = gisuId
+        self.applicantParts = ["WEB"]
         self.memberId = nil
         _destination = State(initialValue: .explore)
         _selectedProject = State(initialValue: previewProject)
@@ -218,11 +222,10 @@ public struct MatchingView: View {
         if let selectedProject {
             MatchingProjectDetail(
                 summary: selectedProject, repository: repository, gisuId: gisuId,
-                rounds: loadedRounds, roundState: detailRoundState,
-                retry: { organizationAttempt += 1; roundAttempt += 1 },
+                applicantParts: applicantParts,
                 openApplications: { navigate(.applications) },
                 back: { navigate(.explore) },
-                chapterPicker: { chapterPicker(allowsAll: false) }, tabs: { matchingTabs }
+                tabs: { matchingTabs }
             )
             .id(selectedProject.id)
         } else {
@@ -259,21 +262,6 @@ public struct MatchingView: View {
             Label("매칭 도구", systemImage: "slider.horizontal.3")
         }
         .fixedSize()
-    }
-
-    private var detailRoundState: MatchingDetailRoundState {
-        switch organization.phase {
-        case .loading: return .loading
-        case .failed(let failure): return .failed(failure)
-        case .loaded(let org):
-            if org.chapters.isEmpty { return .ready }
-        }
-        guard chapterId != nil else { return .chooseChapter }
-        switch rounds.phase {
-        case .loading: return .loading
-        case .failed(let failure): return .failed(failure)
-        case .loaded: return .ready
-        }
     }
 
     private var schools: [MatchingFilterOption] {
