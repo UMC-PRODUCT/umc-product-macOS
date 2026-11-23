@@ -9,6 +9,31 @@ import CoreDesignSystem
 import MatchingDomain
 import SwiftUI
 
+@MainActor
+@Observable
+final class MatchingExplorerState {
+    struct Filters: Equatable {
+        var keyword = ""
+        var part: String?
+        var quotaStatus: String?
+        var schoolId: String?
+    }
+
+    struct Query: Equatable {
+        let chapterId: String?
+        let filters: Filters
+        let page: Int
+        let attempt: Int
+    }
+
+    var loadedQuery: Query?
+    var returnProjectId: String?
+    var filters = Filters()
+    var page = 0
+    var attempt = 0
+    var projects = MatchingRequest<MatchingProjectPage>()
+}
+
 struct MatchingExplorer: View {
     let repository: any MatchingUseCase
     let gisuId: String
@@ -16,40 +41,25 @@ struct MatchingExplorer: View {
     let schools: [MatchingFilterOption]
     let select: (MatchingProject) -> Void
 
-    private struct Filters: Equatable {
-        var keyword = ""
-        var part: String?
-        var quotaStatus: String?
-        var schoolId: String?
-    }
-
-    private struct Query: Equatable {
-        let chapterId: String?
-        let filters: Filters
-        let page: Int
-        let attempt: Int
-    }
-
-    @State private var filters = Filters()
-    @State private var page = 0
-    @State private var attempt = 0
-    @State private var projects = MatchingRequest<MatchingProjectPage>()
+    @Bindable var state: MatchingExplorerState
+    let restoreScroll: () -> Void
+    @FocusState private var focusedProject: String?
     @FocusState private var searchFocused: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: UMCSpacing.value24) {
             HStack {
-                TextField("프로젝트명 검색", text: $filters.keyword)
+                TextField("프로젝트명 검색", text: $state.filters.keyword)
                     .accessibilityLabel("프로젝트명 검색")
                     .accessibilityHint("프로젝트 이름을 입력해 검색하세요.")
                     .frame(maxWidth: 220)
                     .focused($searchFocused)
-                Picker("학교", selection: $filters.schoolId) {
+                Picker("학교", selection: $state.filters.schoolId) {
                     Text("학교 전체").tag(String?.none)
                     ForEach(schools) { Text($0.name).tag(Optional($0.id)) }
                 }
                 .accessibilityLabel("학교 필터")
-                Picker("파트", selection: $filters.part) {
+                Picker("파트", selection: $state.filters.part) {
                     Text("파트 전체").tag(String?.none)
                     ForEach(["DESIGN", "MOBILE_PRODUCT_ENGINEER", "WEB_PRODUCT_ENGINEER",
                              "WEB", "IOS", "ANDROID", "NODEJS", "SPRINGBOOT"], id: \.self) {
@@ -57,7 +67,7 @@ struct MatchingExplorer: View {
                     }
                 }
                 .accessibilityLabel("파트 필터")
-                Picker("모집 상태", selection: $filters.quotaStatus) {
+                Picker("모집 상태", selection: $state.filters.quotaStatus) {
                     Text("모집 상태 전체").tag(String?.none)
                     Text("모집 중").tag(Optional("RECRUITING"))
                     Text("모집 완료").tag(Optional("COMPLETED"))
@@ -72,7 +82,7 @@ struct MatchingExplorer: View {
                     .keyboardShortcut("f")
                     .hidden()
             }
-            MatchingRequestView(request: projects, retry: { attempt += 1 }) { result in
+            MatchingRequestView(request: state.projects, retry: { state.attempt += 1 }) { result in
                 if result.content.isEmpty {
                     ContentUnavailableView("프로젝트가 없어요", systemImage: "magnifyingglass",
                         description: Text("다른 검색어나 모집 조건을 선택해 보세요."))
@@ -80,46 +90,60 @@ struct MatchingExplorer: View {
                     LazyVGrid(columns: [GridItem(.adaptive(minimum: 315, maximum: 460), spacing: UMCSpacing.value24)],
                               alignment: .leading, spacing: UMCSpacing.value24) {
                         ForEach(result.content, id: \.id) { project in
-                            MatchingProjectCard(project: project) { select(project) }
+                            MatchingProjectCard(project: project, focusedProject: $focusedProject) {
+                                state.returnProjectId = project.id
+                                select(project)
+                            }
+                            .onAppear {
+                                guard state.returnProjectId == project.id else { return }
+                                focusedProject = project.id
+                                state.returnProjectId = nil
+                                restoreScroll()
+                            }
                         }
                     }
                 }
                 HStack {
-                    let start = page * 3 + 1
-                    let end = page * 3 + result.content.count
+                    let start = state.page * 3 + 1
+                    let end = state.page * 3 + result.content.count
                     if let count = result.totalElements, end >= start {
                         Text("\(start)–\(end) / \(count)개 프로젝트").umcTypography(.bodyRegular)
                     } else {
-                        Text("\(page + 1)페이지").umcTypography(.bodyRegular)
+                        Text("\(state.page + 1)페이지").umcTypography(.bodyRegular)
                     }
                     Spacer()
-                    if page > 0 {
-                        Button("이전 페이지") { page -= 1 }
+                    if state.page > 0 {
+                        Button("이전 페이지") { state.page -= 1 }
                             .buttonStyle(MatchingActionStyle(appearance: .secondary))
                     }
-                    Button("다음 페이지") { page += 1 }
+                    Button("다음 페이지") { state.page += 1 }
                         .buttonStyle(MatchingActionStyle(appearance: .secondary))
                         .disabled(!result.hasNext)
                 }
             }
         }
-        .onChange(of: filters) { page = 0 }
-        .onChange(of: chapterId) { page = 0 }
-        .task(id: Query(chapterId: chapterId, filters: filters, page: page, attempt: attempt)) {
-            await projects.load {
-                if !filters.keyword.isEmpty { try await Task.sleep(for: .milliseconds(250)) }
+        .onChange(of: state.filters) { state.page = 0 }
+        .onChange(of: chapterId) { state.page = 0 }
+        .task(id: MatchingExplorerState.Query(chapterId: chapterId, filters: state.filters, page: state.page, attempt: state.attempt)) {
+            let query = MatchingExplorerState.Query(chapterId: chapterId, filters: state.filters,
+                                                    page: state.page, attempt: state.attempt)
+            if state.loadedQuery == query, case .loaded = state.projects.phase { return }
+            await state.projects.load {
+                if !state.filters.keyword.isEmpty { try await Task.sleep(for: .milliseconds(250)) }
                 return try await repository.projects(
-                    gisuId: gisuId, keyword: filters.keyword.isEmpty ? nil : filters.keyword,
-                    page: page, part: filters.part, quotaStatus: filters.quotaStatus,
-                    schoolId: filters.schoolId, chapterId: chapterId
+                    gisuId: gisuId, keyword: state.filters.keyword.isEmpty ? nil : state.filters.keyword,
+                    page: state.page, part: state.filters.part, quotaStatus: state.filters.quotaStatus,
+                    schoolId: state.filters.schoolId, chapterId: chapterId
                 )
             }
+            if !Task.isCancelled { state.loadedQuery = query }
         }
     }
 }
 
 struct MatchingProjectCard: View {
     let project: MatchingProject
+    let focusedProject: FocusState<String?>.Binding
     let open: () -> Void
 
     var body: some View {
@@ -146,7 +170,9 @@ struct MatchingProjectCard: View {
             HStack {
                 Text(ownerName).umcTypography(.bodyRegular).foregroundStyle(.secondary)
                 Spacer()
-                Button("공고 보기 →", action: open).buttonStyle(MatchingActionStyle(appearance: .text))
+                Button("공고 보기 →", action: open)
+                    .focused(focusedProject, equals: project.id)
+                    .buttonStyle(MatchingActionStyle(appearance: .text))
             }
         }
         .matchingPanel()

@@ -77,6 +77,10 @@ public struct MatchingView: View {
     private let gisuId: String
     private let applicantParts: [String]
     private let memberId: String?
+    @State private var explorer = MatchingExplorerState()
+    @State private var position = ScrollPosition()
+    @State private var visibleY: CGFloat = 0
+    @State private var explorerY: CGFloat = 0
     @State private var destination: MatchingDestination
     @State private var organization = MatchingRequest<MatchingOrganization>()
     @State private var rounds = MatchingRequest<[MatchingRound]>()
@@ -143,6 +147,10 @@ public struct MatchingView: View {
                 }
                 .padding(.horizontal, UMCSpacing.value40)
                 .padding(.vertical, UMCSpacing.value24)
+            }
+            .scrollPosition($position)
+            .onScrollGeometryChange(for: CGFloat.self) { $0.visibleRect.minY } action: { _, y in
+                visibleY = y
             }
         }
         .toolbar {
@@ -241,7 +249,10 @@ public struct MatchingView: View {
             case .explore:
                 scheduleSummary
                 MatchingExplorer(repository: repository, gisuId: gisuId, chapterId: chapterId,
-                                 schools: schools, select: { go(.init(destination: .explore, project: $0)) })
+                                 schools: schools, select: {
+                                     explorerY = visibleY
+                                     go(.init(destination: .explore, project: $0))
+                                 }, state: explorer, restoreScroll: { position.scrollTo(y: explorerY) })
             case .applications:
                 MatchingApplications(repository: repository, gisuId: gisuId, memberId: memberId, rounds: loadedRounds,
                                      explore: { navigate(.explore) })
@@ -362,6 +373,10 @@ public struct MatchingView: View {
     }
 
     private func restore(_ target: Location) {
+        if target.project != nil { position.scrollTo(edge: .top) }
+        if selectedProject != nil, target.project == nil, target.destination == .explore {
+            position.scrollTo(y: explorerY)
+        }
         selectedProject = target.project
         draftId = target.draftId
         destination = target.destination
