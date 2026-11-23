@@ -8,36 +8,86 @@ import NoticeDomain
 import SwiftUI
 import UniformTypeIdentifiers
 
+@MainActor
+@Observable
+final class NoticeAccessState {
+    var entry: NoticeEntry?
+    var permissions: Set<String> = []
+    var selection: Set<String> = []
+    var editSheet = false
+    var deletePrompt = false
+    var showReaders = false
+    var photo: NoticeAttachment?
+    var counts: NoticeReadCounts?
+    var rows: [NoticeReader] = []
+    var targets: Set<String> = []
+    var cursor: String?
+    var confirmReminder = false
+    var reminderSent = false
+    var requestID = UUID()
+
+    func applyPermissions(_ allowed: Set<String>) throws {
+        guard allowed.contains("READ") else {
+            revoke()
+            throw NoticeRequestFailure.accessDenied
+        }
+        permissions = allowed
+        if !allowed.contains("CHECK") {
+            clearReaders()
+            showReaders = false
+        }
+        if !allowed.contains("EDIT") { editSheet = false }
+        if !allowed.contains("DELETE") { deletePrompt = false }
+    }
+
+    func clearReaders() {
+        requestID = UUID()
+        counts = nil
+        rows = []
+        targets = []
+        cursor = nil
+        confirmReminder = false
+        reminderSent = false
+    }
+
+    func revoke() {
+        entry = nil
+        permissions = []
+        selection = []
+        editSheet = false
+        deletePrompt = false
+        showReaders = false
+        photo = nil
+        clearReaders()
+    }
+}
+
 struct NoticeArticleView: View {
     let repository: any NoticeRepository
+    @State private var access = NoticeAccessState()
     let id: String
     let confirmed: Bool
     let onBack: () -> Void
+    let onAccessLost: () -> Void
     let onChanged: () -> Void
     let onRead: () -> Void
-    @State private var entry: NoticeEntry?
-    @State private var selection: Set<String> = []
-    @State private var permissions: Set<String> = []
-    @State private var editSheet = false
-    @State private var deletePrompt = false
-    @State private var showReaders = false
-    @State private var photo: NoticeAttachment?
     @State private var busy = false
     @State private var error: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: UMCSpacing.value16) {
             HStack {
-                Text("공지 / " + (entry?.mustRead == true ? "고정" : "상세")).foregroundStyle(.secondary)
+                Text("공지 / " + (access.entry?.mustRead == true ? "고정" : "상세")).foregroundStyle(
+                    .secondary)
                 Spacer()
-                if permissions.contains("CHECK") {
-                    Button("읽음 현황") { showReaders = true }
+                if access.permissions.contains("CHECK") {
+                    Button("읽음 현황") { access.showReaders = true }
                 }
-                if permissions.contains("EDIT") {
-                    Button("수정") { editSheet = true }
+                if access.permissions.contains("EDIT") {
+                    Button("수정") { access.editSheet = true }
                 }
-                if permissions.contains("DELETE") {
-                    Button("삭제", role: .destructive) { deletePrompt = true }
+                if access.permissions.contains("DELETE") {
+                    Button("삭제", role: .destructive) { access.deletePrompt = true }
                 }
             }
             if let error {
@@ -48,20 +98,20 @@ struct NoticeArticleView: View {
                     }
                 }
             }
-            if let entry {
+            if let article = access.entry {
                 ScrollView {
                     VStack(alignment: .leading, spacing: UMCSpacing.value16) {
-                        Text(entry.audienceLabel).foregroundStyle(.secondary)
-                        Text(entry.title).umcTypography(.largeTitle2Bold)
-                        Label(entry.metadata, systemImage: "person.crop.circle")
+                        Text(article.audienceLabel).foregroundStyle(.secondary)
+                        Text(article.title).umcTypography(.largeTitle2Bold)
+                        Label(article.metadata, systemImage: "person.crop.circle")
                             .foregroundStyle(.secondary)
                         Divider()
                         Text(
                             (try? AttributedString(
-                                markdown: entry.content,
+                                markdown: article.content,
                                 options: .init(
                                     interpretedSyntax: .inlineOnlyPreservingWhitespace)))
-                                ?? AttributedString(entry.content)
+                                ?? AttributedString(article.content)
                         )
                         .umcTypography(.bodyRegular).textSelection(.enabled)
                         .environment(
@@ -70,13 +120,13 @@ struct NoticeArticleView: View {
                                 noticeWebURL(url.absoluteString) == nil
                                     ? .discarded : .systemAction
                             })
-                        if let images = entry.images, !images.isEmpty {
+                        if let images = article.images, !images.isEmpty {
                             GroupBox("사진 \(images.count)") {
                                 ScrollView(.horizontal) {
                                     HStack {
                                         ForEach(images) { image in
                                             Button {
-                                                photo = image
+                                                access.photo = image
                                             } label: {
                                                 AsyncImage(url: noticeWebURL(image.url)) { image in
                                                     image.resizable().scaledToFill()
@@ -92,8 +142,8 @@ struct NoticeArticleView: View {
                                 }
                             }
                         }
-                        if let vote = entry.vote { poll(vote) }
-                        ForEach(entry.links ?? []) { link in
+                        if let vote = article.vote { poll(vote) }
+                        ForEach(article.links ?? []) { link in
                             if let url = noticeWebURL(link.url) {
                                 Link(destination: url) { Label(link.url, systemImage: "link") }
                             }
@@ -118,7 +168,7 @@ struct NoticeArticleView: View {
         }
         .padding(UMCSpacing.value32)
         .task { await perform { try await reloadWithPermissions() } }
-        .confirmationDialog("이 공지를 삭제할까요?", isPresented: $deletePrompt) {
+        .confirmationDialog("이 공지를 삭제할까요?", isPresented: $access.deletePrompt) {
             Button("공지 삭제", role: .destructive) {
                 Task {
                     await perform {
@@ -130,22 +180,28 @@ struct NoticeArticleView: View {
             }
         }
         .sheet(
-            isPresented: $editSheet,
+            isPresented: $access.editSheet,
             onDismiss: {
+                guard access.entry != nil else { return }
                 onChanged()
-                Task { await perform { try await reload() } }
+                Task { await perform { try await reloadWithPermissions() } }
             }
         ) {
-            if let entry {
-                NoticeEditView(repository: repository, entry: entry) {
-                    editSheet = false
+            if let article = access.entry {
+                NoticeEditView(
+                    repository: repository, entry: article, onAccessDenied: revokeAccess
+                ) {
+                    access.editSheet = false
                 }
             }
         }
-        .sheet(isPresented: $showReaders) { NoticeReadersView(repository: repository, id: id) }
-        .sheet(item: $photo) { photo in
+        .sheet(isPresented: $access.showReaders) {
+            NoticeReadersView(
+                access: access, repository: repository, id: id, onAccessDenied: revokeAccess)
+        }
+        .sheet(item: $access.photo) { imageFile in
             VStack {
-                AsyncImage(url: noticeWebURL(photo.url)) { phase in
+                AsyncImage(url: noticeWebURL(imageFile.url)) { phase in
                     if let image = phase.image {
                         image.resizable().scaledToFit()
                     } else if phase.error != nil {
@@ -154,7 +210,7 @@ struct NoticeArticleView: View {
                         ProgressView()
                     }
                 }
-                Button("닫기") { self.photo = nil }.keyboardShortcut(.cancelAction)
+                Button("닫기") { access.photo = nil }.keyboardShortcut(.cancelAction)
             }
             .padding().frame(minWidth: 450, minHeight: 320)
         }
@@ -176,31 +232,41 @@ struct NoticeArticleView: View {
                     Toggle(
                         "\(option.content) (\(option.voteCount)표)",
                         isOn: Binding {
-                            selection.contains(option.optionId)
+                            access.selection.contains(option.optionId)
                         } set: { enabled in
                             if enabled {
-                                if !vote.allowMultipleChoice { selection.removeAll() }
-                                selection.insert(option.optionId)
+                                if !vote.allowMultipleChoice { access.selection.removeAll() }
+                                access.selection.insert(option.optionId)
                             } else {
-                                selection.remove(option.optionId)
+                                access.selection.remove(option.optionId)
                             }
                         }
                     )
                     .disabled(vote.status != "OPEN" || busy)
                 }
                 let previous = Set(vote.mySelectedOptionIds)
-                Button(selection.isEmpty && !previous.isEmpty ? "투표 취소" : "투표 제출") {
+                Button(access.selection.isEmpty && !previous.isEmpty ? "투표 취소" : "투표 제출") {
                     Task {
                         await perform {
-                            try await repository.vote(
-                                options: selection.sorted(),
-                                replacing: !previous.isEmpty, id: id)
-                            entry = nil
-                            try await reload()
+                            let desired = access.selection
+                            do {
+                                try await repository.vote(
+                                    options: desired.sorted(),
+                                    replacing: !previous.isEmpty, id: id)
+                            } catch let rejection as NoticeRequestFailure {
+                                throw rejection
+                            } catch {
+                                access.entry = nil
+                                try await reloadWithPermissions()
+                                if access.selection == desired { return }
+                                throw NoticeRequestFailure.rejected("현재 투표 결과를 확인한 뒤 다시 선택하세요.")
+                            }
+                            access.entry = nil
+                            try await reloadWithPermissions()
                         }
                     }
                 }
-                .disabled(vote.status != "OPEN" || busy || previous == selection)
+                .disabled(vote.status != "OPEN" || busy || previous == access.selection)
             }.frame(maxWidth: .infinity, alignment: .leading).padding(8)
         } label: {
             Label(vote.status == "OPEN" ? "진행 중인 투표" : "투표", systemImage: "chart.bar")
@@ -208,14 +274,20 @@ struct NoticeArticleView: View {
     }
 
     private func reloadWithPermissions() async throws {
+        let allowed = try await repository.permissions(id: id)
+        try access.applyPermissions(allowed)
         try await reload()
-        permissions = try await repository.permissions(id: id)
     }
 
     private func reload() async throws {
         let detail = try await repository.detail(id: id)
-        entry = detail
-        selection = Set(detail.vote?.mySelectedOptionIds ?? [])
+        access.entry = detail
+        access.selection = Set(detail.vote?.mySelectedOptionIds ?? [])
+    }
+
+    private func revokeAccess() {
+        access.revoke()
+        onAccessLost()
     }
 
     private func perform(_ operation: () async throws -> Void) async {
@@ -223,7 +295,9 @@ struct NoticeArticleView: View {
         busy = true
         error = nil
         defer { busy = false }
-        do { try await operation() } catch {
+        do { try await operation() } catch NoticeRequestFailure.accessDenied {
+            if !Task.isCancelled { revokeAccess() }
+        } catch {
             if !Task.isCancelled { self.error = error.localizedDescription }
         }
     }
@@ -231,47 +305,42 @@ struct NoticeArticleView: View {
 
 private struct NoticeReadersView: View {
     @Environment(\.dismiss) private var dismiss
+    @Bindable var access: NoticeAccessState
     let repository: any NoticeRepository
     let id: String
-    @State private var counts: NoticeReadCounts?
-    @State private var rows: [NoticeReader] = []
-    @State private var targets: Set<String> = []
-    @State private var confirmReminder = false
-    @State private var reminderSent = false
+    let onAccessDenied: () -> Void
     @State private var status = "READ"
-    @State private var cursor: String?
     @State private var busy = false
     @State private var error: String?
-    @State private var requestID = UUID()
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             Text("읽음 현황").umcTypography(.title2Bold)
-            if let counts {
+            if let statistics = access.counts {
                 Text(
                     [
-                        "전체 \(counts.totalCount)명", "읽음 \(counts.readCount)명",
-                        "안 읽음 \(counts.unreadCount)명",
+                        "전체 \(statistics.totalCount)명", "읽음 \(statistics.readCount)명",
+                        "안 읽음 \(statistics.unreadCount)명",
                     ].joined(separator: " · "))
             }
             Picker("상태", selection: $status) {
                 Text("읽음").tag("READ")
                 Text("안 읽음").tag("UNREAD")
             }.pickerStyle(.segmented)
-            List(rows, id: \.challengerId) { row in
+            List(access.rows, id: \.challengerId) { row in
                 let name = [row.name, row.schoolName].compactMap { $0 }.joined(separator: " · ")
                 if status == "UNREAD" {
                     Toggle(
                         name,
                         isOn: Binding {
-                            targets.contains(row.challengerId)
+                            access.targets.contains(row.challengerId)
                         } set: { selected in
                             if selected {
-                                targets.insert(row.challengerId)
+                                access.targets.insert(row.challengerId)
                             } else {
-                                targets.remove(row.challengerId)
+                                access.targets.remove(row.challengerId)
                             }
-                            reminderSent = false
+                            access.reminderSent = false
                         })
                 } else {
                     Text(name)
@@ -280,33 +349,34 @@ private struct NoticeReadersView: View {
             if busy { ProgressView() }
             if let error {
                 Text(error)
-                Button("다시 시도") { Task { await load(after: cursor) } }
-            } else if let cursor {
-                Button("더 보기") { Task { await load(after: cursor) } }.disabled(busy)
+                Button("다시 시도") { Task { await load(after: access.cursor) } }
+            } else if let next = access.cursor {
+                Button("더 보기") { Task { await load(after: next) } }.disabled(busy)
             }
             if status == "UNREAD" {
-                Button("선택한 대상에게 리마인드 발송") { confirmReminder = true }
-                    .disabled(targets.isEmpty || busy)
-                if reminderSent { Text("리마인드를 발송했습니다.") }
+                Button("선택한 대상에게 리마인드 발송") { access.confirmReminder = true }
+                    .disabled(access.targets.isEmpty || busy)
+                if access.reminderSent { Text("리마인드를 발송했습니다.") }
             }
             Button("닫기") { dismiss() }.keyboardShortcut(.cancelAction)
         }
         .padding(24).frame(minWidth: 360, minHeight: 340)
+        .onDisappear { access.clearReaders() }
         .task(id: status) {
-            targets = []
-            reminderSent = false
+            access.targets = []
+            access.reminderSent = false
             await load(after: nil)
         }
-        .confirmationDialog("선택한 대상에게 알림을 보낼까요?", isPresented: $confirmReminder) {
+        .confirmationDialog("선택한 대상에게 알림을 보낼까요?", isPresented: $access.confirmReminder) {
             Button("발송") {
                 Task {
                     busy = true
                     defer { busy = false }
                     do {
-                        try await repository.remind(id: id, challengers: targets.sorted())
-                        targets.removeAll()
-                        reminderSent = true
-                    } catch { self.error = error.localizedDescription }
+                        try await repository.remind(id: id, challengers: access.targets.sorted())
+                        access.targets.removeAll()
+                        access.reminderSent = true
+                    } catch { handle(error) }
                 }
             }
         }
@@ -314,22 +384,32 @@ private struct NoticeReadersView: View {
 
     private func load(after next: String?) async {
         let token = UUID()
-        requestID = token
+        access.requestID = token
         busy = true
         error = nil
         if next == nil {
-            rows = []
-            cursor = nil
+            access.rows = []
+            access.cursor = nil
         }
-        defer { if requestID == token { busy = false } }
+        defer { if access.requestID == token { busy = false } }
         do {
-            if counts == nil { counts = try await repository.readCounts(id: id) }
+            let summary = try await repository.readCounts(id: id)
             let page = try await repository.readers(id: id, status: status, cursor: next)
-            guard requestID == token, !Task.isCancelled else { return }
-            rows += page.content
-            cursor = page.hasNext ? page.nextCursor : nil
+            guard access.requestID == token, !Task.isCancelled else { return }
+            access.counts = summary
+            access.rows += page.content
+            access.cursor = page.hasNext ? page.nextCursor : nil
         } catch {
-            if requestID == token, !Task.isCancelled { self.error = error.localizedDescription }
+            if access.requestID == token, !Task.isCancelled { handle(error) }
+        }
+    }
+
+    private func handle(_ failure: Error) {
+        if case NoticeRequestFailure.accessDenied = failure {
+            dismiss()
+            onAccessDenied()
+        } else {
+            error = failure.localizedDescription
         }
     }
 }
@@ -339,6 +419,8 @@ private struct NoticeEditView: View {
     let repository: any NoticeRepository
     let entry: NoticeEntry
     let saved: () -> Void
+    let onAccessDenied: () -> Void
+    @State private var savingTask: Task<Void, Never>?
     @State private var title: String
     @State private var content: String
     @State private var pinned: Bool
@@ -351,10 +433,14 @@ private struct NoticeEditView: View {
     @State private var busy = false
     @State private var failure: String?
 
-    init(repository: any NoticeRepository, entry: NoticeEntry, saved: @escaping () -> Void) {
+    init(
+        repository: any NoticeRepository, entry: NoticeEntry, onAccessDenied: @escaping () -> Void,
+        saved: @escaping () -> Void
+    ) {
         self.repository = repository
         self.entry = entry
         self.saved = saved
+        self.onAccessDenied = onAccessDenied
         _title = State(initialValue: entry.title)
         _content = State(initialValue: entry.content)
         _pinned = State(initialValue: entry.mustRead)
@@ -398,14 +484,19 @@ private struct NoticeEditView: View {
                 Button("취소") { dismiss() }.keyboardShortcut(.cancelAction)
                 Spacer()
                 Button("저장") {
-                    Task {
+                    guard savingTask == nil else { return }
+                    savingTask = Task {
+                        defer { savingTask = nil }
                         guard !busy else { return }
                         busy = true
                         defer { busy = false }
                         do {
                             try await save()
+                            try Task.checkCancellation()
                             saved()
-                        } catch { failure = error.localizedDescription }
+                        } catch NoticeRequestFailure.accessDenied {
+                            if !Task.isCancelled { onAccessDenied() }
+                        } catch { if !Task.isCancelled { failure = error.localizedDescription } }
                     }
                 }
                 .keyboardShortcut(.defaultAction)
@@ -416,6 +507,7 @@ private struct NoticeEditView: View {
                         || !links.allSatisfy { noticeWebURL($0) != nil })
             }
         }.disabled(busy).interactiveDismissDisabled(busy)
+            .onDisappear { savingTask?.cancel() }
             .padding(24).frame(minWidth: 420, minHeight: 450)
             .fileImporter(
                 isPresented: $importing, allowedContentTypes: [.jpeg, .png, .webP, .gif, .heic],
@@ -433,6 +525,9 @@ private struct NoticeEditView: View {
     }
 
     private func save() async throws {
+        guard try await repository.permissions(id: entry.id).contains("EDIT") else {
+            throw NoticeRequestFailure.accessDenied
+        }
         if entry.title != title || entry.content != content || entry.mustRead != pinned {
             try await repository.edit(id: entry.id, title: title, content: content, pinned: pinned)
         }

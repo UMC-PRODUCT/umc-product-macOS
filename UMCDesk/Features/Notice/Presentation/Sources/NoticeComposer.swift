@@ -12,6 +12,8 @@ struct NoticeComposer: View {
     @Environment(\.dismiss) private var dismiss
     let repository: any NoticeRepository
     let gisu: String
+    let onAccessDenied: () -> Void
+    let onCheckList: (String, String) -> Void
     let onPublished: (String) -> Void
     @State private var draft: NoticeDraft
     @State private var organization: NoticeOrganization?
@@ -23,17 +25,23 @@ struct NoticeComposer: View {
     @State private var importing = false
     @State private var busy = false
     @State private var error: String?
-    @State private var publishedID: String?
+    @State private var publication = NoticePublication()
+    @State private var publishingTask: Task<Void, Never>?
+    private var publishedID: String? { publication.noticeID }
     @State private var uploaded: [URL: String] = [:]
     @State private var imagesAttached = false
     @State private var linksAttached = false
 
     init(
         repository: any NoticeRepository, gisu: String, tab: String,
+        onAccessDenied: @escaping () -> Void,
+        onCheckList: @escaping (String, String) -> Void,
         onPublished: @escaping (String) -> Void
     ) {
         self.repository = repository
         self.gisu = gisu
+        self.onAccessDenied = onAccessDenied
+        self.onCheckList = onCheckList
         self.onPublished = onPublished
         var value = NoticeDraft()
         value.noticeTab = tab
@@ -78,7 +86,7 @@ struct NoticeComposer: View {
                     }
                     Toggle("필독 공지로 고정", isOn: $draft.mustRead)
                     Toggle("대상자에게 알림 발송", isOn: $draft.shouldNotify)
-                }.disabled(publishedID != nil)
+                }.disabled(publishedID != nil || publication.needsListCheck)
                 Section("첨부") {
                     TextField("링크 (한 줄에 하나)", text: $linksText, axis: .vertical)
                         .lineLimit(2...6).disabled(linksAttached)
@@ -113,7 +121,7 @@ struct NoticeComposer: View {
                 }
             }
             .formStyle(.grouped)
-            .disabled(busy)
+            .disabled(busy || publication.needsListCheck || publication.needsPollCheck)
             if let error { Text(error).foregroundStyle(.red).textSelection(.enabled) }
             HStack {
                 Button(publishedID == nil ? "취소" : "게시된 공지 열기") {
@@ -121,9 +129,23 @@ struct NoticeComposer: View {
                 }.keyboardShortcut(.cancelAction).disabled(busy)
                 Spacer()
                 if busy { ProgressView().controlSize(.small) }
-                Button(publishedID == nil ? "게시" : "첨부 저장 재시도") { Task { await publish() } }
+                if publication.needsListCheck {
+                    Button("목록에서 게시 결과 확인") { onCheckList(draft.title, draft.noticeTab) }
+                        .disabled(busy)
+                } else {
+                    Button(
+                        publication.needsPollCheck
+                            ? "투표 등록 결과 확인" : (publishedID == nil ? "게시" : "첨부 저장 재시도")
+                    ) {
+                        guard publishingTask == nil else { return }
+                        publishingTask = Task {
+                            defer { publishingTask = nil }
+                            await publish()
+                        }
+                    }
                     .keyboardShortcut(.defaultAction)
-                    .disabled(!valid || busy)
+                    .disabled((!valid && !publication.needsPollCheck) || busy)
+                }
             }
         }
         .padding(24)
@@ -133,6 +155,7 @@ struct NoticeComposer: View {
                 self.error = error.localizedDescription
             }
         }
+        .onDisappear { publishingTask?.cancel() }
         .interactiveDismissDisabled(busy || publishedID != nil)
         .fileImporter(
             isPresented: $importing, allowedContentTypes: [.jpeg, .png, .webP, .gif, .heic],
@@ -200,17 +223,16 @@ struct NoticeComposer: View {
     }
 
     private func publish() async {
-        guard valid, !busy else { return }
+        guard valid || publication.needsPollCheck, !busy else { return }
         busy = true
         error = nil
         defer { busy = false }
         do {
-            let id: String
-            if let publishedID {
-                id = publishedID
-            } else {
-                id = try await repository.create(draft, gisu: gisu)
-                publishedID = id
+            guard try await repository.canCompose(gisu: gisu) else {
+                throw NoticeRequestFailure.accessDenied
+            }
+            let id = try await publication.publish {
+                try await repository.create(draft, gisu: gisu)
             }
             for file in files where uploaded[file] == nil {
                 uploaded[file] = try await repository.uploadImage(file: file)
@@ -223,9 +245,29 @@ struct NoticeComposer: View {
                 try await repository.replaceLinks(links, id: id)
                 linksAttached = true
             }
-            if usingPoll { try await repository.addPoll(poll, id: id) }
+            if usingPoll {
+                try await publication.publishPoll {
+                    try await repository.addPoll(poll, id: id)
+                } check: {
+                    guard let result = try await repository.detail(id: id).vote else {
+                        return .absent
+                    }
+                    let matches =
+                        result.title == poll.title
+                        && result.options.map(\.content) == poll.options
+                        && result.isAnonymous == poll.isAnonymous
+                        && result.allowMultipleChoice == poll.allowMultipleChoice
+                        && (try? Date(result.endsAtExclusive, strategy: .iso8601))
+                            == (try? Date(poll.endsAt.ISO8601Format(), strategy: .iso8601))
+                    return matches ? .matching : .different
+                }
+            }
+            try Task.checkCancellation()
             onPublished(id)
+        } catch NoticeRequestFailure.accessDenied {
+            if !Task.isCancelled { onAccessDenied() }
         } catch {
+            guard !Task.isCancelled else { return }
             let prefix = publishedID == nil ? "" : "본문을 게시했습니다. 첨부 저장을 확인해 주세요. "
             self.error = prefix + error.localizedDescription
         }

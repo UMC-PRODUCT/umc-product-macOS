@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import Observation
 import UMCFoundation
 
 public struct NoticeAuthor: Codable, Sendable {
@@ -495,6 +496,7 @@ public struct NoticePollDraft: Sendable {
 
 public protocol NoticeRepository: Sendable {
     func activeGisu() async throws -> String
+    func canCompose(gisu: String) async throws -> Bool
     func organization(gisu: String) async throws -> NoticeOrganization?
     func notices(gisu: String, tab: String, keyword: String, part: String?, page: Int) async throws
         -> NoticePage
@@ -616,5 +618,80 @@ public struct NoticeOrganization: Codable, Sendable {
         try values.encodeIfPresent(generation, forKey: .generation)
         try values.encode(chapters, forKey: .chapters)
         try values.encode(schools, forKey: .schools)
+    }
+}
+
+public enum NoticeRequestFailure: LocalizedError, Equatable, Sendable {
+    case accessDenied
+    case rejected(String)
+    case publicationUnconfirmed
+    case pollMissing
+    case pollUnconfirmed
+
+    public var errorDescription: String? {
+        switch self {
+        case .accessDenied: "이 공지를 열거나 변경할 권한이 없습니다."
+        case .rejected(let message): message
+        case .publicationUnconfirmed: "서버에서 게시 결과를 확인하지 못했습니다. 목록에서 제목을 확인하세요."
+        case .pollMissing: "공지 상세에서 투표가 없는 것을 확인했습니다. 투표를 다시 등록할 수 있습니다."
+        case .pollUnconfirmed: "투표 등록 결과를 확인하지 못했습니다. 공지 상세에서 다시 확인하세요."
+        }
+    }
+}
+
+/// 서버가 생성 요청 식별자를 제공하지 않아 응답을 잃은 POST는 조회로만 확인한다.
+@MainActor
+@Observable
+public final class NoticePublication {
+    public private(set) var noticeID: String?
+    public private(set) var needsListCheck = false
+    public private(set) var needsPollCheck = false
+
+    public init() {}
+
+    public func publish(_ create: () async throws -> String) async throws -> String {
+        if let noticeID { return noticeID }
+        guard !needsListCheck else { throw NoticeRequestFailure.publicationUnconfirmed }
+        needsListCheck = true
+        do {
+            let result = try await create()
+            noticeID = result
+            needsListCheck = false
+            return result
+        } catch let error as NoticeRequestFailure {
+            if case .rejected = error { needsListCheck = false }
+            if case .accessDenied = error { needsListCheck = false }
+            throw error
+        } catch {
+            throw NoticeRequestFailure.publicationUnconfirmed
+        }
+    }
+
+    public enum PollReceipt { case matching, absent, different }
+
+    public func publishPoll(
+        create: () async throws -> Void,
+        check: () async throws -> PollReceipt
+    ) async throws {
+        if !needsPollCheck {
+            needsPollCheck = true
+            do {
+                try await create()
+                return
+            } catch let error as NoticeRequestFailure {
+                if case .rejected = error { needsPollCheck = false }
+                if case .accessDenied = error { needsPollCheck = false }
+                throw error
+            } catch {
+                try Task.checkCancellation()
+            }
+        }
+        switch try await check() {
+        case .matching: return
+        case .absent:
+            needsPollCheck = false
+            throw NoticeRequestFailure.pollMissing
+        case .different: throw NoticeRequestFailure.pollUnconfirmed
+        }
     }
 }

@@ -132,3 +132,37 @@ struct OrganizationResponse: Codable, Sendable {
         try values.encode(gisus, forKey: .gisus)
     }
 }
+
+struct NoticeWriterProfile: Codable {
+    let isSuperAdmin: Bool
+    let currentGisuMemberInfo: Membership?
+
+    struct Membership: Codable {
+        let gisuId: String
+        let isAdmin: Bool
+        enum CodingKeys: CodingKey { case gisuId, isAdmin }
+        init(from decoder: Decoder) throws {
+            let values = try decoder.container(keyedBy: CodingKeys.self)
+            gisuId = try values.decodeFlexibleString(forKey: .gisuId)
+            isAdmin = try values.decode(Bool.self, forKey: .isAdmin)
+        }
+        func encode(to encoder: Encoder) throws {
+            var values = encoder.container(keyedBy: CodingKeys.self)
+            try values.encode(gisuId, forKey: .gisuId)
+            try values.encode(isAdmin, forKey: .isAdmin)
+        }
+    }
+
+    enum CodingKeys: CodingKey { case isSuperAdmin, currentGisuMemberInfo }
+    init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        isSuperAdmin = try values.decode(Bool.self, forKey: .isSuperAdmin)
+        currentGisuMemberInfo = try values.decodeIfPresent(
+            Membership.self, forKey: .currentGisuMemberInfo)
+    }
+    func encode(to encoder: Encoder) throws {
+        var values = encoder.container(keyedBy: CodingKeys.self)
+        try values.encode(isSuperAdmin, forKey: .isSuperAdmin)
+        try values.encodeIfPresent(currentGisuMemberInfo, forKey: .currentGisuMemberInfo)
+    }
+}

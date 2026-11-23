@@ -15,7 +15,13 @@ public struct LiveNoticeRepository: NoticeRepository {
     private let environment: NetworkEnvironment
     private let noticesPath = "/api/v1/notices"
 
-    public init(adapter: MoyaNetworkAdapter, environment: NetworkEnvironment) {
+    private let validateAccount: @Sendable () async throws -> Void
+
+    public init(
+        adapter: MoyaNetworkAdapter, environment: NetworkEnvironment,
+        validateAccount: @escaping @Sendable () async throws -> Void
+    ) {
+        self.validateAccount = validateAccount
         self.adapter = adapter
         self.environment = environment
     }
@@ -23,6 +29,13 @@ public struct LiveNoticeRepository: NoticeRepository {
     public func activeGisu() async throws -> String {
         let value: ActiveGisu = try await request("/api/v1/gisu/active")
         return value.gisuId
+    }
+
+    public func canCompose(gisu: String) async throws -> Bool {
+        let profile: NoticeWriterProfile = try await request("/api/v2/member/me")
+        return profile.isSuperAdmin
+            || (profile.currentGisuMemberInfo?.gisuId == gisu
+                && profile.currentGisuMemberInfo?.isAdmin == true)
     }
 
     public func organization(gisu: String) async throws -> NoticeOrganization? {
@@ -87,18 +100,62 @@ public struct LiveNoticeRepository: NoticeRepository {
         let ticket: UploadTicket = try await request(
             "/api/v1/storage/prepare-upload",
             method: .post, task: .requestJSONEncodable(body))
-        guard let url = URL(string: ticket.uploadUrl),
-            url.scheme == "https" || (url.scheme == "http" && url.host == "127.0.0.1"),
-            ticket.uploadMethod.uppercased() == "PUT"
+        guard let url = URL(string: ticket.uploadUrl), permitsUpload(to: url),
+            ticket.uploadMethod.uppercased() == "PUT",
+            !ticket.fileId.isEmpty, !ticket.fileId.contains("/"),
+            ticket.fileId != ".", ticket.fileId != ".."
         else { throw URLError(.badURL) }
         var upload = URLRequest(url: url)
         upload.httpMethod = "PUT"
         upload.allHTTPHeaderFields = ticket.headers
-        let (_, response) = try await URLSession.shared.upload(for: upload, fromFile: file)
-        guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode)
-        else { throw URLError(.badServerResponse) }
+        try await uploadFile(file, request: upload)
+        try _Concurrency.Task.checkCancellation()
+        try await validateAccount()
         try await validate("/api/v1/storage/" + ticket.fileId + "/confirm", method: .post)
         return ticket.fileId
+    }
+
+    func permitsUpload(to url: URL) -> Bool {
+        guard url.user == nil, url.password == nil, url.fragment == nil, url.host != nil else {
+            return false
+        }
+        if url.scheme == "https" { return true }
+        #if DEBUG
+            let base = environment.baseURL
+            return base.scheme == "http" && base.host == "127.0.0.1" && base.port != nil
+                && url.scheme == base.scheme && url.host == base.host && url.port == base.port
+        #else
+            return false
+        #endif
+    }
+
+    private func uploadFile(_ file: URL, request: URLRequest) async throws {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.httpShouldSetCookies = false
+        configuration.urlCredentialStorage = nil
+        let session = URLSession(configuration: configuration)
+        defer { session.invalidateAndCancel() }
+        try await withThrowingTaskGroup(of: Void.self) { group in
+            group.addTask {
+                try await validateAccount()
+                try _Concurrency.Task.checkCancellation()
+                let (_, response) = try await session.upload(
+                    for: request, fromFile: file,
+                    delegate: RefuseUploadRedirect())
+                guard let http = response as? HTTPURLResponse,
+                    (200..<300).contains(http.statusCode)
+                else { throw URLError(.badServerResponse) }
+            }
+            group.addTask {
+                // Signed storage does not use the authenticated REST transport.
+                while true {
+                    try await _Concurrency.Task.sleep(for: .milliseconds(250))
+                    try await validateAccount()
+                }
+            }
+            defer { group.cancelAll() }
+            try await group.next()
+        }
     }
 
     public func attachImages(_ files: [String], id: String) async throws {
@@ -219,12 +276,21 @@ public struct LiveNoticeRepository: NoticeRepository {
                 environment: environment, path: path, method: method, task: task)
             return try await adapter.request(target).data
         } catch let error as UMCFoundation.NetworkError {
-            if case .requestFailed(_, let data) = error, let data,
-                let envelope = try? JSONDecoder().decode(
-                    APIResponse<EmptyResult>.self, from: data),
-                let message = envelope.message
-            {
-                throw RepositoryError.serverError(code: envelope.code, message: message)
+            switch error {
+            case .unauthorized, .noRefreshToken, .maxRetryExceeded, .tokenRefreshFailed:
+                throw NoticeRequestFailure.accessDenied
+            case .requestFailed(let status, let data):
+                if [401, 403, 404, 410].contains(status) {
+                    throw NoticeRequestFailure.accessDenied
+                }
+                if (400..<500).contains(status), status != 408 {
+                    let envelope = data.flatMap {
+                        try? JSONDecoder().decode(APIResponse<EmptyResult>.self, from: $0)
+                    }
+                    throw NoticeRequestFailure.rejected(
+                        envelope?.message ?? error.localizedDescription)
+                }
+            default: break
             }
             throw error
         }
@@ -320,5 +386,15 @@ private struct OrganizationQuery {
     let id: String
     var parameters: [String: String] {
         ["id": id, "includeChapter": "true", "includeSchool": "true"]
+    }
+}
+
+private final class RefuseUploadRedirect: NSObject, URLSessionTaskDelegate {
+    func urlSession(
+        _ session: URLSession, task: URLSessionTask,
+        willPerformHTTPRedirection response: HTTPURLResponse, newRequest request: URLRequest,
+        completionHandler: @escaping (URLRequest?) -> Void
+    ) {
+        completionHandler(nil)
     }
 }
