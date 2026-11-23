@@ -27,7 +27,10 @@ final class ActivityViewModel {
     var members: Loadable<[ActivityRow]> = .idle
     var reviews: Loadable<[AttendanceReview]> = .idle
     var capabilities: ScheduleCapabilities?
-    var canReview = false
+    private(set) var canReview = false
+    var tab: ActivityTab = .attendance
+    var decision: ReviewDecision?
+    private var reviewEpoch = UUID()
     var submitting = false
     var feedback: String?
 
@@ -48,20 +51,71 @@ final class ActivityViewModel {
             if !Task.isCancelled { groups = groupResult }
         case .members: break
         case .management:
+            guard canReview else { return }
+            let epoch = reviewEpoch
             reviews = .loading
             let result = await capture { try await repository.reviews() }
-            if !Task.isCancelled { reviews = result }
+            guard !Task.isCancelled, canReview, epoch == reviewEpoch else { return }
+            if case .failed(let error) = result, isAccessDenied(error) {
+                revokeReviews()
+                return
+            }
+            reviews = result
+            if let decision, !canDecide(decision) { self.decision = nil }
         }
     }
 
     func permissions() async {
         async let create = try? repository.capabilities()
-        async let authorizedReviews = try? repository.canReadReviews()
-        let (creation, review) = await (create, authorizedReviews)
-        if !Task.isCancelled {
-            capabilities = creation
-            canReview = review == true
+        let epoch = reviewEpoch
+        let review = try? await repository.canReadReviews()
+        if !Task.isCancelled, epoch == reviewEpoch {
+            if review == true { canReview = true } else { revokeReviews() }
         }
+        let creation = await create
+        if !Task.isCancelled { capabilities = creation }
+    }
+
+    private func revokeReviews() {
+        reviewEpoch = UUID()
+        canReview = false
+        reviews = .idle
+        decision = nil
+        if tab == .management { tab = .attendance }
+    }
+
+    private func isAccessDenied(_ error: any Error) -> Bool {
+        switch error {
+        case NetworkError.unauthorized, NetworkError.requestFailed(statusCode: 401, data: _),
+            NetworkError.requestFailed(statusCode: 403, data: _):
+            true
+        default: false
+        }
+    }
+
+    func canDecide(_ item: ReviewDecision) -> Bool {
+        guard canReview, tab == .management, case .loaded(let rows) = reviews,
+            let row = rows.first(where: { $0.id == item.schedule }), row.mayDecide
+        else { return false }
+        return row.participants.contains {
+            $0.id == item.member && $0.status?.hasSuffix("_PENDING") == true
+        }
+    }
+
+    func decide(_ item: ReviewDecision) async {
+        guard canDecide(item) else { return }
+        _ = await perform(
+            {
+                do {
+                    try await repository.decide(
+                        scheduleID: item.schedule, memberID: item.member,
+                        approve: item.approve)
+                } catch {
+                    if isAccessDenied(error) { revokeReviews() }
+                    throw error
+                }
+                return "출석 판정을 저장했어요."
+            }, reload: .management)
     }
 
     func loadMembers(_ id: String) async {
@@ -91,13 +145,11 @@ final class ActivityViewModel {
 
 public struct ActivityView: View {
     @State private var model: ActivityViewModel
-    @State private var tab: ActivityTab = .attendance
     @State private var selectedGroup: String?
     @State private var selectedSchedule: String?
     @State private var memberProfile: ActivityRow?
     @State private var memberSearch = ""
     @State private var presented: Panel?
-    @State private var decision: ReviewDecision?
     @State private var retry = UUID()
 
     public init(repository: any ActivityRepository) {
@@ -107,7 +159,7 @@ public struct ActivityView: View {
     public var body: some View {
         VStack(spacing: 0) {
             HStack {
-                Picker("활동", selection: $tab) {
+                Picker("활동", selection: Bindable(model).tab) {
                     ForEach(ActivityTab.allCases.filter { $0 != .management || model.canReview }) {
                         Text($0.rawValue).tag($0)
                     }
@@ -129,7 +181,7 @@ public struct ActivityView: View {
                                 .labelStyle(.iconOnly)
                         }.activityPanel()
                     }
-                    switch tab {
+                    switch model.tab {
                     case .attendance:
                         loaded(model.schedules) { schedules in
                             TimelineView(.periodic(from: .now, by: 30)) { timeline in
@@ -182,15 +234,17 @@ public struct ActivityView: View {
                             memberProfile = $0
                         }
                     case .management:
-                        Text("출석 관리").umcTypography(.largeTitle3Bold)
-                        loaded(model.reviews) { reviewRows($0) }
+                        if model.canReview {
+                            Text("출석 관리").umcTypography(.largeTitle3Bold)
+                            loaded(model.reviews) { reviewRows($0) }
+                        }
                     }
                 }.frame(maxWidth: .infinity, alignment: .leading).padding(28)
             }
         }
         .background(UMCColor.Custom.backgroundSurface)
         .tint(UMCColor.Semantic.textBrandDefault)
-        .task(id: LoadKey(tab: tab, retry: retry)) { await model.load(tab) }
+        .task(id: LoadKey(tab: model.tab, retry: retry)) { await model.load(model.tab) }
         .task(id: retry) { await model.permissions() }
         .sheet(item: $memberProfile) { member in
             ActivityMemberDetail(repository: model.repository, member: member)
@@ -205,20 +259,13 @@ public struct ActivityView: View {
         .alert(
             "출석 판정을 확정할까요?",
             isPresented: Binding(
-                get: { decision != nil }, set: { if !$0 { decision = nil } }
-            ), presenting: decision
+                get: { model.canReview && model.decision != nil },
+                set: { if !$0 { model.decision = nil } }
+            ), presenting: model.decision
         ) { item in
             Button("취소", role: .cancel) {}
             Button(item.approve ? "승인" : "거절") {
-                Task {
-                    _ = await model.perform(
-                        {
-                            try await model.repository.decide(
-                                scheduleID: item.schedule,
-                                memberID: item.member, approve: item.approve)
-                            return "출석 판정을 저장했어요."
-                        }, reload: .management)
-                }
+                Task { await model.decide(item) }
             }
         } message: {
             Text($0.name + "님의 출석 요청")
@@ -394,7 +441,7 @@ public struct ActivityView: View {
                         if schedule.mayDecide && member.status?.hasSuffix("_PENDING") == true {
                             ForEach([true, false], id: \.self) { approve in
                                 Button(approve ? "승인" : "거절") {
-                                    decision = ReviewDecision(
+                                    model.decision = ReviewDecision(
                                         schedule: schedule.id, member: member.id,
                                         name: member.name, approve: approve)
                                 }.disabled(model.submitting)
@@ -418,7 +465,7 @@ public struct ActivityView: View {
     }
 }
 
-private struct ReviewDecision {
+struct ReviewDecision {
     let schedule: String
     let member: String
     let name: String

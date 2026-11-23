@@ -10,6 +10,7 @@ import CoreNetwork
 import Foundation
 
 public struct LiveActivityRepository: ActivityRepository {
+    let pointGrants = PointGrantCoordinator()
     private let client: NetworkClient
     private let baseURL: URL
 

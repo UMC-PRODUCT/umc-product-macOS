@@ -211,6 +211,8 @@ struct ActivityMemberDetail: View {
     @State private var feedback: String?
     @State private var working = false
     @State private var confirming = false
+    @State private var operationID = UUID()
+    @State private var awaitingLedger = false
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
@@ -228,13 +230,15 @@ struct ActivityMemberDetail: View {
             if canGrant {
                 Divider()
                 Text("포인트 관리").umcTypography(.headlineBold)
-                TextField("부여할 점수", text: $amount)
-                TextField("지급 사유", text: $reason)
-                Button("포인트 지급") { confirming = true }
-                    .disabled(
-                        Int(amount) == nil
-                            || reason.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                            || reason.count > 200)
+                TextField("부여할 점수", text: $amount).disabled(awaitingLedger)
+                TextField("지급 사유", text: $reason).disabled(awaitingLedger)
+                Button(awaitingLedger ? "지급 원장 다시 확인" : "포인트 지급") {
+                    if awaitingLedger { submit() } else { confirming = true }
+                }
+                .disabled(
+                    Int(amount) == nil
+                        || reason.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                        || reason.count > 200)
             }
             if let feedback { Text(feedback).foregroundStyle(.secondary) }
             HStack {
@@ -252,6 +256,11 @@ struct ActivityMemberDetail: View {
             } catch { if !Task.isCancelled { feedback = error.localizedDescription } }
         }
         .task(id: selected) {
+            confirming = false
+            awaitingLedger = false
+            operationID = UUID()
+            amount = ""
+            reason = ""
             canGrant = false
             guard let selected else { return }
             let authorized = try? await repository.canGrantPoints(challengerID: selected)
@@ -259,24 +268,33 @@ struct ActivityMemberDetail: View {
         }
         .alert("포인트를 지급할까요?", isPresented: $confirming) {
             Button("취소", role: .cancel) {}
-            Button("지급") {
-                guard let selected, canGrant, let value = Int(amount), !working else { return }
-                working = true
-                Task {
-                    defer { working = false }
-                    do {
-                        try await repository.grantPoints(
-                            challengerID: selected, value: value, reason: reason)
-                        amount = ""
-                        reason = ""
-                        feedback = "포인트를 지급했어요."
-                    } catch { feedback = error.localizedDescription }
-                }
-            }
+            Button("지급") { submit() }
         } message: {
             Text("\(member.title)님에게 \(amount)점을 지급합니다.")
         }
     }
+    private func submit() {
+        guard let selected, canGrant, let value = Int(amount), !working else { return }
+        working = true
+        Task {
+            defer { working = false }
+            do {
+                let result = try await repository.grantPoints(
+                    operationID: operationID, challengerID: selected, value: value, reason: reason)
+                awaitingLedger = result == .awaitingLedger
+                switch result {
+                case .awaitingLedger:
+                    feedback = "지급 여부를 확인 중이에요. 원장을 다시 확인해 주세요."
+                case .recorded, .ledgerMatch:
+                    amount = ""
+                    reason = ""
+                    operationID = UUID()
+                    feedback = result == .recorded ? "포인트를 지급했어요." : "같은 금액과 사유의 새 지급 기록을 확인했어요."
+                }
+            } catch { feedback = error.localizedDescription }
+        }
+    }
+
 }
 
 struct MemberDirectory: View {
