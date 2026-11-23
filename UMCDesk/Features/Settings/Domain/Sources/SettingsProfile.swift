@@ -85,12 +85,14 @@ public struct SettingsProfileLinks: Equatable, Sendable {
 
 public struct SettingsActivity: Equatable, Identifiable, Sendable {
     public let id: String
+    public let gisuId: String?
     public let generation: String
     public let part: String
     public let roles: [String]
 
-    public init(id: String, generation: String, part: String, roles: [String] = []) {
+    public init(id: String, generation: String, part: String, roles: [String] = [], gisuId: String? = nil) {
         self.id = id
+        self.gisuId = gisuId
         self.generation = generation
         self.part = part
         self.roles = roles

@@ -15,6 +15,7 @@ public actor NetworkClient {
     nonisolated let aquilaClient: Aquila.NetworkClient
     private let logoutTokens: LogoutTokenStore
     private var loginTask: Task<Void, Error>?
+    public private(set) var sessionGeneration = UUID()
     private var logoutTask: Task<String?, Error>?
     nonisolated static let logger = Aquila.VerboseLogger(redactedKeys: [
         "authorizationCode", "oAuthVerificationToken", "emailVerificationToken",
@@ -105,6 +106,7 @@ public actor NetworkClient {
         if let logoutTask { return try await logoutTask.value }
         let pendingLogin = loginTask
         pendingLogin?.cancel()
+        sessionGeneration = UUID()
         let task = Task<String?, Error> {
             _ = await pendingLogin?.result
             defer { logoutTask = nil }
@@ -117,6 +119,11 @@ public actor NetworkClient {
         }
         logoutTask = task
         return try await task.value
+    }
+
+    public func invalidateSession(generation: UUID) async throws {
+        guard generation == sessionGeneration else { throw CancellationError() }
+        try await logout()
     }
 
     public func isLoggedIn() async -> Bool {

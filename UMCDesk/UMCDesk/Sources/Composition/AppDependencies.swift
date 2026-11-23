@@ -13,6 +13,9 @@ import CoreDomain
 import UMCFoundation
 import CoreNetwork
 import SettingsDomain
+import MatchingData
+import MatchingDomain
+import MatchingPresentation
 import SettingsData
 import SettingsPresentation
 
@@ -25,6 +28,8 @@ final class AppDependencies {
     let settingsPreferences: SettingsPreferences
     let settingsViewModel: SettingsViewModel
     let windowSettingsViewModel: SettingsViewModel
+    let matchingProgress: MatchingProgressController
+    let matchingUseCase: any MatchingUseCase
     let navigation: AppNavigation
     private let client: NetworkClient
     private var didStartRestoration = false
@@ -83,6 +88,10 @@ final class AppDependencies {
         self.loginRepository = LiveEmailLoginRepository(
             client: client, adapter: adapter, environment: environment
         )
+        let matchingRepository = LiveMatchingRepository(adapter: adapter, client: client, environment: environment)
+        matchingUseCase = DefaultMatchingUseCase(repository: matchingRepository)
+        matchingProgress = MatchingProgressController(repository: matchingUseCase)
+        resetRelay.matchingProgress = matchingProgress
         self.container = container
         self.userSession = userSession
         #if DEBUG
@@ -142,6 +151,10 @@ final class AppDependencies {
         )
         resetRelay.windowSettingsViewModel = windowSettingsViewModel
         resetRelay.navigation = navigation
+        liveSettings.onLogout = { [weak navigation, weak matchingProgress] in
+            navigation?.resetAccount()
+            matchingProgress?.setAccount(nil)
+        }
         resetRelay.settingsViewModel = settingsViewModel
         if !isSettingsPreview, preferences.launchPage == .myPage {
             settingsViewModel.showProfile()
@@ -151,6 +164,8 @@ final class AppDependencies {
         container.registerInstance(MoyaNetworkAdapter.self, instance: adapter)
         container.registerInstance(UserSessionManager.self, instance: userSession)
         container.registerInstance(SettingsPreferences.self, instance: preferences)
+        container.registerInstance(MatchingRepository.self, instance: matchingRepository)
+        container.registerInstance(MatchingUseCase.self, instance: matchingUseCase)
         container.registerInstance(SettingsUseCase.self, instance: useCase)
         container.registerInstance(SettingsSystemActions.self, instance: systemActions)
         container.registerInstance(SettingsViewModel.self, instance: settingsViewModel)
@@ -175,8 +190,18 @@ final class AppDependencies {
         }
         #endif
         guard !isSettingsPreview, await client.isLoggedIn() else { return }
+        await settingsViewModel.refreshSignedInAccount()
+        guard await client.isLoggedIn() else { return }
         if settingsPreferences.launchPage != .settings { settingsViewModel.showProfile() }
         navigation.showsSettings = true
+    }
+
+    var verifiedMatchingMemberId: String? {
+        isSettingsPreview ? nil : settingsViewModel.profile?.id
+    }
+
+    func openMatching(_ destination: MatchingDestination = .explore) {
+        navigation.openMatching(destination, memberId: verifiedMatchingMemberId)
     }
 
     func restoreSupportedFonts() {
