@@ -32,11 +32,13 @@ struct AuthRegistration: View {
                             placeholder: AppLocalization.string("이름을 입력해 주세요."),
                             text: $form.name, field: .name, focus: $focusedField
                         )
+                        .onSubmit { focusedField = .nickname }
                         AuthTextField(
                             AppLocalization.string("닉네임"),
                             placeholder: AppLocalization.string("닉네임을 입력해 주세요."),
                             text: $form.nickname, field: .nickname, focus: $focusedField
                         )
+                        .onSubmit { focusedField = .email }
                     }
                     AuthEmailVerificationFields(viewModel: viewModel, form: form, focus: $focusedField)
                     AuthSchoolPicker(form: form)
@@ -46,7 +48,9 @@ struct AuthRegistration: View {
                         }
                     }
                     if form.emailVerification == .verified && !form.school.isEmpty {
-                        AuthPasswordFields(form: form, focus: $focusedField)
+                        AuthPasswordFields(
+                            form: form, focus: $focusedField, submit: viewModel.completeRegistration
+                        )
                             .transition(AuthMotion.pageTransition(reduceMotion: reduceMotion))
                     }
                     AuthTermsAgreement(form: form)
@@ -64,17 +68,6 @@ struct AuthRegistration: View {
             }
         }
         .task { await viewModel.loadRegistrationOptions() }
-        .onSubmit {
-            switch focusedField {
-            case .name: focusedField = .nickname
-            case .nickname: focusedField = .email
-            case .email: viewModel.sendVerification()
-            case .verificationCode: viewModel.verifyCode()
-            case .password: focusedField = .passwordConfirmation
-            case .passwordConfirmation: viewModel.completeRegistration()
-            default: break
-            }
-        }
         .onAppear { focusedField = form.initialFocus }
         .animation(AuthMotion.animation(reduceMotion: reduceMotion),
             value: form.emailVerification)
@@ -100,7 +93,8 @@ struct AuthPasswordReset: View {
             VStack(spacing: UMCSpacing.value32) {
                 VStack(spacing: UMCSpacing.value20) {
                     AuthEmailVerificationFields(viewModel: viewModel, form: form, focus: $focusedField)
-                    AuthPasswordFields(form: form, focus: $focusedField, isReset: true)
+                    AuthPasswordFields(form: form, focus: $focusedField, isReset: true,
+                                       submit: viewModel.resetPassword)
                 }
                 VStack(spacing: UMCSpacing.value16) {
                     AuthButton(title: AppLocalization.string("비밀번호 변경")) {
@@ -111,15 +105,6 @@ struct AuthPasswordReset: View {
                         viewModel.navigate(to: .emailLogin)
                     }
                 }
-            }
-        }
-        .onSubmit {
-            switch focusedField {
-            case .email: viewModel.sendVerification()
-            case .verificationCode: viewModel.verifyCode()
-            case .password: focusedField = .passwordConfirmation
-            case .passwordConfirmation: viewModel.resetPassword()
-            default: break
             }
         }
         .onAppear { focusedField = form.initialFocus }
@@ -143,6 +128,7 @@ private struct AuthEmailVerificationFields: View {
                     isInvalid: form.showsEmailError,
                     showsClear: focus.wrappedValue == .email
                 )
+                .onSubmit { viewModel.sendVerification() }
                 AuthButton(title: buttonTitle) {
                     viewModel.sendVerification()
                 }
@@ -163,6 +149,7 @@ private struct AuthEmailVerificationFields: View {
                             text: $form.verificationCode, field: .verificationCode, focus: focus,
                             isInvalid: form.emailVerification == .invalid
                         )
+                        .onSubmit { viewModel.verifyCode() }
                         AuthButton(title: AppLocalization.string("인증번호 확인")) {
                             viewModel.verifyCode()
                         }
@@ -205,6 +192,7 @@ private struct AuthPasswordFields: View {
     @Bindable var form: AuthFormState
     let focus: FocusState<AuthField?>.Binding
     var isReset = false
+    let submit: () -> Void
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
@@ -217,6 +205,7 @@ private struct AuthPasswordFields: View {
                     isSecure: true, showsValue: $form.showsPassword,
                     isDisabled: form.emailVerification != .verified
                 )
+                .onSubmit { focus.wrappedValue = .passwordConfirmation }
                 AuthTextField(
                     isReset
                         ? AppLocalization.string("새 비밀번호 확인") : AppLocalization.string("비밀번호 확인"),
@@ -225,6 +214,7 @@ private struct AuthPasswordFields: View {
                     isSecure: true, showsValue: $form.showsPasswordConfirmation,
                     isDisabled: form.emailVerification != .verified
                 )
+                .onSubmit { submit() }
             }
             if form.showsPasswordError {
                 Text(AppLocalization.string("입력 조건을 충족하지 않거나 비밀번호가 일치하지 않아요."))
