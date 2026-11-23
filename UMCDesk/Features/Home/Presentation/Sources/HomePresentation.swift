@@ -56,20 +56,23 @@ public struct HomeView: View {
     @State private var selectedGame: MiniGame?
     @State private var reload = UUID()
     @State private var records = GameRecords()
+    private let defaults: UserDefaults
     private let memberID: String?
     private let onOpen: ((HomeDestination) -> Void)?
 
     public init(
         repository: any HomeRepository, memberID: String? = nil,
+        defaults: UserDefaults = .standard,
         onOpen: ((HomeDestination) -> Void)? = nil
     ) {
         _model = State(initialValue: HomeViewModel(repository))
+        self.defaults = defaults
         self.memberID = memberID
         self.onOpen = onOpen
     }
 
-    private var recordKey: String? {
-        (memberID ?? model.profile?.id).map { "home.games.records." + $0 }
+    var recordStore: HomeGameRecordStore {
+        HomeGameRecordStore(defaults: defaults, memberID: memberID ?? model.profile?.id)
     }
 
     public var body: some View {
@@ -145,14 +148,8 @@ public struct HomeView: View {
         .background(UMCColor.Custom.backgroundSurface)
         .tint(UMCColor.Semantic.textBrandDefault)
         .task(id: reload) { await model.load() }
-        .onChange(of: recordKey, initial: true) { _, key in
-            if let key, let data = UserDefaults.standard.data(forKey: key),
-                let saved = try? JSONDecoder().decode(GameRecords.self, from: data)
-            {
-                records = saved
-            } else {
-                records = GameRecords()
-            }
+        .onChange(of: recordStore, initial: true) { _, store in
+            records = store.load()
         }
     }
 
@@ -198,14 +195,6 @@ public struct HomeView: View {
         records.best[id] = max(score, records.best[id, default: 0])
         records.totals[id, default: 0] += score
         records.recent = Array((["\(game.title) \(score)점"] + records.recent).prefix(3))
-        if let recordKey, let data = try? JSONEncoder().encode(records) {
-            UserDefaults.standard.set(data, forKey: recordKey)
-        }
+        recordStore.save(records)
     }
-}
-
-struct GameRecords: Codable {
-    var best: [String: Int] = [:]
-    var totals: [String: Int] = [:]
-    var recent: [String] = []
 }
