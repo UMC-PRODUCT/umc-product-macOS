@@ -256,7 +256,9 @@ private struct MatchingAssignmentResult: View {
                             teamButton
                         }
                     } else {
+                        MatchingBadge(text: "합격 · 팀 등록 대기")
                         Label("현재 공개 팀 명단에 이름이 없어요", systemImage: "clock")
+                        refreshResult
                         teamButton
                     }
                 }
@@ -264,12 +266,20 @@ private struct MatchingAssignmentResult: View {
                     MatchingTeamPanel { MatchingRosterList(team: roster) }
                 }
             } else {
-                Text("공개 팀 명단을 확인할 수 없어요.").foregroundStyle(.secondary)
+                VStack(alignment: .leading, spacing: UMCSpacing.value12) {
+                    Text("공개 팀 명단을 확인할 수 없어요.").foregroundStyle(.secondary)
+                    refreshResult
+                }
             }
         }
         .task(id: attempt) {
             await request.load { try await repository.publishedTeam(projectId: card.projectId) }
         }
+    }
+
+    private var refreshResult: some View {
+        Button("결과 새로고침") { attempt += 1 }
+            .buttonStyle(MatchingActionStyle(appearance: .secondary))
     }
 
     private var teamButton: some View {
