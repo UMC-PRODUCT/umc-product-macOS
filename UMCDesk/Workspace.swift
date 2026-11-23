@@ -33,6 +33,9 @@ let workspace = Workspace(
                     path: "Features/Matching", target: "MatchingDataTests"
                 )),
                 .testableTarget(target: .project(
+                    path: "Features/Matching", target: "MatchingPresentationTests"
+                )),
+                .testableTarget(target: .project(
                     path: "Features/Home", target: "HomeDomainTests"
                 )),
                 .testableTarget(target: .project(
