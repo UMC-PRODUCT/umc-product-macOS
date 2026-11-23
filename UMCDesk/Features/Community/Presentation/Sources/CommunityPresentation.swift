@@ -90,6 +90,7 @@ private struct ThreadBrowser: View {
                         rows(threads)
                     }
                 }
+                .frame(minHeight: 0, maxHeight: .infinity)
                 .focused($resultsFocused)
                 .accessibilityLabel("스레드 검색 결과")
                 if let next {
@@ -97,7 +98,8 @@ private struct ThreadBrowser: View {
                 }
             }
             .padding(UMCSpacing.value16)
-            .frame(minWidth: 220, idealWidth: 320, maxWidth: 400)
+            .frame(minWidth: 220, idealWidth: 344, maxWidth: 400,
+                   minHeight: 0, maxHeight: .infinity, alignment: .topLeading)
             if let item = threads.first(where: { $0.id == selection }) {
                 ThreadDestination(accountID: accountID, thread: item, detached: false,
                                   repository: repository, conversations: conversations,
@@ -107,8 +109,11 @@ private struct ThreadBrowser: View {
                 ContentUnavailableView(threads.isEmpty && !loading && failure == nil
                     ? "표시할 스레드가 없어요" : "스레드를 선택하세요",
                     systemImage: "bubble.left.and.bubble.right")
+                    .frame(minWidth: 0, maxWidth: .infinity, minHeight: 0, maxHeight: .infinity)
             }
         }
+        .frame(minWidth: 0, maxWidth: .infinity, minHeight: 0, maxHeight: .infinity,
+               alignment: .topLeading)
         .task(id: search + [String(reload)]) {
             if loadedSearch != search {
                 threads = []

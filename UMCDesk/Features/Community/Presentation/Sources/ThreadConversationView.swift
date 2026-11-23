@@ -97,6 +97,7 @@ private struct ConversationTimeline: View {
                     }
                 }.padding(UMCSpacing.value24)
             }
+            .frame(minHeight: 0, maxHeight: .infinity)
             .defaultScrollAnchor(.bottom, for: .initialOffset)
             if let failure = model.failure {
                 HStack {
@@ -109,8 +110,13 @@ private struct ConversationTimeline: View {
                         .iconOnly)
                 }.padding(.horizontal, UMCSpacing.value24)
             }
-            if active { composer } else { Text("참여자만 메시지를 보낼 수 있어요.").padding() }
+            if active {
+                composer.fixedSize(horizontal: false, vertical: true)
+            } else {
+                Text("참여자만 메시지를 보낼 수 있어요.").padding()
+            }
         }
+        .frame(minHeight: 0, maxHeight: .infinity, alignment: .top)
         .background(UMCColor.Custom.backgroundDefault)
         .task { await model.observe(active: active) }
         .task(id: summaryRequested) {
