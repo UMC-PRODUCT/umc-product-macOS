@@ -259,9 +259,7 @@ final class AppDependencies {
             navigation.showsSettings = false
             return
         }
-        navigation.matchingDestination = nil
-        navigation.section = section
-        navigation.showsSettings = true
+        navigation.selectFeature(section)
     }
 
     func signOut() async throws { try await client.logout() }

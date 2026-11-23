@@ -231,7 +231,8 @@ private struct AppRootView: View {
                     AnyView(MatchingWorkspace(
                         repository: dependencies.matchingUseCase, destination: destination,
                         memberId: dependencies.settingsViewModel.profile?.id,
-                        activities: dependencies.settingsViewModel.profile?.activities ?? []
+                        activities: dependencies.settingsViewModel.profile?.activities ?? [],
+                        openWorkspace: dependencies.navigation.openWorkspace
                     )
                     .id(dependencies.navigation.matchingNavigationID)
                     .id(dependencies.settingsViewModel.profile?.id))
@@ -287,7 +288,9 @@ private struct AppRootView: View {
                                  conversations: account.conversations, management: account.members,
                                     defaults: dependencies.featureDefaults)
         case .projects:
-            ProjectWorkspaceView(accountID: account.memberID, loadProjects: account.projects,
+            ProjectWorkspaceView(accountID: account.memberID,
+                                 initialProjectID: dependencies.navigation.workspaceProjectID,
+                                 loadProjects: account.projects,
                                  loadGitHub: WorkspaceGitHubClient.recentWork(repository:),
                                  openMatching: { dependencies.openMatching() })
         }
@@ -308,6 +311,7 @@ private struct MatchingWorkspace: View {
     let destination: MatchingDestination
     let memberId: String?
     let activities: [SettingsActivity]
+    let openWorkspace: (String, String) -> Void
     @State private var gisuId: String?
     @State private var errorMessage: String?
     @State private var attempt = 0
@@ -317,7 +321,10 @@ private struct MatchingWorkspace: View {
             if let gisuId {
                 MatchingView(repository: repository, gisuId: gisuId,
                              initialDestination: destination, memberId: memberId,
-                             applicantParts: activities.filter { $0.gisuId == gisuId }.map(\.part))
+                             applicantParts: activities.filter { $0.gisuId == gisuId }.map(\.part),
+                             onOpenProject: memberId.map { member in
+                                 { project in openWorkspace(project, member) }
+                             })
             } else if let errorMessage {
                 ContentUnavailableView {
                     Label("활동 기수를 불러올 수 없어요", systemImage: "calendar")

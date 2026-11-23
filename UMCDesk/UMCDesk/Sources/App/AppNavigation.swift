@@ -18,6 +18,7 @@ final class AppNavigation {
     private(set) var matchingNavigationID = UUID()
     private(set) var pendingMatching: MatchingDestination?
     var matchingDestination: MatchingDestination?
+    private(set) var workspaceProjectID: String?
     var showsSettings: Bool {
         didSet {
             if !showsSettings { matchingDestination = nil }
@@ -25,6 +26,7 @@ final class AppNavigation {
     }
 
     func openMatching(_ destination: MatchingDestination = .explore, memberId: String?) {
+        workspaceProjectID = nil
         section = nil
         pendingSection = nil
         guard let memberId, !memberId.isEmpty else {
@@ -39,6 +41,7 @@ final class AppNavigation {
     }
 
     func resetAccount() {
+        workspaceProjectID = nil
         pendingMatching = nil
         showsSettings = false
     }
@@ -46,6 +49,19 @@ final class AppNavigation {
     var section: DeskSection?
     var pendingSection: DeskSection?
     var account: FeatureAccount?
+
+    func selectFeature(_ destination: DeskSection?) {
+        workspaceProjectID = nil
+        matchingDestination = nil
+        section = destination
+        showsSettings = true
+    }
+
+    func openWorkspace(projectID: String, memberID: String) {
+        guard account?.memberID == memberID, !projectID.isEmpty else { return }
+        selectFeature(.projects)
+        workspaceProjectID = projectID
+    }
 
     init(launchPage: SettingsLaunchPage) {
         showsSettings = launchPage != .login
