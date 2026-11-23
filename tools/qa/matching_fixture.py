@@ -6,6 +6,7 @@
 """Synthetic matching routes for the authenticated loopback session fixture."""
 
 import re
+from copy import deepcopy
 from datetime import datetime, timezone
 from threading import Lock
 
@@ -25,6 +26,10 @@ class State:
         self.lock = Lock()
         self.applications = {}
         self.next_id = 701
+        self.next_project = 801
+        self.next_form_item = 2001
+        self.drafts = {}
+        self.forms = {}
 
 
 def _now():
@@ -139,6 +144,8 @@ def _dispatch(state, method, path, query, body, member):
         return _operations(state, method, path, query, body, member)
     project, identifier, action = match.groups()
     if project != "1":
+        if project in state.drafts and identifier is None:
+            return _operations(state, method, path, query, body, member)
         return 404, None
     if identifier is None:
         if method == "POST":
@@ -152,12 +159,12 @@ def _dispatch(state, method, path, query, body, member):
     if method == "GET" and not action:
         return 200, _detail(app)
     if app["status"] == "CANCELLED":
-        return 409, None
+        return (400, None) if method == "DELETE" else (404, None)
     if method == "PUT" and not action:
         return _save(app, body)
     if method == "POST" and action == "/submit":
         if app["status"] != "DRAFT":
-            return 409, None
+            return 404, None
         if not (app["text"] or "").strip():
             return 400, None
         now = _now()
@@ -169,7 +176,188 @@ def _dispatch(state, method, path, query, body, member):
     return 405, None
 
 
+def _page(rows, query):
+    try:
+        page = int(query.get("page", ["0"])[0])
+        size = int(query.get("size", ["20"])[0])
+    except (ValueError, IndexError):
+        return 400, None
+    if page < 0 or size < 1:
+        return 400, None
+    start = page * size
+    return 200, {"content": rows[start:start + size], "page": str(page), "size": str(size),
+                 "totalElements": str(len(rows)), "totalPages": str((len(rows) + size - 1) // size),
+                 "hasPrevious": page > 0, "hasNext": start + size < len(rows)}
+
+
+def _permission(project, member, state):
+    draft = state.drafts.get(project)
+    public = project == "1"
+    own = draft is not None and draft["productOwner"]["memberId"] == member
+
+    def flag(allowed):
+        return {"allowed": allowed}
+
+    return {"projectId": project, "exists": public or own,
+            "canEditInfo": flag(False), "canDelete": flag(False),
+            "application": {"canCreate": flag(public and member in ELIGIBLE),
+                            "canReadList": flag(own), "canDecide": flag(False)},
+            "applicationForm": {"canRead": flag(public or (own and project in state.forms)),
+                                "canCreate": flag(own and project not in state.forms),
+                                "canEdit": flag(own and project in state.forms)},
+            "member": {"canRead": flag(public or own)}}
+
+
+def _save_form(state, draft, body):
+    # QA supports common free-text sections. Surface additional editor features as unsupported.
+    form = deepcopy(body)
+    sections = form.get("sections")
+    if not isinstance(sections, list):
+        return 400, None
+    project = draft["id"]
+    prior = state.forms.get(project, {}).get("sections", [])
+    next_id = state.next_form_item
+    used = set()
+
+    def assign(row, key, old):
+        nonlocal next_id
+        identifier = row.get(key)
+        if identifier is None:
+            identifier = next_id
+            next_id += 1
+        elif type(identifier) is not int or str(identifier) not in old:
+            return False
+        if identifier in used:
+            return False
+        used.add(identifier)
+        row[key] = str(identifier)
+        return True
+
+    def valid_item(row):
+        return (isinstance(row, dict) and isinstance(row.get("title"), str)
+                and bool(row["title"].strip()) and type(row.get("orderNo")) is int
+                and row["orderNo"] >= 0)
+
+    old_sections = {s["sectionId"]: s for s in prior}
+    for section in sections:
+        if not valid_item(section) or not isinstance(section.get("questions"), list):
+            return 400, None
+        if section.get("type") != "COMMON":
+            return 501, None
+        if not assign(section, "sectionId", old_sections):
+            return 400, None
+        old_section = old_sections.get(section["sectionId"], {})
+        old_questions = {q["questionId"] for q in old_section.get("questions", [])}
+        for question in section["questions"]:
+            if not valid_item(question) or not isinstance(question.get("isRequired"), bool):
+                return 400, None
+            if question.get("type") not in ("SHORT_TEXT", "LONG_TEXT"):
+                return 501, None
+            if question.get("options") != [] or not assign(question, "questionId", old_questions):
+                return 400, None
+    title = form.get("title")
+    description = form.get("description")
+    if title is not None and (not isinstance(title, str) or len(title) > 200):
+        return 400, None
+    if description is not None and (not isinstance(description, str) or len(description) > 500):
+        return 400, None
+    state.next_form_item = next_id
+    form_id = str(10000 + int(project))
+    result = {"projectId": project, "applicationFormId": form_id, "description": description,
+              "title": title or "프로젝트 지원서", "sections": sections}
+    state.forms[project] = result
+    draft["applicationFormId"] = form_id
+    return 200, result
+
+
+def _public_stats(path, query):
+    chapter = query.get("chapterId", [None])[0]
+    if chapter not in ("1", "2"):
+        return 400, None
+    if path.endswith("/matching-overview"):
+        if query.get("view", ["PUBLISHED"]) != ["PUBLISHED"]:
+            return 403, None
+        public = published_teams({"projectIds": ["1"]})["1"]
+        parts = [{"part": group["part"], "members": group["members"],
+                  "currentMemberCount": str(len(group["members"])), "quota": "2",
+                  "status": "RECRUITING"} for group in public["partGroups"]]
+        parts.append({"part": "DESIGN", "members": [], "currentMemberCount": "0",
+                      "quota": "1", "status": "RECRUITING"})
+        row = {"projectId": "1", "projectName": "모아", "currentMemberCount": "1",
+               "quota": "3", "partQuotaStatus": "RECRUITING", "parts": parts,
+               "productOwner": public["productOwner"], "coProductOwners": []}
+        return 200, {"projects": [row] if chapter == "1" else []}
+    count = {"phase": "FIRST", "matchedMemberCount": "0"}
+    project = {"projectId": "1", "projectName": "모아", "matchedMemberCount": "0",
+               "quota": "2", "rounds": [count], "parts": [{"part": "WEB", "quota": "2",
+                                                          "matchedMemberCount": "0"}]}
+    return 200, {"chapterId": chapter, "schoolMatchingStatistics": [],
+                 "roundMatchingStatistics": [dict(count, availableMemberCount="1")]
+                 if chapter == "1" else [],
+                 "projectMatchingStatistics": [project] if chapter == "1" else []}
+
+
 def _operations(state, method, path, query, body, member):
+    if path == ROOT + "/permissions" and method == "GET":
+        ids = [key for value in query.get("ids", []) for key in value.split(",")]
+        if not ids or any(not key.isdecimal() for key in ids):
+            return 400, None
+        return 200, {"projects": [_permission(key, member, state) for key in dict.fromkeys(ids)]}
+    if path == ROOT and method == "POST":
+        if member != "102" or body.get("productOwnerMemberId") not in (None, 102):
+            return 403, None
+        if body.get("gisuId") != 10:
+            return 400, None
+        project = str(state.next_project)
+        state.next_project += 1
+        state.drafts[project] = {"id": project, "status": "DRAFT", "name": None,
+                                 "productOwner": {"memberId": member, "name": "둘째 챌린저"},
+                                 "partQuotas": [], "applicationFormId": None}
+        return 200, {"projectId": project, "status": "DRAFT"}
+    if method == "GET" and path in (ROOT + "/me/drafts", ROOT + "/me/managed"):
+        keyword = query.get("keyword", [""])[0]
+        rows = [draft for draft in reversed(state.drafts.values())
+                if draft["productOwner"]["memberId"] == member and query.get("gisuId") == ["10"]
+                and query.get("chapterId", ["1"]) == ["1"] and keyword in (draft["name"] or "")]
+        return _page(rows, query)
+    if method == "GET" and path in (ROOT + "/statistics/matchings",
+                                    ROOT + "/statistics/matching-overview"):
+        return _public_stats(path, query)
+    if path == ROOT + "/members" and method == "GET":
+        return 200, published_teams(query)
+    if path == ROOT + "/1/members" and method == "GET":
+        return 200, published_teams({"projectIds": ["1"]})["1"]
+    if path.startswith(ROOT + "/admin/") or path.startswith(ROUNDS + "/"):
+        return 403, None
+    if path in (ROOT + "/complete", ROOT + "/statistics/applications"):
+        return 403, None
+    route = re.fullmatch(ROOT + r"/(\d+)(/.*)?", path)
+    if route is None:
+        return None
+    project, suffix = route.groups()
+    draft = state.drafts.get(project)
+    if draft:
+        if draft["productOwner"]["memberId"] != member:
+            return 403, None
+        if method == "GET":
+            if not suffix:
+                return 200, dict(draft)
+            if suffix == "/application-form":
+                return 200, state.forms.get(project)
+            if suffix == "/applications":
+                return 200, []
+            if suffix == "/members":
+                return 200, {"projectId": project, "productOwner": draft["productOwner"],
+                             "coProductOwners": [], "partGroups": []}
+        if method == "PUT" and suffix == "/application-form":
+            return _save_form(state, draft, body)
+        if suffix in (None, "/submit", "/part-quotas"):
+            return 403, None  # Active round, incomplete draft or restricted quotas.
+        return 501, None
+    if project == "1" and method == "GET" and suffix == "/applications":
+        return (400, None) if query.get("status") == ["DRAFT"] else (200, [])
+    if project == "1" and method != "GET":
+        return 403, None
     return None
 
 
@@ -182,7 +370,7 @@ def handle(handler, method, path, query, body, member_id) -> bool:
             handler.server.matching_state = State()
     state = handler.server.matching_state
     with state.lock:
-        result = _dispatch(state, method, path, query, body or {}, str(member_id))
+        result = deepcopy(_dispatch(state, method, path, query, body or {}, str(member_id)))
     if result is None:
         return False
     handler.send_result(*result)
