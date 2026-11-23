@@ -14,6 +14,11 @@ public final class UMCWindowButtonFocus {
 
     public init() {}
 
+    public var hasFollowingKeyView: Bool {
+        guard let control, let next = control.nextValidKeyView else { return false }
+        return next !== control
+    }
+
     @discardableResult
     public func focus() -> Bool {
         guard let control, control.canBecomeKeyView, let window = control.window

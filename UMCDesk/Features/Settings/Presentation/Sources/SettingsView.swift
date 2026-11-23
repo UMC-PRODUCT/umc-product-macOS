@@ -66,6 +66,7 @@ public struct SettingsView: View {
     }
 
     fileprivate enum Constants {
+        static let backTab = KeyEquivalent("\u{19}")
         static let railWidth: CGFloat = 44
         static let sidebarWidth: CGFloat = 271
         static let contentWidth: CGFloat = 760
@@ -232,6 +233,15 @@ public struct SettingsView: View {
                 }
                 SettingsHelpButton(foreground: sidebarChromeForeground, focusTarget: railHelpFocus) {
                     openWindow(id: DeskWindow.support)
+                }
+                .onKeyPress(keys: [.tab, Constants.backTab]) { press in
+                    guard featureContent == nil, viewModel.page != .myPage else { return .ignored }
+                    let backwards = press.modifiers.contains(.shift) || press.key == Constants.backTab
+                    guard !backwards || !railHelpFocus.hasFollowingKeyView else { return .ignored }
+                    tabbedPastSearchResults = false
+                    showsSearchSuggestions = true
+                    searchFocus = backwards ? searchFocusRows.last ?? .field : .field
+                    return .handled
                 }
                 .modifier(SettingsTooltip(
                     title: AppLocalization.string("도움말"), isSuppressed: showsProfileMenu))
@@ -495,7 +505,7 @@ public struct SettingsView: View {
                 .contentShape(.rect)
                 .onTapGesture { dismissSearchSuggestions() }
         }
-        .onKeyPress(keys: [.downArrow, .upArrow, .tab]) { press in
+        .onKeyPress(keys: [.downArrow, .upArrow, .tab, Constants.backTab]) { press in
             moveSearchFocus(press)
         }
     }
@@ -628,21 +638,27 @@ public struct SettingsView: View {
         }
     }
 
+    private var searchFocusRows: [SearchFocus] {
+        if viewModel.isSearching { return viewModel.searchResults.map { .result($0.id) } }
+        return suggestionItems.map(\.focus)
+    }
+
     private func moveSearchFocus(_ press: KeyPress) -> KeyPress.Result {
         guard viewModel.isSearching || showsSearchSuggestions else { return .ignored }
-        let rows = viewModel.isSearching ? viewModel.searchResults.map {
-            SearchFocus.result($0.id)
-        } : suggestionItems.map(\.focus)
-        let positions: [SearchFocus] = [.field] + rows
+        let positions: [SearchFocus] = [.field] + searchFocusRows
         guard let focus = searchFocus, let index = positions.firstIndex(of: focus) else {
             return .ignored
         }
-        let backwards = press.key == .upArrow || press.modifiers.contains(.shift)
+        let backwards = press.key == .upArrow || press.key == Constants.backTab ||
+            press.modifiers.contains(.shift)
         let next = index + (backwards ? -1 : 1)
         guard positions.indices.contains(next) else {
-            if press.key == .tab {
+            if press.key == .tab || press.key == Constants.backTab {
                 showsSearchSuggestions = false
-                if backwards { return railHelpFocus.focus() ? .handled : .ignored }
+                if backwards || !railHelpFocus.hasFollowingKeyView {
+                    tabbedPastSearchResults = false
+                    return railHelpFocus.focus() ? .handled : .ignored
+                }
                 tabbedPastSearchResults = true
                 return .ignored
             }
