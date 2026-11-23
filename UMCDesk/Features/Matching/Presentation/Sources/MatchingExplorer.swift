@@ -29,6 +29,7 @@ final class MatchingExplorerState {
 
     var loadedQuery: Query?
     var returnProjectId: String?
+    var listOrigin: CGPoint?
     var filters = Filters()
     var page = 0
     var attempt = 0
@@ -43,7 +44,6 @@ struct MatchingExplorer: View {
     let select: (MatchingProject) -> Void
 
     @Bindable var state: MatchingExplorerState
-    let restoreScroll: () -> Void
     @FocusState private var searchFocused: Bool
 
     var body: some View {
@@ -92,10 +92,11 @@ struct MatchingExplorer: View {
                         ForEach(result.content, id: \.id) { project in
                             MatchingProjectCard(
                                 project: project, restoresFocus: state.returnProjectId == project.id,
+                                listOrigin: state.listOrigin,
                                 didRestore: {
                                     state.returnProjectId = nil
-                                    restoreScroll()
-                                }, open: {
+                                }, open: { origin in
+                                    state.listOrigin = origin
                                     select(project)
                                 }
                             )
@@ -143,8 +144,9 @@ struct MatchingExplorer: View {
 struct MatchingProjectCard: View {
     let project: MatchingProject
     let restoresFocus: Bool
+    let listOrigin: CGPoint?
     let didRestore: () -> Void
-    let open: () -> Void
+    let open: (CGPoint?) -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: UMCSpacing.value16) {
@@ -170,7 +172,8 @@ struct MatchingProjectCard: View {
             HStack {
                 Text(ownerName).umcTypography(.bodyRegular).foregroundStyle(.secondary)
                 Spacer()
-                ProjectPostingButton(restoresFocus: restoresFocus, didRestore: didRestore, open: open)
+                ProjectPostingButton(restoresFocus: restoresFocus, listOrigin: listOrigin,
+                                     didRestore: didRestore, open: open)
                     .fixedSize()
             }
         }
@@ -197,11 +200,13 @@ struct MatchingApplicationRoute: Identifiable {
 
 private struct ProjectPostingButton: NSViewRepresentable {
     let restoresFocus: Bool
+    let listOrigin: CGPoint?
     let didRestore: () -> Void
-    let open: () -> Void
+    let open: (CGPoint?) -> Void
 
     final class PostingButton: NSButton {
-        var open: (() -> Void)?
+        var open: ((CGPoint?) -> Void)?
+        var listOrigin: CGPoint?
         var didRestore: (() -> Void)?
         var restoresFocus = false
         override var acceptsFirstResponder: Bool { true }
@@ -217,11 +222,18 @@ private struct ProjectPostingButton: NSViewRepresentable {
                 guard let self, restoresFocus, let window, window.makeFirstResponder(self)
                 else { return }
                 restoresFocus = false
+                if let origin = listOrigin, let scroll = enclosingScrollView {
+                    window.contentView?.layoutSubtreeIfNeeded()
+                    let clip = scroll.contentView
+                    let target = clip.constrainBoundsRect(CGRect(origin: origin, size: clip.bounds.size))
+                    clip.scroll(to: target.origin)
+                    scroll.reflectScrolledClipView(clip)
+                }
                 didRestore?()
             }
         }
 
-        @objc func openPosting() { open?() }
+        @objc func openPosting() { open?(enclosingScrollView?.contentView.bounds.origin) }
 
         override func keyDown(with event: NSEvent) {
             if [36, 76].contains(event.keyCode), event.modifierFlags.intersection([.command, .option, .control, .shift]).isEmpty {
@@ -242,6 +254,7 @@ private struct ProjectPostingButton: NSViewRepresentable {
     }
 
     func updateNSView(_ button: PostingButton, context: Context) {
+        button.listOrigin = listOrigin
         button.open = open
         button.didRestore = didRestore
         button.restoresFocus = restoresFocus

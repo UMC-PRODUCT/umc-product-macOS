@@ -79,8 +79,6 @@ public struct MatchingView: View {
     private let memberId: String?
     @State private var explorer = MatchingExplorerState()
     @State private var position = ScrollPosition()
-    @State private var visibleY: CGFloat = 0
-    @State private var explorerY: CGFloat = 0
     @State private var destination: MatchingDestination
     @State private var organization = MatchingRequest<MatchingOrganization>()
     @State private var rounds = MatchingRequest<[MatchingRound]>()
@@ -149,9 +147,6 @@ public struct MatchingView: View {
                 .padding(.vertical, UMCSpacing.value24)
             }
             .scrollPosition($position)
-            .onScrollGeometryChange(for: CGFloat.self) { $0.visibleRect.minY } action: { _, y in
-                visibleY = y
-            }
         }
         .toolbar {
             if selectedProject != nil {
@@ -250,9 +245,8 @@ public struct MatchingView: View {
                 scheduleSummary
                 MatchingExplorer(repository: repository, gisuId: gisuId, chapterId: chapterId,
                                  schools: schools, select: {
-                                     explorerY = visibleY
                                      go(.init(destination: .explore, project: $0))
-                                 }, state: explorer, restoreScroll: { position.scrollTo(y: explorerY) })
+                                 }, state: explorer)
             case .applications:
                 MatchingApplications(repository: repository, gisuId: gisuId, memberId: memberId, rounds: loadedRounds,
                                      explore: { navigate(.explore) })
@@ -376,7 +370,6 @@ public struct MatchingView: View {
         if target.project != nil { position.scrollTo(edge: .top) }
         if let selectedProject, target.project == nil, target.destination == .explore {
             explorer.returnProjectId = selectedProject.id
-            position.scrollTo(y: explorerY)
         }
         selectedProject = target.project
         draftId = target.draftId
