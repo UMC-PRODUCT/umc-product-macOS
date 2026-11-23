@@ -20,6 +20,12 @@ public struct LiveCommunityThreadRepository: CommunityThreadRepository {
         self.environment = environment
     }
 
+    public func thread(id: String) async throws -> CommunityThread {
+        try ConversationIdentifier.validate(id)
+        let detail: ThreadResponse = try await request("/" + id)
+        return detail.model
+    }
+
     public func threads(query: String, filter: String, offset: String?) async throws -> ThreadPage<CommunityThread> {
         let fields = ThreadListQuery(filter: filter, query: query, offset: offset)
         let page: ListResponse = try await request("", task: .requestParameters(
@@ -96,8 +102,11 @@ private struct ThreadResponse: Codable {
     let isJoined: Bool
     let membershipState: String?
     let unreadCount: String
+    let myRole: ThreadManagementRole?
+    let memberCount: String?
     enum CodingKeys: CodingKey {
-        case threadId, title, description, icon, isPinned, isMuted, isJoined, membershipState, unreadCount
+        case threadId, title, description, icon, isPinned, isMuted, isJoined, membershipState
+        case unreadCount, myRole, memberCount
     }
 
     init(from decoder: Decoder) throws {
@@ -110,6 +119,8 @@ private struct ThreadResponse: Codable {
         isMuted = try values.decode(Bool.self, forKey: .isMuted)
         isJoined = try values.decode(Bool.self, forKey: .isJoined)
         membershipState = try values.decodeIfPresent(String.self, forKey: .membershipState)
+        myRole = try values.decodeIfPresent(ThreadManagementRole.self, forKey: .myRole)
+        memberCount = try values.decodeFlexibleStringIfPresent(forKey: .memberCount)
         unreadCount = try values.decodeFlexibleString(forKey: .unreadCount)
     }
 
@@ -123,13 +134,15 @@ private struct ThreadResponse: Codable {
         try values.encode(isMuted, forKey: .isMuted)
         try values.encode(isJoined, forKey: .isJoined)
         try values.encodeIfPresent(membershipState, forKey: .membershipState)
+        try values.encodeIfPresent(myRole, forKey: .myRole)
+        try values.encodeIfPresent(memberCount, forKey: .memberCount)
         try values.encode(unreadCount, forKey: .unreadCount)
     }
 
     var model: CommunityThread {
         CommunityThread(id: threadId, title: title, description: description, icon: icon,
             isPinned: isPinned, isMuted: isMuted, isJoined: isJoined, membershipState: membershipState,
-            unread: unreadCount)
+            unread: unreadCount, myRole: myRole, memberCount: memberCount)
     }
 }
 
