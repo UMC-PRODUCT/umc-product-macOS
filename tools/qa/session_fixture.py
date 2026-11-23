@@ -8,7 +8,6 @@
 import home_activity_fixture
 import matching_fixture
 import notice_fixture
-import project_workspace_fixture
 import thread_feature_fixture
 import argparse
 import json
@@ -124,9 +123,6 @@ class SessionFixture(BaseHTTPRequestHandler):
                     self.server.profile_links = {}
                 self.server.profile_links[member] = links
             self.send_result(200, self.profile(email))
-            return True
-        if self.command == "GET" and path == "/api/v1/projects/members":
-            self.send_result(200, project_workspace_fixture.published_teams(query))
             return True
         if thread_feature_fixture.handle(self, self.command, path, query, body, member):
             return True
