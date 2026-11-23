@@ -25,6 +25,7 @@ struct ProjectOperationsView: View {
     var status: String?
     let close: () -> Void
     @State private var page = ProjectPage.posting
+    @State private var inspectingDraft = false
     @State private var revision = 0
     @State private var pending: ProjectConfirmation?
     @State private var operationTask: Task<Void, Never>?
@@ -41,11 +42,23 @@ struct ProjectOperationsView: View {
             }) { project, permissions in
                 let context = ProjectContext(project: project, status: status, permissions: permissions,
                                              service: service, confirm: { pending = $0 })
+                if status == "PENDING_REVIEW", inspectingDraft || page != .posting {
+                    Button("공개 검토로", systemImage: "chevron.left") {
+                        inspectingDraft = false
+                        page = .posting
+                    }
+                }
                 Text(project.name).umcTypography(.title1Bold)
                 Picker("관리 도구", selection: $page) {
                     ForEach(ProjectPage.allCases, id: \.self) { Text($0.rawValue).tag($0) }
                 }.pickerStyle(.segmented)
                 switch page {
+                case .posting where status == "PENDING_REVIEW" && !inspectingDraft:
+                    ProjectPublicationReview(
+                        context: context,
+                        inspectPosting: { inspectingDraft = true },
+                        inspectForm: { page = .form }
+                    )
                 case .posting: ProjectPostingEditor(context: context)
                 case .state: ProjectStatusEditor(context: context)
                 case .form:
@@ -119,7 +132,12 @@ struct ProjectOperationsView: View {
             do {
                 try await service.perform(operation, projectId: projectId)
                 try Task.checkCancellation()
-                if case .delete = operation { close() } else { revision += 1 }
+                switch operation {
+                case .submit, .publish, .delete, .abort, .complete:
+                    close()
+                default:
+                    revision += 1
+                }
             } catch is CancellationError {
                 return
             } catch let MatchingFormSaveError.answeredSectionDeletion(message) {
@@ -163,7 +181,6 @@ private struct ProjectPostingEditor: View {
     @State private var name: String
     @State private var summary: String
     @State private var link: String
-    @State private var quotas: [String: Int]
     @State private var choosingImage = false
     @State private var slot = ProjectImageSlot.thumbnail
 
@@ -172,10 +189,6 @@ private struct ProjectPostingEditor: View {
         _name = State(initialValue: context.project.name)
         _summary = State(initialValue: context.project.description ?? "")
         _link = State(initialValue: context.project.externalLink ?? "")
-        _quotas = State(initialValue: Dictionary(uniqueKeysWithValues: context.project.partQuotas.compactMap {
-            guard let quota = Int($0.quota) else { return nil }
-            return ($0.part, quota)
-        }))
     }
 
     var body: some View {
@@ -212,25 +225,129 @@ private struct ProjectPostingEditor: View {
             }
             .textFieldStyle(.roundedBorder)
             .matchingPanel()
-            VStack(alignment: .leading, spacing: UMCSpacing.value12) {
-                Text("파트별 모집 정원").umcTypography(.title3Bold)
-                ForEach(Array(Set(OperationsPart.selectable + quotas.keys)).sorted(), id: \.self) { part in
-                    Stepper(value: Binding(get: { quotas[part] ?? 0 }, set: { quotas[part] = $0 }),
-                            in: 0...999) {
-                        Text(MatchingLabel.part(part) + " · " + String(quotas[part] ?? 0))
-                    }
-                    .disabled(!context.allows(.quota))
-                }
-                if context.allows(.quota) {
-                    Button("정원 저장") {
-                        context.request("모집 정원을 저장할까요?", name, .quotas(quotas.filter { $0.value > 0 }))
-                    }.disabled(!quotas.values.contains { $0 > 0 })
-                }
-                if context.allows(.publish) {
-                    Button("프로젝트 공개") { context.request("프로젝트를 공개할까요?", name, .publish) }
-                }
-            }.matchingPanel()
+            ProjectQuotaPanel(context: context, isPublicationReview: false)
         }
+    }
+}
+
+extension MatchingProject {
+    var hasConfiguredQuota: Bool { partQuotas.contains { (Int($0.quota) ?? 0) > 0 } }
+    var isReadyForPublication: Bool { applicationFormId != nil && hasConfiguredQuota }
+}
+
+private struct ProjectPublicationReview: View {
+    let context: ProjectContext
+    let inspectPosting: () -> Void
+    let inspectForm: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: UMCSpacing.value24) {
+            HStack {
+                VStack(alignment: .leading, spacing: UMCSpacing.value8) {
+                    Text("프로젝트 공개 검토").umcTypography(.largeTitle3Bold)
+                    Text("공고 · 지원 폼 · 파트 정원을 확인한 뒤 모집을 시작하세요.")
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                Button("초안으로", action: inspectPosting)
+                    .buttonStyle(MatchingActionStyle(appearance: .text))
+                    .help("공고 편집 화면으로 이동")
+                Button("공고 공개") {
+                    context.request("공고를 공개할까요?", "지원 폼도 함께 공개됩니다.", .publish)
+                }
+                .buttonStyle(MatchingActionStyle(appearance: .primary))
+                .disabled(!context.allows(.publish) || !context.project.isReadyForPublication)
+            }
+            HStack(alignment: .top, spacing: UMCSpacing.value24) {
+                VStack(alignment: .leading, spacing: UMCSpacing.value16) {
+                    MatchingBadge(text: "검토 대기")
+                    Text(context.project.name).umcTypography(.title1Bold)
+                    if let pm = context.project.productOwner {
+                        Text([pm.nickname ?? pm.name, pm.schoolName].compactMap { $0 }
+                            .joined(separator: " · ")).foregroundStyle(.secondary)
+                    }
+                    if let description = context.project.description { Text(description) }
+                    Divider()
+                    HStack {
+                        if let url = MatchingLabel.webURL(context.project.externalLink) {
+                            Link("소개 자료", destination: url)
+                        }
+                        Button("지원 폼 확인", action: inspectForm)
+                            .buttonStyle(MatchingActionStyle(appearance: .secondary))
+                            .disabled(context.project.applicationFormId == nil ||
+                                      !context.allows(.formRead))
+                    }
+                    if context.project.applicationFormId == nil {
+                        Text("지원 폼 미등록")
+                    } else if context.allows(.formRead) {
+                        OperationsLoad(key: context.project.id, load: {
+                            try await context.service.editableForm(projectId: context.project.id)
+                        }) { form in
+                            let common = questionCount("COMMON", in: form)
+                            let part = questionCount("PART", in: form)
+                            Text("공통 질문 \(common)개 · 파트 질문 \(part)개")
+                                .foregroundStyle(.secondary)
+                        }
+                    } else {
+                        Text("지원 폼 등록됨").foregroundStyle(.secondary)
+                    }
+                }.matchingPanel()
+                ProjectQuotaPanel(context: context, isPublicationReview: true)
+            }
+        }
+    }
+
+    private func questionCount(_ type: String, in form: EditableMatchingForm) -> Int {
+        form.sections.filter { $0.type == type }.reduce(0) { $0 + $1.questions.count }
+    }
+}
+
+private struct ProjectQuotaPanel: View {
+    let context: ProjectContext
+    let isPublicationReview: Bool
+    @State private var quotas: [String: Int]
+
+    init(context: ProjectContext, isPublicationReview: Bool) {
+        self.context = context
+        self.isPublicationReview = isPublicationReview
+        _quotas = State(initialValue: Dictionary(uniqueKeysWithValues: context.project.partQuotas.compactMap {
+            guard let quota = Int($0.quota) else { return nil }
+            return ($0.part, quota)
+        }))
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: UMCSpacing.value12) {
+            Text("파트별 모집 정원").umcTypography(.title3Bold)
+            ForEach(Array(Set(OperationsPart.selectable + quotas.keys)).sorted(), id: \.self) { part in
+                Stepper(value: Binding(get: { quotas[part] ?? 0 }, set: { quotas[part] = $0 }),
+                        in: 0...999) {
+                    Text(MatchingLabel.part(part) + " · " + String(quotas[part] ?? 0))
+                }
+                .disabled(!context.allows(.quota))
+            }
+            if context.allows(.quota) {
+                Button("정원 저장") {
+                    let openings = quotas.filter { $0.value > 0 }
+                    context.request("모집 정원을 저장할까요?", context.project.name, .quotas(openings))
+                }.disabled(!quotas.values.contains { $0 > 0 })
+            }
+            if isPublicationReview {
+                let registered = context.project.applicationFormId != nil
+                let configured = context.project.hasConfiguredQuota
+                VStack(alignment: .leading, spacing: UMCSpacing.value8) {
+                    Text(context.project.isReadyForPublication ? "공개 준비 완료" : "공개 준비 중")
+                        .umcTypography(.headlineBold)
+                    Text((registered ? "지원 폼 등록됨" : "지원 폼 미등록") + " · " +
+                         (configured ? "모집 정원 설정됨" : "모집 정원 미설정"))
+                }.matchingPanel(UMCColor.Semantic.surfaceBrandMedium)
+                if !context.allows(.publish), let reason = context.permissions[.publish]?.reason {
+                    Text(reason).foregroundStyle(.secondary)
+                }
+            } else if context.allows(.publish) {
+                Button("프로젝트 공개") { context.request("프로젝트를 공개할까요?", context.project.name, .publish) }
+            }
+        }.matchingPanel()
     }
 }
 
