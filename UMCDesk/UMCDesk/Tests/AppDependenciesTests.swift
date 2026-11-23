@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import Synchronization
 import Testing
 import SettingsDomain
 @testable import SettingsPresentation
@@ -16,6 +17,54 @@ import CoreNetwork
 @MainActor
 struct AppDependenciesTests {
     #if DEBUG
+    @Test("로그인 창이 토큰 저장 후 닫혀도 두 프로필을 확인한 뒤 보호 화면으로 복귀한다")
+    func loginCompletionSurvivesCallerCancellation() async throws {
+        let barrier = ProfileResponseBarrier()
+        AccountCompletionProtocol.barrier.withLock { $0 = barrier }
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [AccountCompletionProtocol.self]
+        let session = URLSession(configuration: config)
+        defer {
+            barrier.release.signal()
+            session.invalidateAndCancel()
+            AccountCompletionProtocol.barrier.withLock { $0 = nil }
+        }
+        let dependencies = AppDependencies(
+            arguments: ["--local-api-port", "19451"], session: session
+        )
+        let store = dependencies.container.resolve(TokenStore.self)
+        dependencies.selectSection(.projects)
+        let caller = Task {
+            defer { barrier.arrival.continuation.finish() }
+            try await dependencies.login(email: "member@example.test", password: "fixture-only")
+        }
+
+        var requests = barrier.arrival.stream.makeAsyncIterator()
+        _ = try #require(await requests.next())
+        #expect(await store.getAccessToken() == "fixture-access")
+        #expect(await store.getRefreshToken() == "fixture-refresh")
+        #expect(dependencies.settingsViewModel.profile == nil)
+        #expect(dependencies.windowSettingsViewModel.profile == nil)
+        #expect(dependencies.navigation.account == nil)
+        #expect(dependencies.navigation.pendingSection == .projects)
+        #expect(!dependencies.navigation.showsSettings)
+
+        caller.cancel()
+        barrier.release.signal()
+        try await caller.value
+
+        let account = try #require(dependencies.navigation.account)
+        #expect(account.memberID == "101")
+        #expect(dependencies.settingsViewModel.profile?.id == account.memberID)
+        #expect(dependencies.windowSettingsViewModel.profile?.id == account.memberID)
+        #expect(dependencies.navigation.pendingSection == nil)
+        #expect(dependencies.navigation.section == .projects)
+        #expect(dependencies.navigation.showsSettings)
+        #expect(try await account.client.currentAccessToken() == "fixture-access")
+        #expect(await store.getRefreshToken() == "fixture-refresh")
+        #expect(barrier.profileCount.withLock { $0 } == 2)
+    }
+
     @Test("A session reset clears the shared Settings account")
     func sessionResetClearsSettingsAccount() async throws {
         let preferences = AppDependencies.makeSettingsPreferences(arguments: ["--settings-preview"])
@@ -147,3 +196,60 @@ struct AppDependenciesTests {
         #expect(store === resolvedStore)
     }
 }
+
+#if DEBUG
+private final class ProfileResponseBarrier: Sendable {
+    let arrival = AsyncStream<Void>.makeStream()
+    let release = DispatchSemaphore(value: 0)
+    let profileCount = Mutex(0)
+}
+
+private final class AccountCompletionProtocol: URLProtocol, @unchecked Sendable {
+    static let barrier = Mutex<ProfileResponseBarrier?>(nil)
+
+    override class func canInit(with request: URLRequest) -> Bool { true }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+
+    override func startLoading() {
+        guard let url = request.url, let barrier = Self.barrier.withLock({ $0 }) else {
+            client?.urlProtocol(self, didFailWithError: URLError(.badURL))
+            return
+        }
+        let result: String
+        switch (request.httpMethod, url.path) {
+        case ("POST", "/api/v1/auth/login/email"):
+            result = """
+                {"memberId":"101","accessToken":"fixture-access","refreshToken":"fixture-refresh"}
+                """
+        case ("GET", "/api/v1/member/me"):
+            let authorization = request.value(forHTTPHeaderField: "Authorization")
+            guard authorization == "Bearer fixture-access" else {
+                client?.urlProtocol(self, didFailWithError: URLError(.userAuthenticationRequired))
+                return
+            }
+            let first = barrier.profileCount.withLock {
+                $0 += 1
+                return $0 == 1
+            }
+            if first {
+                barrier.arrival.continuation.yield()
+                guard barrier.release.wait(timeout: .now() + 10) == .success else {
+                    client?.urlProtocol(self, didFailWithError: URLError(.timedOut))
+                    return
+                }
+            }
+            result = #"{"id":"101","name":"합성회원","nickname":"테스트"}"#
+        default:
+            client?.urlProtocol(self, didFailWithError: URLError(.unsupportedURL))
+            return
+        }
+        let response = HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil,
+                                       headerFields: ["Content-Type": "application/json"])!
+        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+        client?.urlProtocol(self, didLoad: Data(#"{"success":true,"result":\#(result)}"#.utf8))
+        client?.urlProtocolDidFinishLoading(self)
+    }
+
+    override func stopLoading() {}
+}
+#endif
