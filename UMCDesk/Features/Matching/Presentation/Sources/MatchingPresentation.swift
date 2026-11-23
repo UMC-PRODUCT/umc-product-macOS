@@ -341,7 +341,14 @@ public struct MatchingView: View {
                 if authorizedChapter == chapterId {
                     Button("지부 일정 관리") { editingSchedule = true }
                 }
-                ForEach(loadedRounds, id: \.id) { MatchingRoundCard(round: $0) }
+                ForEach(loadedRounds, id: \.id) { round in
+                    MatchingRoundCard(round: round)
+                    if round.autoDecisionExecutedAt != nil {
+                        MatchingPublicationStatus(
+                            round: round, repository: repository, gisuId: gisuId
+                        )
+                    }
+                }
                 if loadedRounds.isEmpty { Text("등록된 매칭 일정이 없어요.").matchingPanel() }
             }
             .sheet(isPresented: $editingSchedule) {

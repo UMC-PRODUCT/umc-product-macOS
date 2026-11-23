@@ -307,7 +307,7 @@ extension OperationsTeam {
     }
 }
 
-private extension MatchingApplication {
+extension MatchingApplication {
     var cardId: String { applicationId.map { "application-" + $0 } ?? "assigned-" + projectId }
 }
 
