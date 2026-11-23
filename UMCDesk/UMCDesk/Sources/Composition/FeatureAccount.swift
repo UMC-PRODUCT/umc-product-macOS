@@ -26,7 +26,8 @@ struct FeatureAccount: Sendable {
     let client: NetworkClient
     let environment: NetworkEnvironment
 
-    init(memberID: String, boundClient bound: NetworkClient, environment: NetworkEnvironment) {
+    init(memberID: String, boundClient bound: NetworkClient, environment: NetworkEnvironment,
+         defaults: UserDefaults) {
         self.memberID = memberID
         self.client = bound
         self.environment = environment
@@ -38,7 +39,9 @@ struct FeatureAccount: Sendable {
         notices = LiveNoticeRepository(adapter: adapter, environment: environment) {
             _ = try await bound.currentAccessToken()
         }
-        posts = LiveCommunityPostRepository(adapter: adapter, environment: environment)
+        posts = LiveCommunityPostRepository(
+            adapter: adapter, environment: environment, accountID: memberID, defaults: defaults
+        )
         threads = LiveCommunityThreadRepository(adapter: adapter, environment: environment)
         members = LiveThreadManagementRepository(adapter: adapter, environment: environment)
         conversations = LiveThreadConversationRepository(adapter: adapter, environment: environment) {

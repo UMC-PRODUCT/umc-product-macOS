@@ -184,7 +184,8 @@ final class AppDependencies {
             hasRestored = false
             throw NetworkError.invalidResponse
         }
-        navigation.account = FeatureAccount(memberID: id, boundClient: accountClient, environment: environment)
+        navigation.account = FeatureAccount(memberID: id, boundClient: accountClient,
+                                            environment: environment, defaults: featureDefaults)
         navigation.section = navigation.pendingSection
         navigation.pendingSection = nil
         hasRestored = true
@@ -221,7 +222,8 @@ final class AppDependencies {
             await windowSettingsViewModel.refreshProfile(showsToast: false)
             guard windowSettingsViewModel.profile?.id == id,
                   (try? await accountClient.currentAccessToken()) != nil else { return }
-            navigation.account = FeatureAccount(memberID: id, boundClient: accountClient, environment: environment)
+            navigation.account = FeatureAccount(memberID: id, boundClient: accountClient,
+                                                environment: environment, defaults: featureDefaults)
             navigation.section = navigation.pendingSection
             navigation.pendingSection = nil
             hasRestored = true
