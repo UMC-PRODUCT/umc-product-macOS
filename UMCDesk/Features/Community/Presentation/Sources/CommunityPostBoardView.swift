@@ -77,11 +77,6 @@ private struct Board: View {
                     Button("목록 다시 불러오기") { reload += 1 }
                 }
                 if loading { ProgressView("게시글 불러오는 중").controlSize(.small) }
-                if !loading && rows.isEmpty && failure == nil {
-                    ContentUnavailableView(
-                        keyword.isEmpty ? "게시글이 없어요" : "검색 결과가 없어요",
-                        systemImage: "text.bubble")
-                }
                 List(rows, selection: $selected) { row in
                     VStack(alignment: .leading, spacing: 4) {
                         Text(CommunityPostCategory(rawValue: row.category)?.label ?? row.category)
@@ -96,13 +91,23 @@ private struct Board: View {
                         }.font(.caption).foregroundStyle(.secondary)
                     }.padding(.vertical, 6).tag(row.id)
                         .accessibilityElement(children: .combine)
-                }.focused($resultsFocused).accessibilityLabel("게시글 목록")
+                }
+                .frame(minHeight: 0, maxHeight: .infinity)
+                .overlay {
+                    if !loading && rows.isEmpty && failure == nil {
+                        ContentUnavailableView(
+                            keyword.isEmpty ? "게시글이 없어요" : "검색 결과가 없어요",
+                            systemImage: "text.bubble")
+                    }
+                }
+                .focused($resultsFocused).accessibilityLabel("게시글 목록")
                 if let next {
                     Button("더 보기") { Task { await load(page: next) } }.disabled(loading)
                 }
             }
             .padding(UMCSpacing.value16)
-            .frame(minWidth: 220, idealWidth: 320, maxWidth: 420)
+            .frame(minWidth: 220, idealWidth: 320, maxWidth: 420,
+                   minHeight: 0, maxHeight: .infinity, alignment: .topLeading)
             if let selected {
                 CommunityPostDetailView(id: selected, accountID: accountID, repository: repository)
                 {
@@ -112,8 +117,11 @@ private struct Board: View {
                 }.id(selected)
             } else {
                 ContentUnavailableView("게시글을 선택하세요", systemImage: "text.bubble")
+                    .frame(minWidth: 0, maxWidth: .infinity, minHeight: 0, maxHeight: .infinity)
             }
         }
+        .frame(minWidth: 0, maxWidth: .infinity, minHeight: 0, maxHeight: .infinity,
+               alignment: .topLeading)
         .background(UMCColor.Custom.backgroundDefault)
         .task(id: version) {
             if loadedRequest != request {

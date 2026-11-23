@@ -19,7 +19,7 @@ struct CommunityPostBoardTests {
         let repository = BoardFixture()
         let board = CommunityPostBoardView(accountID: "101", repository: repository)
             .environment(\.colorScheme, scheme)
-        let host = NSHostingView(rootView: board)
+        let host = NSHostingView(rootView: board.frame(minWidth: 0, maxWidth: .infinity, maxHeight: .infinity))
         let window = NSWindow(
             contentRect: .init(x: 0, y: 0, width: 800, height: 600),
             styleMask: [.titled], backing: .buffered, defer: false)
@@ -29,6 +29,9 @@ struct CommunityPostBoardTests {
         host.layoutSubtreeIfNeeded()
         let field = try #require(firstField(host))
         #expect(field.accessibilityLabel() == "게시글 검색" || field.placeholderString == "제목·본문 검색")
+        let ypos = field.convert(field.bounds,to:host).midY
+        let fromTop = host.isFlipped ? ypos : host.bounds.height - ypos
+        #expect(fromTop < 120)
         let bitmap = try #require(host.bitmapImageRepForCachingDisplay(in: host.bounds))
         host.cacheDisplay(in: host.bounds, to: bitmap)
         let fill = try #require(
