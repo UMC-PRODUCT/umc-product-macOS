@@ -13,8 +13,8 @@ import Testing
 @Suite("스레드 관리 서버 계약")
 struct ThreadManagementContractTests {
     @Test func onlyConfirmedDeletionEndsTheThreadAsDeleted() {
-        let deleted = Data(#"{"isSuccess":false,"code":"COMMUNITY-0037"}"#.utf8)
-        let wrongCode = Data(#"{"isSuccess":false,"code":"COMMUNITY-0033"}"#.utf8)
+        let deleted = Data(#"{"success":false,"code":"COMMUNITY-0037"}"#.utf8)
+        let wrongCode = Data(#"{"success":false,"code":"COMMUNITY-0033"}"#.utf8)
         let classify = LiveCommunityThreadRepository.detailError(status:data:)
         #expect(classify(410, deleted) as? ThreadDetailError == .deleted)
         #expect(classify(404, wrongCode) as? ThreadDetailError == .accessDenied)
