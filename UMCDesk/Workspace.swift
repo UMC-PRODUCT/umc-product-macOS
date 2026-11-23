@@ -29,6 +29,30 @@ let workspace = Workspace(
                 .testableTarget(target: .project(
                     path: "Features/Settings", target: "SettingsPresentationTests"
                 )),
+                .testableTarget(target: .project(
+                    path: "Features/Home", target: "HomeDomainTests"
+                )),
+                .testableTarget(target: .project(
+                    path: "Features/Home", target: "HomeDataTests"
+                )),
+                .testableTarget(target: .project(
+                    path: "Features/Activity", target: "ActivityDataTests"
+                )),
+                .testableTarget(target: .project(
+                    path: "Features/Notice", target: "NoticeDomainTests"
+                )),
+                .testableTarget(target: .project(
+                    path: "Features/Notice", target: "NoticeDataTests"
+                )),
+                .testableTarget(target: .project(
+                    path: "Features/Community", target: "CommunityDataTests"
+                )),
+                .testableTarget(target: .project(
+                    path: "Features/Community", target: "CommunityPresentationTests"
+                )),
+                .testableTarget(target: .project(
+                    path: "Features/ProjectWorkspace", target: "ProjectWorkspaceDataTests"
+                )),
                 .testableTarget(target: .project(path: "Core/DI", target: "CoreDITests")),
                 .testableTarget(target: .project(
                     path: "Core/DesignSystem", target: "CoreDesignSystemTests"

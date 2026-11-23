@@ -11,16 +11,24 @@ import Moya
 
 /// Keeps UMC error handling while Aquila performs Moya requests and authentication.
 public struct MoyaNetworkAdapter: Sendable {
+    private let networkClient: NetworkClient
     private let adapter: AquilaMoya.MoyaNetworkAdapter
 
     public init(networkClient: NetworkClient) {
+        self.networkClient = networkClient
         adapter = AquilaMoya.MoyaNetworkAdapter(networkClient: networkClient.aquilaClient)
     }
 
     public func request<T: TargetType>(_ target: T) async throws -> Response {
         do {
-            return try await adapter.request(target)
+            try await networkClient.validateScope()
+            let response = try await CredentialRequest.$scope.withValue(networkClient.accountScope) {
+                try await adapter.request(target)
+            }
+            try await networkClient.validateScope()
+            return response
         } catch {
+            try await networkClient.validateScope()
             throw NetworkClient.appError(from: error)
         }
     }

@@ -14,6 +14,10 @@ final class AppSessionResetRelay {
     weak var settingsViewModel: SettingsViewModel?
 
     func reset() async {
+        navigation?.authEntry = .login
+        navigation?.account = nil
+        navigation?.section = nil
+        navigation?.pendingSection = nil
         navigation?.showsSettings = false
         await settingsViewModel?.invalidateAccount()
         await windowSettingsViewModel?.invalidateAccount()

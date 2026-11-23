@@ -17,8 +17,9 @@ public struct SettingsView: View {
 
     @Environment(\.openWindow) private var openWindow
     @State private var viewModel: SettingsViewModel
-    private let threadContent: (() -> AnyView)?
-    @State private var showsThreads = false
+    private let onSelectSection: ((DeskSection?) -> Void)?
+    private let section: DeskSection?
+    private let featureContent: AnyView?
     @State private var showsSearchSuggestions = false
     @FocusState private var searchFocus: SearchFocus?
 
@@ -67,8 +68,11 @@ public struct SettingsView: View {
         static let contentWidth: CGFloat = 760
     }
 
-    public init(viewModel: SettingsViewModel, threadContent: (() -> AnyView)? = nil) {
-        self.threadContent = threadContent
+    public init(viewModel: SettingsViewModel, section: DeskSection? = nil,
+                featureContent: AnyView? = nil, onSelectSection: ((DeskSection?) -> Void)? = nil) {
+        self.section = section
+        self.featureContent = featureContent
+        self.onSelectSection = onSelectSection
         _viewModel = State(initialValue: viewModel)
     }
 
@@ -82,7 +86,7 @@ public struct SettingsView: View {
                 .zIndex(1)
                 .simultaneousGesture(TapGesture().onEnded { dismissSearchSuggestions() })
             HStack(spacing: 0) {
-                if !showsThreads, viewModel.page != .myPage {
+                if featureContent == nil, viewModel.page != .myPage {
                     settingsSidebar
                         .foregroundStyle(sidebarPalette.textNeutralDefault)
                         .tint(sidebarPalette.textBrandDefault)
@@ -95,7 +99,7 @@ public struct SettingsView: View {
                         .accessibilityHidden(true)
                 }
                 Group {
-                    if showsThreads, let threadContent { threadContent() }
+                    if let featureContent { featureContent }
                     else { pageContent }
                 }
                     .environment(\.settingsAppearancePalette, palette)
@@ -162,8 +166,7 @@ public struct SettingsView: View {
                 accessibleProfileMenuFocus = .trigger
             }
         }
-        .toolbar { if !showsThreads { navigationToolbar } }
-        .onChange(of: viewModel.profile?.id) { showsThreads = false }
+        .toolbar { if featureContent == nil { navigationToolbar } }
         .toolbarBackground(UMCColor.Custom.backgroundAppShell, for: .windowToolbar)
         .toolbarBackgroundVisibility(.visible, for: .windowToolbar)
         .toolbarColorScheme(.dark, for: .windowToolbar)
@@ -196,26 +199,24 @@ public struct SettingsView: View {
     private var appRail: some View {
         VStack(spacing: 0) {
             VStack(spacing: 0) {
-                railItem(AppLocalization.string("홈"), symbol: "house")
-                railItem(AppLocalization.string("공지"), symbol: "megaphone")
-                railItem(AppLocalization.string("활동"), symbol: "calendar.badge.checkmark")
-                if threadContent != nil {
-                    Button {
-                        if viewModel.profile == nil { viewModel.onOpenLogin?() }
-                        else { showsThreads = true }
-                    } label: {
-                        Image(systemName: "bubble.left")
-                            .frame(width: 44, height: 44)
-                            .contentShape(.rect)
+                ForEach(DeskSection.allCases, id: \.self) { item in
+                    if let onSelectSection {
+                        Button { onSelectSection(item) } label: {
+                            Image(systemName: item.symbol)
+                                .frame(width: 44, height: 44)
+                                .contentShape(.rect)
+                        }
+                        .buttonStyle(SettingsPlainButtonStyle())
+                        .foregroundStyle(sidebarChromeForeground)
+                        .background(section == item ? UMCColor.Primitives.teal800 : .clear,
+                                    in: .rect(cornerRadius: UMCRadius.value8))
+                        .accessibilityAddTraits(section == item ? .isSelected : [])
+                        .accessibilityLabel(item.title)
+                        .help(item.title)
+                    } else {
+                        railItem(item.title, symbol: item.symbol)
                     }
-                    .buttonStyle(SettingsPlainButtonStyle())
-                    .foregroundStyle(sidebarChromeForeground)
-                    .accessibilityLabel("스레드")
-                    .help("스레드")
-                } else {
-                    railItem(AppLocalization.string("스레드"), symbol: "bubble.left")
                 }
-                railItem(AppLocalization.string("프로젝트"), symbol: "square.grid.2x2")
                 railItem(AppLocalization.string("커뮤니티"), symbol: "person.2")
                 Button { openWindow(id: DeskWindow.support) } label: {
                     Image(systemName: "questionmark.circle")
@@ -288,13 +289,13 @@ public struct SettingsView: View {
                 profileMenuButton(
                     AppLocalization.string("마이페이지"), symbol: "person.crop.circle", focus: .myPage
                 ) {
-                    showsThreads = false
+                    onSelectSection?(nil)
                     viewModel.showProfile()
                 }
                 profileMenuButton(
                     AppLocalization.string("설정"), symbol: "gearshape", focus: .settings
                 ) {
-                    showsThreads = false
+                    onSelectSection?(nil)
                     viewModel.showSettings()
                 }
             }
