@@ -32,7 +32,9 @@ struct FeatureAccount: Sendable {
         self.environment = environment
         let adapter = MoyaNetworkAdapter(networkClient: bound)
         home = LiveHomeRepository(client: bound, baseURL: environment.baseURL)
-        activity = LiveActivityRepository(client: bound, baseURL: environment.baseURL)
+        activity = LiveActivityRepository(
+            client: bound, baseURL: environment.baseURL, memberID: memberID
+        )
         notices = LiveNoticeRepository(adapter: adapter, environment: environment) {
             _ = try await bound.currentAccessToken()
         }
