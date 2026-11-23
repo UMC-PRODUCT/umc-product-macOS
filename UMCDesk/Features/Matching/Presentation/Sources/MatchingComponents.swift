@@ -177,6 +177,69 @@ struct MatchingRoundCard: View {
     }
 }
 
+struct MatchingPublicationStatus: View {
+    let round: MatchingRound
+    let repository: any MatchingUseCase
+    let gisuId: String
+    @State private var checks = 0
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: UMCSpacing.value12) {
+            if checks == 0 {
+                summary(round)
+            } else {
+                OperationsLoad(key: checks, load: {
+                    async let schedule = repository.rounds(chapterId: round.chapterId)
+                    async let results = repository.personalCards(gisuId: gisuId)
+                    return try await (schedule, results)
+                }) { schedule, results in
+                    if let current = schedule.first(where: { $0.id == round.id }) {
+                        summary(current)
+                        let published = results.filter { current.hasPublishedResult($0) }
+                        if published.isEmpty {
+                            Text("이 차수에서 공개된 내 결과가 조회되지 않았어요.")
+                        } else {
+                            ForEach(published, id: \.cardId) { result in
+                                Text((result.project?.name ?? "프로젝트") + " · " +
+                                     MatchingLabel.status(result.status))
+                            }
+                        }
+                    } else {
+                        Text("현재 지부 일정에서 이 차수를 찾을 수 없어요.")
+                    }
+                }
+            }
+            Button("발표 상태 확인") { checks += 1 }
+                .buttonStyle(MatchingActionStyle(appearance: .secondary))
+        }.matchingPanel()
+    }
+
+    private func summary(_ current: MatchingRound) -> some View {
+        VStack(alignment: .leading, spacing: UMCSpacing.value8) {
+            if let executed = current.autoDecisionExecutedAt {
+                MatchingBadge(text: "자동 처리 완료")
+                Text("선발 처리 완료 · " + MatchingLabel.time(executed))
+                    .umcTypography(.title3Bold)
+                if current.phase != "RANDOM_MATCHING", current.resultPublishAt != nil {
+                    Text("미선발 지원서는 결과 공개 시 불합격으로 확정돼요.")
+                }
+            }
+            if let publication = current.resultPublishAt {
+                Text("결과 공개 예정 · " + MatchingLabel.time(publication))
+            } else {
+                Text("공개 예정 시각 미등록")
+            }
+        }
+    }
+}
+
+extension MatchingRound {
+    func hasPublishedResult(_ application: MatchingApplication) -> Bool {
+        application.matchingRound?.id == id &&
+            (application.status == "APPROVED" || application.status == "REJECTED")
+    }
+}
+
 struct MatchingActionStyle: ButtonStyle {
     enum Appearance { case primary, secondary, text }
     let appearance: Appearance
