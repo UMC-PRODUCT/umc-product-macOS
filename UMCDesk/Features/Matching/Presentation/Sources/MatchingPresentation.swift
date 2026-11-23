@@ -214,9 +214,6 @@ public struct MatchingView: View {
             if selectedProject == nil, destination == .explore, canCreateOwnDraft || canChooseOtherPM {
                 Button("프로젝트 만들기") { creating = true }
                     .buttonStyle(MatchingActionStyle(appearance: .primary))
-            } else if destination == .applications {
-                Button("프로젝트 둘러보기") { navigate(.explore) }
-                    .buttonStyle(MatchingActionStyle(appearance: .text))
             }
         }
         .padding(UMCSpacing.value4)
