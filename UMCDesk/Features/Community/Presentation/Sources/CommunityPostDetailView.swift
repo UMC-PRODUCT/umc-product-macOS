@@ -19,6 +19,7 @@ struct CommunityPostDetailView: View {
     @State private var input = ""
     @State private var reply: CommunityPostComment?
     @State private var failure: String?
+    @State private var awaitingConfirmation = false
     @State private var feedback: String?
     @State private var editing = false
     @State private var removal: Removal?
@@ -77,7 +78,7 @@ struct CommunityPostDetailView: View {
                                     Button("답글") {
                                         reply = comment
                                         commenting = true
-                                    }
+                                    }.disabled(awaitingConfirmation)
                                     Button("좋아요 전환") { act(.likeComment(comment.id)) }
                                     if comment.isAuthor {
                                         Button("댓글 삭제", role: .destructive) {
@@ -94,15 +95,25 @@ struct CommunityPostDetailView: View {
                     if let reply {
                         HStack {
                             Text("\(reply.author ?? "댓글")에 답글").font(.caption)
-                            Button("답글 취소") { self.reply = nil }
+                            Button("답글 취소") { self.reply = nil }.disabled(awaitingConfirmation)
                         }
                     }
                     HStack {
                         TextField("댓글을 입력하세요", text: $input, axis: .vertical)
-                            .lineLimit(1...5).focused($commenting)
-                        Button("등록") { act(.comment(input, parentID: reply?.id)) }
+                            .lineLimit(1...5).focused($commenting).disabled(awaitingConfirmation)
+                        Button(awaitingConfirmation ? "등록 결과 확인" : "등록") {
+                            act(.comment(input, parentID: reply?.id))
+                        }
                             .disabled(
                                 input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    }
+                    if awaitingConfirmation {
+                        Button("댓글 작성 취소") {
+                            awaitingConfirmation = false
+                            input = ""
+                            reply = nil
+                            feedback = nil
+                        }
                     }
                     if let feedback { Text(feedback).font(.callout) }
                 } else if failure == nil {
@@ -165,7 +176,7 @@ struct CommunityPostDetailView: View {
             guard revision == expected else { return }
             post = current
             comments = values
-            if let reply, !values.contains(where: { $0.id == reply.id }) { self.reply = nil }
+            if !awaitingConfirmation, let reply, !values.contains(where: { $0.id == reply.id }) { self.reply = nil }
             failure = nil
         } catch {
             if !Task.isCancelled && revision == expected {
@@ -191,6 +202,7 @@ struct CommunityPostDetailView: View {
                     changed(true)
                     return
                 case .comment:
+                    awaitingConfirmation = false
                     input = ""
                     reply = nil
                 case .likeComment: feedback = result == true ? "댓글에 좋아요를 눌렀어요." : "댓글 좋아요를 취소했어요."
@@ -200,6 +212,11 @@ struct CommunityPostDetailView: View {
                 await fetch()
             } catch {
                 if !Task.isCancelled {
+                    if error as? CommunityPostWriteFailure == .unconfirmed {
+                        awaitingConfirmation = true
+                        feedback = error.localizedDescription
+                        return
+                    }
                     // An interrupted toggle may already have committed. Recover by reading.
                     post = nil
                     comments = []
