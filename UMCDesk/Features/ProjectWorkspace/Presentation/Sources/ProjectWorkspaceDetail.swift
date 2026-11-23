@@ -18,7 +18,7 @@ private enum WorkFilter: String, CaseIterable, Identifiable {
     var id: Self { self }
 }
 
-private enum WorkspaceSheet: Identifiable {
+enum WorkspaceSheet: Identifiable {
     case addTodo, connections, todo(UUID), github(WorkspaceGitHubItem)
 
     var id: String {
@@ -35,20 +35,25 @@ struct ProjectWorkspaceDetail: View {
     let project: WorkspaceProject
     let loadGitHub: WorkspaceGitHubLoader?
     let openMatching: (() -> Void)?
+    let refreshMembership: () -> Void
     let close: () -> Void
     @AppStorage private var data: Data
     @State private var filter = WorkFilter.mine
-    @State private var sheet: WorkspaceSheet?
+    @Binding private var sheet: WorkspaceSheet?
     @State private var showsDeleteConfirmation = false
     @State private var refreshID: UUID?
     @State private var githubError = false
     @State private var storageError = false
 
-    init(project: WorkspaceProject, accountID: String, loadGitHub: WorkspaceGitHubLoader?,
-         openMatching: (() -> Void)?, close: @escaping () -> Void) {
+    init(project: WorkspaceProject, accountID: String, sheet: Binding<WorkspaceSheet?>,
+         loadGitHub: WorkspaceGitHubLoader?,
+         openMatching: (() -> Void)?, refreshMembership: @escaping () -> Void,
+         close: @escaping () -> Void) {
+        _sheet = sheet
         self.project = project
         self.loadGitHub = loadGitHub
         self.openMatching = openMatching
+        self.refreshMembership = refreshMembership
         self.close = close
         _data = AppStorage(wrappedValue: Data(), WorkspaceRecord.key(
             accountID: accountID, projectID: project.id
@@ -95,6 +100,10 @@ struct ProjectWorkspaceDetail: View {
                             }
                         }
                         Divider()
+                        Button("참여 상태 새로고침") {
+                            dismiss()
+                            refreshMembership()
+                        }
                         Button("개인 기록 삭제", role: .destructive) {
                             dismiss()
                             showsDeleteConfirmation = true
