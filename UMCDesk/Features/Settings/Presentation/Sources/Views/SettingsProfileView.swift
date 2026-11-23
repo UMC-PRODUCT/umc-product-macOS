@@ -15,6 +15,11 @@ struct SettingsProfileView: View {
     @Environment(\.settingsAppearancePalette) private var palette
     @Environment(\.openWindow) private var openWindow
     @FocusState private var focusesRegistration: Bool
+    @FocusState private var focus: ProfileFocus?
+    @State private var position = ScrollPosition()
+    @State private var visiblePage = CGRect.zero
+
+    private enum ProfileFocus { case scroll, support }
     @Bindable var viewModel: SettingsViewModel
     @Environment(\.openURL) private var openURL
 
@@ -44,7 +49,14 @@ struct SettingsProfileView: View {
                             typography: .bodyRegular)
                         Spacer(minLength: 0)
                         SettingsActionButton(title: AppLocalization.string("문의하기")) {
+                            focus = .support
                             openWindow(id: DeskWindow.support)
+                        }
+                        .focusable(interactions: .edit)
+                        .focused($focus, equals: .support)
+                        .onKeyPress(.return) {
+                            openWindow(id: DeskWindow.support)
+                            return .handled
                         }
                     }
                     .padding(.horizontal, UMCSpacing.value16)
@@ -59,7 +71,25 @@ struct SettingsProfileView: View {
             }
         }
         .scrollBounceBehavior(.basedOnSize)
-        .focusable()
+        .scrollPosition($position)
+        .onScrollGeometryChange(for: CGRect.self) { $0.visibleRect } action: { _, rect in
+            visiblePage = rect
+        }
+        .focusable(interactions: .edit)
+        .focused($focus, equals: .scroll)
+        .defaultFocus($focus, .scroll)
+        .onKeyPress(keys: [.pageDown, .pageUp, .home, .end]) { press in
+            guard press.modifiers.subtracting(.numericPad).subtracting(.function).isEmpty
+            else { return .ignored }
+            switch press.key {
+            case .pageDown: position.scrollTo(y: visiblePage.maxY)
+            case .pageUp: position.scrollTo(y: max(0, visiblePage.minY - visiblePage.height))
+            case .home: position.scrollTo(edge: .top)
+            case .end: position.scrollTo(edge: .bottom)
+            default: return .ignored
+            }
+            return .handled
+        }
     }
 
     private func profileSummary(_ profile: SettingsProfile) -> some View {
