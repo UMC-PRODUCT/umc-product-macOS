@@ -27,6 +27,7 @@ final class AppDependencies {
     let windowSettingsViewModel: SettingsViewModel
     let navigation: AppNavigation
     private let client: NetworkClient
+    private var didStartRestoration = false
     #if DEBUG || UMC_PRERELEASE
     let previewSettingsViewModel: SettingsViewModel
     #endif
@@ -45,7 +46,11 @@ final class AppDependencies {
         let tokenStore: any TokenStore
         #if DEBUG
         let fixturePort = Self.fixturePort(arguments: ProcessInfo.processInfo.arguments)
-        tokenStore = fixturePort == nil ? KeychainTokenStore() : FixtureTokenStore()
+        let previewArguments = ["--settings-preview", "--auth-preview", "--matching-preview"]
+        let isIsolated = fixturePort != nil || previewArguments.contains {
+            ProcessInfo.processInfo.arguments.contains($0)
+        }
+        tokenStore = isIsolated ? FixtureTokenStore() : KeychainTokenStore()
         #else
         tokenStore = KeychainTokenStore()
         #endif
@@ -92,7 +97,12 @@ final class AppDependencies {
         let useCase = DefaultSettingsUseCase(repository: LiveSettingsRepository(
             adapter: adapter, client: client, environment: environment
         ))
+        #if DEBUG
+        let systemActions: any SettingsSystemActions = isIsolated
+            ? SettingsDesignPreview.isolatedSystemActions() : MacSettingsSystemActions()
+        #else
         let systemActions = MacSettingsSystemActions()
+        #endif
         let liveSettings = SettingsViewModel(
             useCase: useCase, preferences: preferences, systemActions: systemActions
         )
@@ -148,15 +158,24 @@ final class AppDependencies {
 
     func login(email: String, password: String) async throws {
         try await loginRepository.login(email: email, password: password)
-        await settingsViewModel.refreshProfile(showsToast: false)
+        await settingsViewModel.refreshSignedInAccount()
+        await windowSettingsViewModel.refreshSignedInAccount()
         guard await client.isLoggedIn() else { throw NetworkError.unauthorized }
         settingsViewModel.showProfile()
         navigation.showsSettings = true
     }
 
     func restoreSession() async {
+        guard !didStartRestoration else { return }
+        didStartRestoration = true
+        #if DEBUG || UMC_PRERELEASE
+        guard !ProcessInfo.processInfo.arguments.contains("--auth-preview") else {
+            navigation.showsSettings = false
+            return
+        }
+        #endif
         guard !isSettingsPreview, await client.isLoggedIn() else { return }
-        settingsViewModel.showProfile()
+        if settingsPreferences.launchPage != .settings { settingsViewModel.showProfile() }
         navigation.showsSettings = true
     }
 
@@ -192,6 +211,12 @@ final class AppDependencies {
         if let port = fixturePort(arguments: arguments) {
             let name = "com.umc.product.macos.local-api.\(port)"
             return SettingsPreferences(defaults: UserDefaults(suiteName: name)!)
+        }
+        if arguments.contains("--auth-preview") || arguments.contains("--matching-preview") {
+            let suite = "com.umc.product.macos.isolated-design-preview"
+            let defaults = UserDefaults(suiteName: suite)!
+            defaults.removePersistentDomain(forName: suite)
+            return SettingsPreferences(defaults: defaults)
         }
         guard arguments.contains("--settings-preview") else { return SettingsPreferences() }
         let suite = "com.umc.product.macos.settings-preview"

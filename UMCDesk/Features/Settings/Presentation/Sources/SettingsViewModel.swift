@@ -136,6 +136,11 @@ public final class SettingsViewModel {
     public func showProfile() { navigate(to: .myPage) }
     public func showSettings() { navigate(to: .general) }
 
+    public func refreshSignedInAccount() async {
+        clearAccount()
+        await refreshProfile(showsToast: false)
+    }
+
     public func invalidateAccount() async {
         guard !isLoggingOut else { return }
         clearAccount()
@@ -448,9 +453,9 @@ public final class SettingsViewModel {
 
     private func handleAuthentication(_ error: any Error) async -> Bool {
         guard error as? SettingsError == .authenticationRequired else { return false }
+        let hadAccount = profile != nil
         clearAccount()
-        profileState = .failed(SettingsError.authenticationRequired)
-        await systemActions.clearAccountNotifications()
+        if hadAccount { await systemActions.clearAccountNotifications() }
         return true
     }
 

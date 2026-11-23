@@ -72,7 +72,6 @@ public struct LiveSettingsRepository: SettingsRepository {
 
     private func requireAuthentication() async throws {
         guard await client.isLoggedIn() else {
-            try await client.logout()
             throw SettingsError.authenticationRequired
         }
     }
@@ -80,7 +79,7 @@ public struct LiveSettingsRepository: SettingsRepository {
     private func accountError(_ error: Error) async throws -> Error {
         if let networkError = error as? NetworkError {
             switch networkError {
-            case .unauthorized, .noRefreshToken, .tokenRefreshFailed:
+            case .unauthorized, .noRefreshToken, .tokenRefreshFailed, .maxRetryExceeded:
                 try await client.logout()
                 return SettingsError.authenticationRequired
             case .requestFailed(_, let data):

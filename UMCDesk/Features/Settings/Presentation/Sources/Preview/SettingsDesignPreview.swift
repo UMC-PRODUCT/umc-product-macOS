@@ -11,6 +11,10 @@ import SettingsDomain
 
 @MainActor
 public enum SettingsDesignPreview {
+    public static func isolatedSystemActions() -> any SettingsSystemActions {
+        PreviewSettingsSystemActions()
+    }
+
     public static let ids = [
         "757:12600", "766:2895", "770:4216", "770:14893", "771:15573", "771:15714",
         "771:15995", "776:16447", "776:16803", "765:15045", "776:17026", "911:19103",

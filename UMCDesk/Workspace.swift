@@ -18,6 +18,9 @@ let workspace = Workspace(
             testAction: .targets([
                 .testableTarget(target: .project(path: ".", target: "UMCDeskTests")),
                 .testableTarget(target: .project(
+                    path: "Features/Auth", target: "AuthPresentationTests"
+                )),
+                .testableTarget(target: .project(
                     path: "Features/Settings", target: "SettingsDomainTests"
                 )),
                 .testableTarget(target: .project(
