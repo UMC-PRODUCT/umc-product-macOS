@@ -50,8 +50,13 @@ struct AuthLoginSelection: View {
                         viewModel.navigate(to: .socialLogin)
                     }
                 }
-                .disabled(screen == .socialLogin)
+                .disabled(screen == .socialLogin || viewModel.login != nil)
                 .opacity(screen == .socialLogin ? 0.4 : 1)
+                if viewModel.login != nil {
+                    Text("macOS에서는 소셜 로그인을 지원하지 않아요. UMC 계정으로 로그인해 주세요.")
+                        .umcTypography(.headlineRegular)
+                        .foregroundStyle(UMCColor.Semantic.textNeutralWeak500)
+                }
                 Rectangle()
                     .fill(UMCColor.Semantic.borderNeutralMedium300)
                     .frame(height: 1)
@@ -194,6 +199,13 @@ struct AuthEmailLogin: View {
                         viewModel.navigate(to: .loginSelection)
                     }
                 }
+            }
+        }
+        .onSubmit {
+            switch focusedField {
+            case .email: focusedField = .password
+            case .password: viewModel.submitLogin()
+            default: break
             }
         }
         .onAppear { focusedField = form.initialFocus }
