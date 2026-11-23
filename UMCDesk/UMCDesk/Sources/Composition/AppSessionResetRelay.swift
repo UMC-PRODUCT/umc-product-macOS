@@ -9,7 +9,6 @@ import SettingsPresentation
 
 @MainActor
 final class AppSessionResetRelay {
-    weak var navigation: AppNavigation?
     weak var windowSettingsViewModel: SettingsViewModel?
     weak var settingsViewModel: SettingsViewModel?
 
