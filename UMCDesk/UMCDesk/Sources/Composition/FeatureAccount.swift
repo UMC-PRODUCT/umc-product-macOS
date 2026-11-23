@@ -19,6 +19,7 @@ struct FeatureAccount: Sendable {
     let home: LiveHomeRepository
     let activity: LiveActivityRepository
     let notices: LiveNoticeRepository
+    let posts: LiveCommunityPostRepository
     let threads: LiveCommunityThreadRepository
     let conversations: LiveThreadConversationRepository
     let members: LiveThreadManagementRepository
@@ -33,6 +34,7 @@ struct FeatureAccount: Sendable {
         home = LiveHomeRepository(client: bound, baseURL: environment.baseURL)
         activity = LiveActivityRepository(client: bound, baseURL: environment.baseURL)
         notices = LiveNoticeRepository(adapter: adapter, environment: environment)
+        posts = LiveCommunityPostRepository(adapter: adapter, environment: environment)
         threads = LiveCommunityThreadRepository(adapter: adapter, environment: environment)
         members = LiveThreadManagementRepository(adapter: adapter, environment: environment)
         conversations = LiveThreadConversationRepository(adapter: adapter, environment: environment) {

@@ -30,11 +30,13 @@ public struct RegistrationSchool: Sendable, Identifiable {
 
 public struct RegistrationTerm: Sendable, Identifiable {
     public let id: String
+    public let type: String?
     public let title: String
     public let link: String
     public let isMandatory: Bool
 
-    public init(id: String, title: String, link: String, isMandatory: Bool) {
+    public init(id: String, title: String, link: String, isMandatory: Bool, type: String? = nil) {
+        self.type = type
         self.id = id
         self.title = title
         self.link = link

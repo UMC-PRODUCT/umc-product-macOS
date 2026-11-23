@@ -31,6 +31,13 @@ struct UMCDeskApp: App {
     @State private var typographyPreview = UMCTypographyPreview()
     #endif
 
+    private func publishedDocument(_ document: SettingsPublishedDocument,
+                                   close: @escaping () -> Void) -> AnyView {
+        AnyView(AuthPublishedTermsView(repository: dependencies.loginRepository,
+                                       requested: document == .service ? .service : .privacy,
+                                       onClose: close))
+    }
+
     var body: some Scene {
         @Bindable var preferences = dependencies.settingsPreferences
         #if DEBUG || UMC_PRERELEASE
@@ -39,6 +46,7 @@ struct UMCDeskApp: App {
 
         Window("UMC Desk", id: "main") {
             AppRootView(dependencies: dependencies)
+                .environment(\.settingsPublishedDocument, publishedDocument)
                 .toggleStyle(UMCCheckboxStyle())
                 .environment(\.locale, AppLocalization.shared.language.locale)
                 .onChange(of: preferences.language) {
@@ -98,6 +106,7 @@ struct UMCDeskApp: App {
 
         Settings {
             SettingsSceneView(dependencies: dependencies)
+                .environment(\.settingsPublishedDocument, publishedDocument)
                 .toggleStyle(UMCCheckboxStyle())
                 .environment(\.locale, AppLocalization.shared.language.locale)
                 .onChange(of: preferences.language) {
@@ -270,6 +279,8 @@ private struct AppRootView: View {
             NoticeBoardView(repository: account.notices)
         case .activity:
             ActivityView(repository: account.activity)
+        case .community:
+            CommunityPostBoardView(accountID: account.memberID, repository: account.posts)
         case .threads:
             CommunityThreadsView(accountID: account.memberID, repository: account.threads,
                                  conversations: account.conversations, management: account.members,

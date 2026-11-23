@@ -89,7 +89,7 @@ extension LiveEmailLoginRepository: AuthFlowRepository {
         let response: TermsResponse = try await request("/terms")
         return response.terms.map {
             RegistrationTerm(id: $0.id, title: $0.typeDescription, link: $0.link,
-                             isMandatory: $0.isMandatory)
+                             isMandatory: $0.isMandatory, type: $0.type)
         }
     }
 
@@ -304,14 +304,16 @@ private struct SchoolItem: Codable {
 
 private struct TermItem: Codable {
     let id: String
+    let type: String?
     let typeDescription: String
     let link: String
     let isMandatory: Bool
-    enum CodingKeys: CodingKey { case id, typeDescription, link, isMandatory }
+    enum CodingKeys: CodingKey { case id, type, typeDescription, link, isMandatory }
 
     init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
         id = try values.decodeFlexibleString(forKey: .id)
+        type = try values.decodeIfPresent(String.self, forKey: .type)
         typeDescription = try values.decode(String.self, forKey: .typeDescription)
         link = try values.decode(String.self, forKey: .link)
         isMandatory = try values.decode(Bool.self, forKey: .isMandatory)
@@ -320,6 +322,7 @@ private struct TermItem: Codable {
     func encode(to encoder: Encoder) throws {
         var values = encoder.container(keyedBy: CodingKeys.self)
         try values.encode(id, forKey: .id)
+        try values.encodeIfPresent(type, forKey: .type)
         try values.encode(typeDescription, forKey: .typeDescription)
         try values.encode(link, forKey: .link)
         try values.encode(isMandatory, forKey: .isMandatory)
