@@ -137,14 +137,17 @@ public final class SettingsViewModel {
     public func showSettings() { navigate(to: .general) }
 
     public func refreshSignedInAccount() async {
-        clearAccount()
-        isLoggingOut = false
+        discardAccountState()
         await refreshProfile(showsToast: false)
     }
 
-    public func invalidateAccount() async {
+    public func discardAccountState() {
         clearAccount()
         isLoggingOut = false
+    }
+
+    public func invalidateAccount() async {
+        discardAccountState()
         await systemActions.clearAccountNotifications()
     }
 

@@ -10,10 +10,16 @@ import Foundation
 import Synchronization
 import UMCFoundation
 
+/// Hides account-owned UI before logout waits for outstanding requests and credential writes.
+public protocol SessionLogoutObserving: SessionResetting {
+    @MainActor func logoutWillBegin()
+}
+
 public actor NetworkClient {
     // MARK: - Property
 
     nonisolated let aquilaClient: Aquila.NetworkClient
+    private let logoutObserver: (any SessionLogoutObserving)?
     private let logoutTokens: LogoutTokenStore
     nonisolated let accountScope: UUID?
     private var loginTask: Task<Void, Error>?
@@ -37,6 +43,7 @@ public actor NetworkClient {
         maxRetryCount: Int = 1,
         sessionResetter: (any SessionResetting)? = nil
     ) {
+        logoutObserver = sessionResetter as? any SessionLogoutObserving
         self.accountScope = nil
         let logoutTokens = LogoutTokenStore(backing: tokenStore)
         self.logoutTokens = logoutTokens
@@ -52,6 +59,7 @@ public actor NetworkClient {
     }
 
     private init(sharing client: NetworkClient, scope: UUID) {
+        logoutObserver = nil
         accountScope = scope
         aquilaClient = client.aquilaClient
         logoutTokens = client.logoutTokens
@@ -174,6 +182,7 @@ public actor NetworkClient {
         logoutTokens.suspendAccountAccess()
         sessionGeneration = UUID()
         let task = Task<String?, Error> {
+            await logoutObserver?.logoutWillBegin()
             _ = await pendingLogin?.result
             defer {
                 logoutTokens.resumeAccountAccess()
