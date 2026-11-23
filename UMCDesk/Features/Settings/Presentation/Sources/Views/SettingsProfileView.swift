@@ -340,13 +340,13 @@ struct SettingsActivityRow: View {
                 .background(palette.fillPrimaryWeak75,
                     in: .rect(cornerRadius: UMCRadius.value6))
             SettingsPartTag(part: activity.part)
-            Spacer(minLength: UMCSpacing.value8)
             ViewThatFits(in: .horizontal) {
                 HStack(spacing: UMCSpacing.value8) { roleTags }
-                VStack(alignment: .trailing, spacing: UMCSpacing.value4) { roleTags }
+                VStack(alignment: .leading, spacing: UMCSpacing.value4) { roleTags }
             }
         }
-        .frame(minHeight: 32)
+        .frame(maxWidth: .infinity, minHeight: 32, alignment: .leading)
+        .accessibilityElement(children: .combine)
     }
 
     private var roleTags: some View {
