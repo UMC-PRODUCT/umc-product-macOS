@@ -184,6 +184,19 @@ struct AppDependenciesTests {
         #expect(UserDefaults.standard.string(forKey: "settings.theme") == originalTheme)
     }
 
+    @Test("Explicit fixture appearance applies without replacing the saved port preference")
+    func fixtureThemeIsTransient() {
+        let arguments = ["--local-api-port", "58174", "--settings-preview", "765:15045"]
+        let previous = AppDependencies.makeSettingsPreferences(arguments: arguments).theme
+        for theme in [SettingsTheme.dark, .light, .system] {
+            let preferences = AppDependencies.makeSettingsPreferences(
+                arguments: arguments + ["--settings-theme", theme.rawValue]
+            )
+            #expect(preferences.theme == theme)
+            #expect(AppDependencies.makeSettingsPreferences(arguments: arguments).theme == previous)
+        }
+    }
+
     @Test("Settings previews isolate preferences from the real app")
     func previewPreferencesAreIsolated() {
         let originalTheme = UserDefaults.standard.string(forKey: "settings.theme")
