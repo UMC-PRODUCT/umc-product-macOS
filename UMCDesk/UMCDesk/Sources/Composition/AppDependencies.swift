@@ -30,7 +30,8 @@ final class AppDependencies {
     let windowSettingsViewModel: SettingsViewModel
     let navigation: AppNavigation
     private let client: NetworkClient
-    private var didStartRestoration = false
+    private var restoration: Task<Void, Never>?
+    private var hasRestored = false
     #if DEBUG || UMC_PRERELEASE
     let previewSettingsViewModel: SettingsViewModel
     #endif
@@ -170,17 +171,36 @@ final class AppDependencies {
     }
 
     func restoreSession() async {
-        guard !didStartRestoration else { return }
-        didStartRestoration = true
-        #if DEBUG || UMC_PRERELEASE
-        guard !ProcessInfo.processInfo.arguments.contains("--auth-preview") else {
-            navigation.showsSettings = false
+        if let restoration {
+            await restoration.value
             return
         }
-        #endif
-        guard !isSettingsPreview, await client.isLoggedIn() else { return }
-        if settingsPreferences.launchPage != .settings { settingsViewModel.showProfile() }
-        navigation.showsSettings = true
+        guard !hasRestored else { return }
+        let task = Task { @MainActor in
+            defer { restoration = nil }
+            #if DEBUG || UMC_PRERELEASE
+            if ProcessInfo.processInfo.arguments.contains("--auth-preview") {
+                navigation.showsSettings = false
+                hasRestored = true
+                return
+            }
+            #endif
+            guard !isSettingsPreview, await client.isLoggedIn() else {
+                hasRestored = true
+                return
+            }
+            await settingsViewModel.refreshProfile(showsToast: false)
+            if settingsViewModel.profile == nil, await client.isLoggedIn() {
+                try? await Task.sleep(for: .milliseconds(500))
+                await settingsViewModel.refreshProfile(showsToast: false)
+            }
+            guard settingsViewModel.profile != nil, await client.isLoggedIn() else { return }
+            hasRestored = true
+            if settingsPreferences.launchPage != .settings { settingsViewModel.showProfile() }
+            navigation.showsSettings = true
+        }
+        restoration = task
+        await task.value
     }
 
     func restoreSupportedFonts() {

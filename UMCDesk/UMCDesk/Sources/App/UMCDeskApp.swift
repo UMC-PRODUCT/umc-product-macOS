@@ -30,7 +30,7 @@ struct UMCDeskApp: App {
         @Bindable var previewPreferences = dependencies.previewSettingsViewModel.preferences
         #endif
 
-        WindowGroup("UMC Desk", id: "main") {
+        Window("UMC Desk", id: "main") {
             AppRootView(dependencies: dependencies)
                 .toggleStyle(UMCCheckboxStyle())
                 .environment(\.locale, AppLocalization.shared.language.locale)
@@ -126,6 +126,7 @@ struct UMCDeskApp: App {
 }
 
 private struct AppRootView: View {
+    @Environment(\.scenePhase) private var scenePhase
     let dependencies: AppDependencies
     @Environment(\.openWindow) private var openWindow
 
@@ -142,6 +143,9 @@ private struct AppRootView: View {
         }
         .onAppear { configureLoginAction() }
         .task { await dependencies.restoreSession() }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active { Task { await dependencies.restoreSession() } }
+        }
     }
 
     private func configureLoginAction() {
