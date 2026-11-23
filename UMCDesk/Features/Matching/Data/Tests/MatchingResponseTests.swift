@@ -154,6 +154,40 @@ struct MatchingTransportTests {
         #expect(json == ["gisuId": 8, "productOwnerMemberId": 22])
     }
 
+    @Test("A presigned upload finishing after account replacement cannot confirm or patch for B")
+    func imageUploadCannotCrossAccounts() async throws {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [MatchingHTTPStub.self]
+        let store = ImageAccountStore()
+        let client = NetworkClient(session: URLSession(configuration: configuration),
+                                   tokenStore: store, refreshService: MatchingTestSession())
+        var repository = LiveMatchingRepository(adapter: MoyaNetworkAdapter(networkClient: client),
+            client: client, environment: .init(baseURL: URL(string: "https://matching.example.test")!))
+        let gate = AsyncStream.makeStream(of: Void.self)
+        let finish = AsyncStream.makeStream(of: Void.self)
+        repository.upload = { request, _ in
+            gate.continuation.yield()
+            for await _ in finish.stream { break }
+            return HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+        }
+        let api = repository
+        MatchingHTTPStub.respond(200, json: """
+        {"success":true,"result":{"fileId":"5","uploadUrl":"https://objects.example.test/test",
+         "uploadMethod":"PUT","headers":{}}}
+        """)
+        let file = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".png")
+        try Data([1]).write(to: file)
+        defer { try? FileManager.default.removeItem(at: file) }
+        let operation = Task { try await api.perform(.changeImage(file: file, slot: .logo), projectId: "42") }
+        for await _ in gate.stream { break }
+        try await client.logout()
+        try await store.save(accessToken: "B", refreshToken: "RB")
+        finish.continuation.yield()
+        await #expect(throws: CancellationError.self) { try await operation.value }
+        #expect(MatchingHTTPStub.recorded?.url?.path == "/api/v1/storage/prepare-upload")
+        #expect(await store.getAccessToken() == "B")
+    }
+
     private func makeAPI() -> LiveMatchingRepository {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.protocolClasses = [MatchingHTTPStub.self]
@@ -218,4 +252,16 @@ private final class MatchingHTTPStub: URLProtocol, @unchecked Sendable {
     }
 
     override func stopLoading() {}
+}
+
+private actor ImageAccountStore: TokenStore {
+    var access: String? = "A"
+    var refresh: String? = "RA"
+    func getAccessToken() -> String? { access }
+    func getRefreshToken() -> String? { refresh }
+    func save(accessToken: String, refreshToken: String) throws {
+        access = accessToken
+        refresh = refreshToken
+    }
+    func clear() { access = nil; refresh = nil }
 }
