@@ -228,9 +228,23 @@ public struct ActivityMemberPage: Sendable {
     }
 }
 
+public struct PointGrantIntent: Codable, Equatable, Sendable {
+    public let id: UUID
+    public let challengerID: String
+    public let value: Int
+    public let reason: String
+
+    public init(id: UUID, challengerID: String, value: Int, reason: String) {
+        self.id = id
+        self.challengerID = challengerID
+        self.value = value
+        self.reason = reason
+    }
+}
+
 public enum PointGrantResult: Equatable, Sendable {
     case recorded
-    case ledgerMatch
+    case matchingUnverified
     case awaitingLedger
 }
 
@@ -252,6 +266,8 @@ public protocol ActivityRepository: Sendable {
     func link(groupID: String, scheduleID: String, weekID: String) async throws
     func memberProfile(id: String) async throws -> ActivityMemberProfile
     func canGrantPoints(challengerID: String) async throws -> Bool
+    func pendingGrant(challengerID: String) throws -> PointGrantIntent?
+    func finishManualReview(operationID: UUID) throws
     func grantPoints(operationID: UUID, challengerID: String, value: Int, reason: String)
         async throws -> PointGrantResult
     func groups() async throws -> [ActivityRow]

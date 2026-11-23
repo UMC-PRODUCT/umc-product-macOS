@@ -87,6 +87,8 @@ private actor ReviewRepository: ActivityRepository {
     func canGrantPoints(challengerID: String) async throws -> Bool {
         throw URLError(.unsupportedURL)
     }
+    nonisolated func pendingGrant(challengerID: String) throws -> PointGrantIntent? { nil }
+    nonisolated func finishManualReview(operationID: UUID) throws {}
     func grantPoints(operationID: UUID, challengerID: String, value: Int, reason: String)
         async throws -> PointGrantResult
     { throw URLError(.unsupportedURL) }

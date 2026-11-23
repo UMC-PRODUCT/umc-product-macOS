@@ -90,12 +90,21 @@ extension LiveActivityRepository {
         try await permission("CHALLENGER_POINT", "WRITE", id: challengerID)
     }
 
+    public func pendingGrant(challengerID: String) throws -> PointGrantIntent? {
+        try pointGrants.journal.pending(challengerID)
+    }
+
+    public func finishManualReview(operationID: UUID) throws {
+        try pointGrants.journal.close(operationID, as: .reviewed)
+    }
+
     public func grantPoints(operationID: UUID, challengerID: String, value: Int, reason: String)
         async throws -> PointGrantResult
     {
-        let grant = PointGrant(challengerID: challengerID, value: value, reason: reason)
+        let grant = PointGrantIntent(
+            id: operationID, challengerID: challengerID, value: value, reason: reason)
         let path = "api/v1/challenger/\(challengerID)"
-        return try await pointGrants.submit(id: operationID, grant: grant) {
+        return try await pointGrants.submit(grant: grant) {
             let ledger: PointLedgerDTO = try await request(path)
             guard ledger.challengerId == challengerID else { throw URLError(.cannotParseResponse) }
             return ledger
