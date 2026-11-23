@@ -219,7 +219,7 @@ public struct LiveMatchingRepository: MatchingRepository {
         }
         let target = MatchingTarget(environment: environment, path: path, method: method, task: task)
         do {
-            let result = try await adapter.request(target)
+            let result = try await adapter.request(target, in: generation)
             if result.statusCode == 204, result.data.isEmpty, let empty = EmptyResult() as? T {
                 return empty
             }

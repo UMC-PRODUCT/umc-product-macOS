@@ -5,6 +5,7 @@
 //  Created by euijjang97 on 11/22/26.
 //
 
+import AppKit
 import CoreDesignSystem
 import MatchingDomain
 import SwiftUI
@@ -43,7 +44,6 @@ struct MatchingExplorer: View {
 
     @Bindable var state: MatchingExplorerState
     let restoreScroll: () -> Void
-    @FocusState private var focusedProject: String?
     @FocusState private var searchFocused: Bool
 
     var body: some View {
@@ -90,16 +90,15 @@ struct MatchingExplorer: View {
                     LazyVGrid(columns: [GridItem(.adaptive(minimum: 315, maximum: 460), spacing: UMCSpacing.value24)],
                               alignment: .leading, spacing: UMCSpacing.value24) {
                         ForEach(result.content, id: \.id) { project in
-                            MatchingProjectCard(project: project, focusedProject: $focusedProject) {
-                                state.returnProjectId = project.id
-                                select(project)
-                            }
-                            .onAppear {
-                                guard state.returnProjectId == project.id else { return }
-                                focusedProject = project.id
-                                state.returnProjectId = nil
-                                restoreScroll()
-                            }
+                            MatchingProjectCard(
+                                project: project, restoresFocus: state.returnProjectId == project.id,
+                                didRestore: {
+                                    state.returnProjectId = nil
+                                    restoreScroll()
+                                }, open: {
+                                    select(project)
+                                }
+                            )
                         }
                     }
                 }
@@ -143,7 +142,8 @@ struct MatchingExplorer: View {
 
 struct MatchingProjectCard: View {
     let project: MatchingProject
-    let focusedProject: FocusState<String?>.Binding
+    let restoresFocus: Bool
+    let didRestore: () -> Void
     let open: () -> Void
 
     var body: some View {
@@ -170,9 +170,8 @@ struct MatchingProjectCard: View {
             HStack {
                 Text(ownerName).umcTypography(.bodyRegular).foregroundStyle(.secondary)
                 Spacer()
-                Button("공고 보기 →", action: open)
-                    .focused(focusedProject, equals: project.id)
-                    .buttonStyle(MatchingActionStyle(appearance: .text))
+                ProjectPostingButton(restoresFocus: restoresFocus, didRestore: didRestore, open: open)
+                    .fixedSize()
             }
         }
         .matchingPanel()
@@ -194,6 +193,60 @@ struct MatchingApplicationRoute: Identifiable {
     let projectName: String
     let roundId: String?
     let isDraft: Bool
+}
+
+private struct ProjectPostingButton: NSViewRepresentable {
+    let restoresFocus: Bool
+    let didRestore: () -> Void
+    let open: () -> Void
+
+    final class PostingButton: NSButton {
+        var open: (() -> Void)?
+        var didRestore: (() -> Void)?
+        var restoresFocus = false
+        override var acceptsFirstResponder: Bool { true }
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            restoreIfNeeded()
+        }
+
+        func restoreIfNeeded() {
+            guard restoresFocus, window != nil else { return }
+            DispatchQueue.main.async { [weak self] in
+                guard let self, restoresFocus, let window, window.makeFirstResponder(self)
+                else { return }
+                restoresFocus = false
+                didRestore?()
+            }
+        }
+
+        @objc func openPosting() { open?() }
+
+        override func keyDown(with event: NSEvent) {
+            if [36, 76].contains(event.keyCode), event.modifierFlags.intersection([.command, .option, .control, .shift]).isEmpty {
+                performClick(nil)
+            } else {
+                super.keyDown(with: event)
+            }
+        }
+    }
+
+    func makeNSView(context: Context) -> PostingButton {
+        let button = PostingButton(title: "공고 보기 →", target: nil, action: nil)
+        button.bezelStyle = .rounded
+        button.target = button
+        button.action = #selector(PostingButton.openPosting)
+        button.setAccessibilityLabel("공고 보기")
+        return button
+    }
+
+    func updateNSView(_ button: PostingButton, context: Context) {
+        button.open = open
+        button.didRestore = didRestore
+        button.restoresFocus = restoresFocus
+        button.restoreIfNeeded()
+    }
 }
 
 struct MatchingProjectDetail<Tabs: View>: View {
