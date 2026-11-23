@@ -213,6 +213,7 @@ struct ActivityMemberDetail: View {
     @State private var confirming = false
     @State private var operationID = UUID()
     @State private var awaitingLedger = false
+    @State private var reviewing = false
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
@@ -239,6 +240,9 @@ struct ActivityMemberDetail: View {
                     Int(amount) == nil
                         || reason.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                         || reason.count > 200)
+                if awaitingLedger {
+                    Button("수동 확인 마치기") { reviewing = true }
+                }
             }
             if let feedback { Text(feedback).foregroundStyle(.secondary) }
             HStack {
@@ -257,6 +261,8 @@ struct ActivityMemberDetail: View {
         }
         .task(id: selected) {
             confirming = false
+            reviewing = false
+            feedback = nil
             awaitingLedger = false
             operationID = UUID()
             amount = ""
@@ -264,7 +270,27 @@ struct ActivityMemberDetail: View {
             canGrant = false
             guard let selected else { return }
             let authorized = try? await repository.canGrantPoints(challengerID: selected)
-            if !Task.isCancelled { canGrant = authorized == true }
+            guard !Task.isCancelled, authorized == true else { return }
+            canGrant = true
+            do {
+                if try restorePending(selected) { submit() }
+            } catch { feedback = error.localizedDescription }
+
+        }
+        .alert("이전 지급을 수동으로 확인했나요?", isPresented: $reviewing) {
+            Button("계속 확인", role: .cancel) {}
+            Button("확인 마치기") {
+                do {
+                    try repository.finishManualReview(operationID: operationID)
+                    awaitingLedger = false
+                    operationID = UUID()
+                    amount = ""
+                    reason = ""
+                    feedback = "수동 확인을 마쳤어요. 추가 지급은 새로 입력해 주세요."
+                } catch { feedback = error.localizedDescription }
+            }
+        } message: {
+            Text("원장과 운영 기록을 대조한 뒤 선택해 주세요. 이후 같은 내용으로 지급하면 별도 지급으로 처리돼요.")
         }
         .alert("포인트를 지급할까요?", isPresented: $confirming) {
             Button("취소", role: .cancel) {}
@@ -273,6 +299,17 @@ struct ActivityMemberDetail: View {
             Text("\(member.title)님에게 \(amount)점을 지급합니다.")
         }
     }
+    private func restorePending(_ challengerID: String) throws -> Bool {
+        guard let intent = try repository.pendingGrant(challengerID: challengerID) else {
+            return false
+        }
+        awaitingLedger = true
+        operationID = intent.id
+        amount = String(intent.value)
+        reason = intent.reason
+        return true
+    }
+
     private func submit() {
         guard let selected, canGrant, let value = Int(amount), !working else { return }
         working = true
@@ -281,17 +318,22 @@ struct ActivityMemberDetail: View {
             do {
                 let result = try await repository.grantPoints(
                     operationID: operationID, challengerID: selected, value: value, reason: reason)
-                awaitingLedger = result == .awaitingLedger
+                awaitingLedger = result != .recorded
                 switch result {
                 case .awaitingLedger:
                     feedback = "지급 여부를 확인 중이에요. 원장을 다시 확인해 주세요."
-                case .recorded, .ledgerMatch:
+                case .matchingUnverified:
+                    feedback = "같은 금액과 사유의 기록이 있어요. 지급자를 식별할 수 없어 수동 확인이 필요해요."
+                case .recorded:
                     amount = ""
                     reason = ""
                     operationID = UUID()
-                    feedback = result == .recorded ? "포인트를 지급했어요." : "같은 금액과 사유의 새 지급 기록을 확인했어요."
+                    feedback = "포인트를 지급했어요."
                 }
-            } catch { feedback = error.localizedDescription }
+            } catch {
+                feedback = error.localizedDescription
+                _ = try? restorePending(selected)
+            }
         }
     }
 

@@ -8,6 +8,7 @@ import ActivityDomain
 import CoreNetwork
 import Foundation
 import Testing
+import XCTest
 
 @testable import ActivityData
 
@@ -100,7 +101,7 @@ private final class ActivityContractTransport: URLProtocol, @unchecked Sendable 
         environment: NetworkEnvironment(baseURL: baseURL), tokenStore: FixtureTokenStore(),
         session: URLSession(configuration: configuration)
     )
-    let repository = LiveActivityRepository(client: client, baseURL: baseURL)
+    let repository = LiveActivityRepository(client: client, baseURL: baseURL, memberID: "operator")
     let rows = try await repository.schedules()
     #expect(rows.first?.id == "701")
     let item = try #require(rows.first)
@@ -138,16 +139,20 @@ func pointGrantReconciliation() async throws {
     let url = try #require(URL(string: "http://127.0.0.1:\(port)"))
     let client = AuthSystemFactory.makeNetworkClient(
         environment: NetworkEnvironment(baseURL: url), tokenStore: FixtureTokenStore())
-    let repository = LiveActivityRepository(client: client, baseURL: url)
+    func makeRepository(_ operatorID: String = "first") -> LiveActivityRepository {
+        LiveActivityRepository(
+            client: client, baseURL: url, memberID: operatorID, journalDirectory: directory)
+    }
+    let repository = makeRepository()
 
-    func checkLedger(_ challenger: String, expected: Double) async throws {
+    func checkLedger(_ challenger: String, expected: Double, rows: Int = 1) async throws {
         let request = URLRequest(url: url.appending(path: "api/v1/challenger/" + challenger))
         let (data, _) = try await client.request(request)
         let ledger = try JSONDecoder().decode(APIResponse<PointLedgerDTO>.self, from: data)
             .unwrap()
         #expect(ledger.totalPoints == expected)
-        #expect(ledger.points.count == 1)
-        #expect(ledger.points[0].point == expected)
+        #expect(ledger.points.count == rows)
+        #expect(ledger.points.map(\.point).reduce(0, +) == expected)
         #expect(ledger.points[0].challengerId == challenger)
     }
 
@@ -166,17 +171,110 @@ func pointGrantReconciliation() async throws {
 
     try Data().write(to: directory.appending(path: "drop-response"))
     let lostID = UUID()
-    func retry() async throws -> PointGrantResult {
-        try await repository.grantPoints(
-            operationID: lostID, challengerID: "102", value: 7, reason: "합성 응답 유실")
+    // A distinct process sends the POST and exits while the ledger is unavailable.
+    let child = Process()
+    let testBundle = Bundle(for: PointGrantRestartProcess.self).bundleURL
+    child.executableURL = URL(fileURLWithPath: "/usr/bin/xcrun")
+    child.arguments = [
+        "xctest", "-XCTest",
+        "ActivityDataTests.PointGrantRestartProcess/testCommittedResponseLoss", testBundle.path,
+    ]
+    var env = [
+        "PATH": "/usr/bin:/bin",
+        "DYLD_FRAMEWORK_PATH": testBundle.deletingLastPathComponent().path,
+    ]
+    if let developerDir = ProcessInfo.processInfo.environment["DEVELOPER_DIR"] {
+        env["DEVELOPER_DIR"] = developerDir
     }
-    #expect(try await retry() == .awaitingLedger)
+    env["POINT_TEST_URL"] = url.absoluteString
+    env["POINT_TEST_DIRECTORY"] = directory.path
+    env["POINT_TEST_ID"] = lostID.uuidString
+    child.environment = env
+    try child.run()
+    child.waitUntilExit()
+    #expect(child.terminationStatus == 0)
+    let pending = try makeRepository().pendingGrant(challengerID: "102")
+    let restored = try #require(pending)
+    #expect(restored.id == lostID)
+    #expect(restored.reason == "합성 응답 유실")
+    #expect(try makeRepository("second").pendingGrant(challengerID: "102") == nil)
+    var components = try #require(URLComponents(url: url, resolvingAgainstBaseURL: false))
+    components.port = Int(port) == 1 ? 2 : 1
+    let isolated = LiveActivityRepository(
+        client: client, baseURL: try #require(components.url),
+        memberID: "first", journalDirectory: directory)
+    #expect(try isolated.pendingGrant(challengerID: "102") == nil)
+
+    func retry() async throws -> PointGrantResult {
+        try await makeRepository().grantPoints(
+            operationID: lostID, challengerID: "102", value: 7,
+            reason: "합성 응답 유실")
+    }
     #expect(try await retry() == .awaitingLedger)
     try FileManager.default.removeItem(at: directory.appending(path: "ledger-unavailable"))
     try Data().write(to: directory.appending(path: "stale-ledger"))
     #expect(try await retry() == .awaitingLedger)
     try FileManager.default.removeItem(at: directory.appending(path: "stale-ledger"))
-    #expect(try await retry() == .ledgerMatch)
-    #expect(try await retry() == .ledgerMatch)
+    #expect(try await retry() == .matchingUnverified)
+    let additionalID = UUID()
+    await #expect(throws: PointJournalError.self) {
+        try await makeRepository().grantPoints(
+            operationID: additionalID, challengerID: "102",
+            value: 7, reason: "합성 응답 유실")
+    }
     try await checkLedger("102", expected: 7)
+    try FileManager.default.removeItem(at: directory.appending(path: "drop-response"))
+    try repository.finishManualReview(operationID: lostID)
+    #expect(
+        try await makeRepository().grantPoints(
+            operationID: additionalID, challengerID: "102",
+            value: 7, reason: "합성 응답 유실") == .recorded)
+    try await checkLedger("102", expected: 14, rows: 2)
+
+    // Our request times out before the server receives it; only another operator writes.
+    let foreignIntent = PointGrantIntent(
+        id: UUID(), challengerID: "101", value: 3, reason: "합성 동시 지급")
+    let otherOperator = makeRepository("second")
+    let observer = PointGrantJournal(baseURL: url, memberID: "first", directory: directory)
+    let ledgerURL = url.appending(path: "api/v1/challenger/101")
+    let result = try await repository.pointGrants.submit(grant: foreignIntent) {
+        let (data, _) = try await client.request(URLRequest(url: ledgerURL))
+        return try JSONDecoder().decode(APIResponse<PointLedgerDTO>.self, from: data).unwrap()
+    } write: {
+        let saved = try observer.lookup(foreignIntent)
+        #expect(saved?.intent == foreignIntent)
+        #expect(saved?.baseline.count == 1)
+        let grant = try await otherOperator.grantPoints(
+            operationID: UUID(), challengerID: "101",
+            value: 3, reason: "합성 동시 지급")
+        #expect(grant == .recorded)
+        throw URLError(.timedOut)
+    }
+    #expect(result == .matchingUnverified)
+    #expect(try makeRepository().pendingGrant(challengerID: "101") == foreignIntent)
+    #expect(
+        try await makeRepository().grantPoints(
+            operationID: foreignIntent.id, challengerID: "101",
+            value: 3, reason: "합성 동시 지급") == .matchingUnverified)
+    try await checkLedger("101", expected: 6, rows: 2)
+}
+
+/// The parent owns the synthetic HTTP server and journal directory across process exit.
+final class PointGrantRestartProcess: XCTestCase {
+    func testCommittedResponseLoss() async throws {
+        let env = ProcessInfo.processInfo.environment
+        guard let rawURL = env["POINT_TEST_URL"], let path = env["POINT_TEST_DIRECTORY"],
+            let rawID = env["POINT_TEST_ID"]
+        else { throw XCTSkip("부모 테스트에서 실행") }
+        let url = try XCTUnwrap(URL(string: rawURL))
+        let client = AuthSystemFactory.makeNetworkClient(
+            environment: NetworkEnvironment(baseURL: url), tokenStore: FixtureTokenStore())
+        let repo = LiveActivityRepository(
+            client: client, baseURL: url, memberID: "first",
+            journalDirectory: URL(fileURLWithPath: path))
+        let result = try await repo.grantPoints(
+            operationID: try XCTUnwrap(UUID(uuidString: rawID)),
+            challengerID: "102", value: 7, reason: "합성 응답 유실")
+        XCTAssertEqual(result, .awaitingLedger)
+    }
 }

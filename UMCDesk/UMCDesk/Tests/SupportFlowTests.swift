@@ -31,11 +31,28 @@ struct SupportFlowTests {
         #expect(fixture.tickets[index].subject == "예시")
         fixture.tickets[index].assignee = "예시 담당자"
         #expect(fixture.tickets[index].status == .received)
-        fixture.tickets[index].reply("확인 중")
+        fixture.tickets[index].reply("확인 중", from: .agent)
         #expect(fixture.tickets[index].status == .active)
         fixture.tickets[index].status = .closed
-        fixture.tickets[index].reply("종료 뒤 입력")
+        fixture.tickets[index].reply("종료 뒤 입력", from: .requester)
         #expect(fixture.tickets[index].replies.map(\.text) == ["확인 중"])
+    }
+
+    @Test func myInquiriesExcludeOtherUsersAndKeepReplyAuthors() throws {
+        let fixture = SupportFixture()
+        let other = try #require(fixture.tickets.first { !$0.belongsToCurrentUser })
+        #expect(!fixture.myTickets.contains { $0.id == other.id })
+        let id = try #require(fixture.create(subject: "질문", content: "예시 본문", team: .product))
+        let index = try #require(fixture.tickets.firstIndex { $0.id == id })
+        fixture.tickets[index].reply("추가 설명", from: .requester)
+        #expect(fixture.tickets[index].status == .received)
+        fixture.tickets[index].reply("확인했어요", from: .agent)
+        let mine = try #require(fixture.myTickets.first { $0.id == id })
+        #expect(mine.replies.map(\.author) == [.requester, .agent])
+        #expect(mine.status == .active)
+        var inaccessible = other
+        inaccessible.reply("다른 사용자의 문의에 입력", from: .requester)
+        #expect(inaccessible.replies.isEmpty)
     }
 
     @Test func draftEditsAreVisibleOnlyAfterPublication() throws {

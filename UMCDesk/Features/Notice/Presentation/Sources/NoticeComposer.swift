@@ -13,7 +13,6 @@ struct NoticeComposer: View {
     let repository: any NoticeRepository
     let gisu: String
     let onAccessDenied: () -> Void
-    let onCheckList: (String, String) -> Void
     let onPublished: (String) -> Void
     @State private var draft: NoticeDraft
     @State private var organization: NoticeOrganization?
@@ -27,21 +26,18 @@ struct NoticeComposer: View {
     @State private var error: String?
     @State private var publication = NoticePublication()
     @State private var publishingTask: Task<Void, Never>?
+    @State private var confirmingNew = false
+    @State private var discarding = false
     private var publishedID: String? { publication.noticeID }
-    @State private var uploaded: [URL: String] = [:]
-    @State private var imagesAttached = false
-    @State private var linksAttached = false
 
     init(
         repository: any NoticeRepository, gisu: String, tab: String,
         onAccessDenied: @escaping () -> Void,
-        onCheckList: @escaping (String, String) -> Void,
         onPublished: @escaping (String) -> Void
     ) {
         self.repository = repository
         self.gisu = gisu
         self.onAccessDenied = onAccessDenied
-        self.onCheckList = onCheckList
         self.onPublished = onPublished
         var value = NoticeDraft()
         value.noticeTab = tab
@@ -89,15 +85,15 @@ struct NoticeComposer: View {
                 }.disabled(publishedID != nil || publication.needsListCheck)
                 Section("첨부") {
                     TextField("링크 (한 줄에 하나)", text: $linksText, axis: .vertical)
-                        .lineLimit(2...6).disabled(linksAttached)
+                        .lineLimit(2...6).disabled(publication.linksAttached)
                     Button("사진 선택", systemImage: "photo.on.rectangle") { importing = true }
-                        .disabled(imagesAttached)
+                        .disabled(publication.imagesAttached)
                     ForEach(files, id: \.self) { file in
                         HStack {
                             Text(file.lastPathComponent)
                             Spacer()
                             Button("제거") { files.removeAll { $0 == file } }.disabled(
-                                imagesAttached)
+                                publication.imagesAttached)
                         }
                     }
                 }
@@ -123,14 +119,35 @@ struct NoticeComposer: View {
             .formStyle(.grouped)
             .disabled(busy || publication.needsListCheck || publication.needsPollCheck)
             if let error { Text(error).foregroundStyle(.red).textSelection(.enabled) }
+            if publication.needsListCheck && !publication.candidates.isEmpty {
+                Text("게시한 공지를 선택하면 준비한 첨부와 투표를 저장합니다.")
+                ScrollView {
+                    VStack(alignment: .leading) {
+                        ForEach(publication.candidates) { candidate in
+                            Button(
+                                "이 공지로 계속 · #\(candidate.id) · \(candidate.title) · \(candidate.createdAt)"
+                            ) {
+                                recover(candidate.id)
+                            }
+                        }
+                    }
+                }.frame(maxHeight: 100).disabled(busy)
+            }
             HStack {
                 Button(publishedID == nil ? "취소" : "게시된 공지 열기") {
-                    if let publishedID { onPublished(publishedID) } else { dismiss() }
+                    if let publishedID {
+                        onPublished(publishedID)
+                    } else if publication.needsListCheck {
+                        discarding = true
+                    } else {
+                        dismiss()
+                    }
                 }.keyboardShortcut(.cancelAction).disabled(busy)
                 Spacer()
                 if busy { ProgressView().controlSize(.small) }
                 if publication.needsListCheck {
-                    Button("목록에서 게시 결과 확인") { onCheckList(draft.title, draft.noticeTab) }
+                    Button("별도 공지로 작성") { confirmingNew = true }.disabled(busy)
+                    Button("게시 결과 확인") { recover(nil) }
                         .disabled(busy)
                 } else {
                     Button(
@@ -156,7 +173,18 @@ struct NoticeComposer: View {
             }
         }
         .onDisappear { publishingTask?.cancel() }
-        .interactiveDismissDisabled(busy || publishedID != nil)
+        .interactiveDismissDisabled(busy || publishedID != nil || publication.needsListCheck)
+        .confirmationDialog(
+            "별도 공지로 작성할까요? 이미 게시됐다면 같은 공지와 알림이 중복될 수 있습니다.", isPresented: $confirmingNew
+        ) {
+            Button("별도 공지 작성") {
+                publication = NoticePublication()
+                error = nil
+            }
+        }
+        .confirmationDialog("게시 결과 확인을 중단하고 작성 중인 첨부와 투표를 버릴까요?", isPresented: $discarding) {
+            Button("초안 버리기", role: .destructive) { dismiss() }
+        }
         .fileImporter(
             isPresented: $importing, allowedContentTypes: [.jpeg, .png, .webP, .gif, .heic],
             allowsMultipleSelection: true
@@ -222,6 +250,33 @@ struct NoticeComposer: View {
         }.disabled(draft.noticeTab == "SCHOOL_CORE")
     }
 
+    private func recover(_ id: String?) {
+        guard publishingTask == nil else { return }
+        busy = true
+        error = nil
+        publishingTask = Task {
+            defer {
+                busy = false
+                publishingTask = nil
+            }
+            do {
+                if let id {
+                    try await publication.confirmCandidate(
+                        id, draft: draft, gisu: gisu, repository: repository)
+                    busy = false
+                    await publish()
+                } else {
+                    try await publication.findCandidates(draft, gisu: gisu, repository: repository)
+                    if publication.candidates.isEmpty { error = "일치하는 게시물이 없습니다. 잠시 후 다시 확인하세요." }
+                }
+            } catch NoticeRequestFailure.accessDenied {
+                if !Task.isCancelled { onAccessDenied() }
+            } catch {
+                if !Task.isCancelled { self.error = error.localizedDescription }
+            }
+        }
+    }
+
     private func publish() async {
         guard valid || publication.needsPollCheck, !busy else { return }
         busy = true
@@ -231,37 +286,10 @@ struct NoticeComposer: View {
             guard try await repository.canCompose(gisu: gisu) else {
                 throw NoticeRequestFailure.accessDenied
             }
-            let id = try await publication.publish {
-                try await repository.create(draft, gisu: gisu)
-            }
-            for file in files where uploaded[file] == nil {
-                uploaded[file] = try await repository.uploadImage(file: file)
-            }
-            if !files.isEmpty && !imagesAttached {
-                try await repository.replaceImages(files.compactMap { uploaded[$0] }, id: id)
-                imagesAttached = true
-            }
-            if !links.isEmpty && !linksAttached {
-                try await repository.replaceLinks(links, id: id)
-                linksAttached = true
-            }
-            if usingPoll {
-                try await publication.publishPoll {
-                    try await repository.addPoll(poll, id: id)
-                } check: {
-                    guard let result = try await repository.detail(id: id).vote else {
-                        return .absent
-                    }
-                    let matches =
-                        result.title == poll.title
-                        && result.options.map(\.content) == poll.options
-                        && result.isAnonymous == poll.isAnonymous
-                        && result.allowMultipleChoice == poll.allowMultipleChoice
-                        && (try? Date(result.endsAtExclusive, strategy: .iso8601))
-                            == (try? Date(poll.endsAt.ISO8601Format(), strategy: .iso8601))
-                    return matches ? .matching : .different
-                }
-            }
+            let id = try await publication.submit(draft, gisu: gisu, repository: repository)
+            try await publication.saveAttachments(
+                files: files, links: links,
+                poll: usingPoll ? poll : nil, repository: repository)
             try Task.checkCancellation()
             onPublished(id)
         } catch NoticeRequestFailure.accessDenied {

@@ -11,18 +11,24 @@ import ProjectWorkspaceDomain
 import SwiftUI
 
 public struct ProjectWorkspaceView: View {
-    private let accountID: String
+    private struct Entry: Hashable {
+        let accountID: String
+        let initialProjectID: String?
+    }
+
+    private let entry: Entry
     private let loadProjects: @Sendable () async throws -> [WorkspaceProject]
     private let loadGitHub: WorkspaceGitHubLoader?
     private let openMatching: (() -> Void)?
 
     public init(
         accountID: String,
+        initialProjectID: String? = nil,
         loadProjects: @escaping @Sendable () async throws -> [WorkspaceProject],
         loadGitHub: WorkspaceGitHubLoader? = nil,
         openMatching: (() -> Void)? = nil
     ) {
-        self.accountID = accountID
+        entry = Entry(accountID: accountID, initialProjectID: initialProjectID)
         self.loadProjects = loadProjects
         self.loadGitHub = loadGitHub
         self.openMatching = openMatching
@@ -31,9 +37,12 @@ public struct ProjectWorkspaceView: View {
     // MARK: - Body
 
     public var body: some View {
-        WorkspaceDirectory(accountID: accountID, loadProjects: loadProjects,
-                           loadGitHub: loadGitHub, openMatching: openMatching)
-            .id(accountID)
+        WorkspaceDirectory(
+            accountID: entry.accountID, loadProjects: loadProjects,
+            loadGitHub: loadGitHub, openMatching: openMatching,
+            directory: WorkspaceDirectoryModel(initialProjectID: entry.initialProjectID)
+        )
+        .id(entry)
     }
 }
 
@@ -51,7 +60,7 @@ struct WorkspaceDirectory: View {
     init(
         accountID: String, loadProjects: @escaping @Sendable () async throws -> [WorkspaceProject],
         loadGitHub: WorkspaceGitHubLoader?, openMatching: (() -> Void)?,
-        directory: WorkspaceDirectoryModel = WorkspaceDirectoryModel()
+        directory: WorkspaceDirectoryModel
     ) {
         _directory = State(initialValue: directory)
         self.accountID = accountID
@@ -123,6 +132,10 @@ struct WorkspaceDirectory: View {
                         } else if directory.isOpening {
                             ProgressView("프로젝트 참여 상태 확인 중")
                         } else if let projects = directory.projects {
+                            if directory.unavailableProjectID != nil {
+                                Label("요청한 프로젝트가 현재 참여 목록에 없습니다.",
+                                      systemImage: "info.circle")
+                            }
                             if projects.isEmpty {
                                 ContentUnavailableView {
                                     Label("매칭에서 만난 팀과 바로 시작하세요", systemImage: "person.2")

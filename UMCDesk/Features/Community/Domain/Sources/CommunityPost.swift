@@ -7,7 +7,7 @@
 
 import Foundation
 
-public struct CommunityPostMeeting: Equatable, Sendable {
+public struct CommunityPostMeeting: Codable, Equatable, Sendable {
     public let meetAt: String
     public let location: String
     public let maxParticipants: String
@@ -108,7 +108,7 @@ public enum CommunityPostScope: String, CaseIterable, Sendable {
     case all, my, commented, scrapped
 }
 
-public enum CommunityPostCategory: String, CaseIterable, Sendable {
+public enum CommunityPostCategory: String, Codable, CaseIterable, Sendable {
     case free = "FREE"
     case question = "QUESTION"
     case information = "INFORMATION"
@@ -123,7 +123,33 @@ public enum CommunityPostAction: Sendable {
     case likeComment(String)
 }
 
+public struct CommunityPostIntent: Codable, Identifiable, Sendable {
+    public enum Draft: Codable, Sendable {
+        case post(title: String, content: String, category: CommunityPostCategory,
+                  meeting: CommunityPostMeeting?)
+        case comment(postID: String, parentID: String?, content: String)
+    }
+
+    public let id: UUID
+    public let draft: Draft
+    public let baseline: Int64
+
+    public init(draft: Draft, baseline: Int64) {
+        self.id = UUID()
+        self.draft = draft
+        self.baseline = baseline
+    }
+
+    public var postID: String? {
+        if case .comment(let id, _, _) = draft { return id }
+        return nil
+    }
+}
+
 public protocol CommunityPostRepository: Sendable {
+    func pendingWrite(postID: String?) throws -> CommunityPostIntent?
+    func discard(_ intent: CommunityPostIntent) throws
+    func check(_ intent: CommunityPostIntent) async throws -> String
     func posts(
         scope: CommunityPostScope, category: CommunityPostCategory?, keyword: String,
         page: String
@@ -138,10 +164,11 @@ public protocol CommunityPostRepository: Sendable {
 }
 
 public enum CommunityPostWriteFailure: LocalizedError, Sendable {
-    case inProgress, unconfirmed
+    case inProgress, unconfirmed, storageUnavailable
 
     public var errorDescription: String? {
         switch self {
+        case .storageUnavailable: "작성 기록을 읽거나 저장할 수 없어요."
         case .inProgress: "같은 내용을 등록하고 있어요."
         case .unconfirmed: "등록 결과를 확인하지 못했어요. 같은 내용으로 다시 누르면 결과를 조회해요."
         }

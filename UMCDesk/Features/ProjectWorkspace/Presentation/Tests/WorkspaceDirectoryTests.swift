@@ -70,6 +70,75 @@ struct WorkspaceDirectoryTests {
         try #require(predicate(), "\(description)")
     }
 
+    @Test func initialRequestWaitsForVerifiedMembershipAndIsConsumedOnce() async {
+        let project = project
+        let model = WorkspaceDirectoryModel(initialProjectID: project.id)
+        #expect(model.isOpening && model.selected == nil)
+        await model.refresh(revision: model.revision) { throw URLError(.timedOut) }
+        #expect(model.failed && model.isOpening && model.selected == nil)
+        model.requestRefresh()
+        await model.refresh(revision: model.revision) { [project] }
+        #expect(model.selected == project && !model.isOpening)
+        model.close()
+        await model.refresh(revision: model.revision) { [project] }
+        #expect(model.selected == nil && model.unavailableProjectID == nil)
+    }
+
+    @Test func missingInitialProjectShowsVerifiedListAndDoesNotOpenOnLaterRefresh() async {
+        let project = project
+        let model = WorkspaceDirectoryModel(initialProjectID: "missing")
+        await model.refresh(revision: model.revision) { [project] }
+        #expect(model.projects == [project] && model.selected == nil)
+        #expect(model.unavailableProjectID == "missing" && !model.isOpening && !model.failed)
+        model.requestRefresh()
+        await model.refresh(revision: model.revision) { [.init(id: "missing", name: "다시 합류한 팀")] }
+        #expect(model.selected == nil && model.unavailableProjectID == nil)
+    }
+
+    @Test func accountSwitchDiscardsDelayedInitialMembership() async throws {
+        let suite = "WorkspaceDirectoryTests." + UUID().uuidString
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let first = project
+        let second = WorkspaceProject(id: "42", name: "다른 팀")
+        let gate = DelayedMembership()
+        let newAccount = DelayedMembership()
+        defer {
+            gate.release()
+            newAccount.release()
+        }
+        let firstView = ProjectWorkspaceView(accountID: "101", initialProjectID: first.id) {
+            await gate.wait()
+            return [first]
+        }
+        let host = NSHostingController(rootView: firstView.defaultAppStorage(defaults))
+        let window = NSWindow(contentViewController: host)
+        defer { window.contentViewController = nil }
+        host.view.layoutSubtreeIfNeeded()
+        try await waitUntil { gate.started }
+        let secondView = ProjectWorkspaceView(accountID: "102", initialProjectID: first.id) {
+            await newAccount.wait()
+            return [second]
+        }
+        host.rootView = secondView.defaultAppStorage(defaults)
+        host.view.layoutSubtreeIfNeeded()
+        try await waitUntil { newAccount.started }
+        gate.release()
+        newAccount.release()
+
+        // A subsequent request for the same account must use the new route identity.
+        host.rootView = ProjectWorkspaceView(accountID: "102", initialProjectID: second.id) {
+            [second]
+        }.defaultAppStorage(defaults)
+        host.view.layoutSubtreeIfNeeded()
+        let validKey = WorkspaceRecord.key(accountID: "102", projectID: second.id)
+        try await waitUntil { defaults.data(forKey: validKey) != nil }
+        let staleKey = WorkspaceRecord.key(accountID: "101", projectID: first.id)
+        let deniedKey = WorkspaceRecord.key(accountID: "102", projectID: first.id)
+        #expect(defaults.data(forKey: staleKey) == nil)
+        #expect(defaults.data(forKey: deniedKey) == nil)
+    }
+
     @Test func revokedMembershipClosesDetailAndConnections() async {
         let project = project
         let model = WorkspaceDirectoryModel()
@@ -80,6 +149,7 @@ struct WorkspaceDirectoryTests {
         await model.refresh(revision: model.revision) { [] }
         #expect(model.projects == [])
         #expect(model.selected == nil)
+        #expect(model.unavailableProjectID == project.id)
         #expect(model.sheet == nil)
     }
 
@@ -87,6 +157,7 @@ struct WorkspaceDirectoryTests {
         let project = project
         let model = WorkspaceDirectoryModel()
         await model.refresh(revision: model.revision) { [project] }
+        #expect(model.selected == nil && !model.isOpening)
         model.open(project)
         #expect(model.selected == nil)
         await model.refresh(revision: model.revision) { [project] }
@@ -138,5 +209,23 @@ private actor TestRoster {
 
     func removeMembers() {
         projects = []
+    }
+}
+
+@MainActor
+private final class DelayedMembership {
+    private var continuations: [CheckedContinuation<Void, Never>] = []
+    private var released = false
+    var started: Bool { !continuations.isEmpty }
+
+    func wait() async {
+        guard !released else { return }
+        await withCheckedContinuation { continuations.append($0) }
+    }
+
+    func release() {
+        released = true
+        continuations.forEach { $0.resume() }
+        continuations.removeAll()
     }
 }

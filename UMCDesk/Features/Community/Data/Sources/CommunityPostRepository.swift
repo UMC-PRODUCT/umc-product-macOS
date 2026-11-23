@@ -9,16 +9,18 @@ import CommunityDomain
 import CoreNetwork
 import Foundation
 import Moya
+import Synchronization
 import UMCFoundation
 
 public struct LiveCommunityPostRepository: CommunityPostRepository {
     private let adapter: MoyaNetworkAdapter
     private let environment: NetworkEnvironment
 
-    private let postWrites = CommunityPostWrites<CommunityPost>()
-    private let commentWrites = CommunityPostWrites<CommunityPostComment>()
+    private let writes: CommunityPostWrites
 
-    public init(adapter: MoyaNetworkAdapter, environment: NetworkEnvironment) {
+    public init(adapter: MoyaNetworkAdapter, environment: NetworkEnvironment,
+                accountID: String, defaults: UserDefaults = .standard) {
+        writes = .init(defaults: defaults, scope: environment.baseURL.absoluteString + "|" + accountID)
         self.adapter = adapter
         self.environment = environment
     }
@@ -79,17 +81,70 @@ public struct LiveCommunityPostRepository: CommunityPostRepository {
             let row: CommunityPostDTO = try await request(path, method: .patch, task: task)
             return row.model
         }
-        let key = [category.rawValue, title, content] + (meeting.map {
-            [$0.meetAt, $0.location, $0.maxParticipants, $0.openChatUrl]
-        } ?? [])
-        return try await postWrites.submit(key: key) {
-            try await posts(scope: .my, category: nil, keyword: "", page: "0").values
-        } matches: { row in
-            row.title == title && row.content == content && row.category == category.rawValue
-                && Self.sameMeeting(row.meeting, meeting)
-        } create: {
+        guard try pendingWrite(postID: nil) == nil else { throw CommunityPostWriteFailure.unconfirmed }
+        let rows = try await posts(scope: .my, category: nil, keyword: "", page: "0").values
+        let intent = try intent(
+            .post(title: title, content: content, category: category, meeting: meeting),
+            ids: rows.map(\.id))
+        return try await submit(intent) {
             let row: CommunityPostDTO = try await request(path, method: .post, task: task)
             return row.model
+        }
+    }
+
+    public func pendingWrite(postID: String?) throws -> CommunityPostIntent? {
+        try writes.pending(postID)
+    }
+
+    public func discard(_ intent: CommunityPostIntent) throws { try writes.discard(intent) }
+
+    public func check(_ intent: CommunityPostIntent) async throws -> String {
+        guard let stored = try writes.pending(intent.postID), stored.id == intent.id else {
+            throw CommunityPostWriteFailure.unconfirmed
+        }
+        switch stored.draft {
+        case let .post(title, content, category, meeting):
+            let rows = try await posts(scope: .my, category: nil, keyword: "", page: "0").values
+            let candidates = rows.filter {
+                (Int64($0.id) ?? 0) > stored.baseline && $0.title == title && $0.content == content
+                    && $0.category == category.rawValue && Self.sameMeeting($0.meeting, meeting)
+            }
+            if candidates.isEmpty { return "최근 내 게시글에서 일치하는 글을 찾지 못했어요." }
+            let ids = candidates.map(\.id).joined(separator: ", ")
+            return "내용이 같은 내 게시글 번호: " + ids + ". 이 작업으로 등록됐는지는 확인할 수 없어요."
+        case let .comment(postID, parentID, content):
+            let rows = try await comments(id: postID)
+            let matches = rows.filter {
+                (Int64($0.id) ?? 0) > stored.baseline && $0.isAuthor && $0.content == content
+            }
+            if matches.isEmpty { return "일치하는 내 댓글을 찾지 못했어요." }
+            if let parentID {
+                return "같은 내용의 내 댓글이 있지만 원댓글 번호 " + parentID + "에 달린 답글인지는 확인할 수 없어요."
+            }
+            return "같은 내용의 내 댓글이 있지만 이 작업으로 등록됐는지는 확인할 수 없어요."
+        }
+    }
+
+    private func intent(_ draft: CommunityPostIntent.Draft, ids: [String]) throws -> CommunityPostIntent {
+        let numbers = ids.compactMap(Int64.init)
+        guard ids.count == numbers.count else { throw NetworkError.invalidResponse }
+        return CommunityPostIntent(draft: draft, baseline: numbers.max() ?? 0)
+    }
+
+    private func submit<T>(_ intent: CommunityPostIntent, create: () async throws -> T) async throws -> T {
+        try _Concurrency.Task.checkCancellation()
+        try writes.begin(intent)
+        defer { writes.finish(intent) }
+        do {
+            let result = try await create()
+            try writes.remove(intent)
+            return result
+        } catch {
+            if case NetworkError.requestFailed(let status, _) = error, (400..<500).contains(status) {
+                try writes.remove(intent)
+                throw error
+            }
+            throw CommunityPostWriteFailure.unconfirmed
         }
     }
 
@@ -119,11 +174,11 @@ public struct LiveCommunityPostRepository: CommunityPostRepository {
         case .comment(let content, let parentID):
             if let parentID { try ConversationIdentifier.validate(parentID) }
             let body = CommentBody(content: content, parentId: parentID.flatMap(Int64.init))
-            _ = try await commentWrites.submit(key: [id, parentID ?? "", content]) {
-                try await comments(id: id)
-            } matches: { row in
-                row.isAuthor && row.content == content
-            } create: {
+            guard try pendingWrite(postID: id) == nil else { throw CommunityPostWriteFailure.unconfirmed }
+            let rows = try await comments(id: id)
+            let intent = try intent(.comment(postID: id, parentID: parentID, content: content),
+                                    ids: rows.map(\.id))
+            _ = try await submit(intent) {
                 let row: CommunityPostCommentDTO = try await request(
                     root + "/comments", method: .post, task: .requestJSONEncodable(body))
                 return row.model
@@ -214,53 +269,57 @@ private struct CommunityPostToggleDTO: Codable {
     }
 }
 
-// The server allocates numeric IDs and lists the account's newest posts first.
-// Keep an uncertain submission with its account-bound repository across view recreation.
-private actor CommunityPostWrites<Row: Identifiable & Sendable> where Row.ID == String {
-    private var pending: [[String]: Int64] = [:]
-    private var running: Set<[String]> = []
+// Serialize compare-and-set across repository instances using the same defaults suite.
+private final class CommunityPostWrites: @unchecked Sendable {
+    private static let running = Mutex<Set<UUID>>([])
+    private let defaults: UserDefaults
+    private let scope: String
 
-    func submit(
-        key: [String], read: () async throws -> [Row], matches: (Row) -> Bool,
-        create: () async throws -> Row
-    ) async throws -> Row {
-        guard running.insert(key).inserted else { throw CommunityPostWriteFailure.inProgress }
-        defer { running.remove(key) }
-        if pending[key] == nil {
-            let rows = try await read()
-            let ids = rows.compactMap { Int64($0.id) }
-            guard ids.count == rows.count else { throw NetworkError.invalidResponse }
-            try _Concurrency.Task.checkCancellation()
-            pending[key] = ids.max() ?? 0
-            do {
-                let result = try await create()
-                pending.removeValue(forKey: key)
-                return result
-            } catch {
-                if Self.wasRejected(error) {
-                    pending.removeValue(forKey: key)
-                    throw error
-                }
-            }
-        }
-        try _Concurrency.Task.checkCancellation()
-        guard let baseline = pending[key], let rows = try? await read() else {
-            throw CommunityPostWriteFailure.unconfirmed
-        }
-        let candidates = rows.filter { (Int64($0.id) ?? 0) > baseline && matches($0) }
-        guard candidates.count == 1, let result = candidates.first else {
-            throw CommunityPostWriteFailure.unconfirmed
-        }
-        pending.removeValue(forKey: key)
-        return result
+    init(defaults: UserDefaults, scope: String) {
+        self.defaults = defaults
+        self.scope = scope
     }
 
-    private static func wasRejected(_ error: Error) -> Bool {
-        switch error {
-        case NetworkError.requestFailed(let status, _): return (400..<500).contains(status)
-        case NetworkError.unauthorized, NetworkError.noRefreshToken,
-             NetworkError.maxRetryExceeded, NetworkError.tokenRefreshFailed: return true
-        default: return false
+    private func key(_ id: String?) -> String {
+        "community.pending.v1|" + scope + "|" + (id ?? "post")
+    }
+
+    private func load(_ id: String?) throws -> CommunityPostIntent? {
+        guard let data = defaults.data(forKey: key(id)) else { return nil }
+        return try JSONDecoder().decode(CommunityPostIntent.self, from: data)
+    }
+
+    func pending(_ id: String?) throws -> CommunityPostIntent? {
+        try Self.running.withLock { _ in try load(id) }
+    }
+
+    func begin(_ intent: CommunityPostIntent) throws {
+        try Self.running.withLock { running in
+            guard try load(intent.postID) == nil else { throw CommunityPostWriteFailure.unconfirmed }
+            defaults.set(try JSONEncoder().encode(intent), forKey: key(intent.postID))
+            guard defaults.synchronize() else { throw CommunityPostWriteFailure.storageUnavailable }
+            running.insert(intent.id)
         }
+    }
+
+    func finish(_ intent: CommunityPostIntent) {
+        _ = Self.running.withLock { $0.remove(intent.id) }
+    }
+
+    func remove(_ intent: CommunityPostIntent) throws {
+        try Self.running.withLock { _ in try clear(intent) }
+    }
+
+    func discard(_ intent: CommunityPostIntent) throws {
+        try Self.running.withLock { running in
+            guard !running.contains(intent.id) else { throw CommunityPostWriteFailure.inProgress }
+            try clear(intent)
+        }
+    }
+
+    private func clear(_ intent: CommunityPostIntent) throws {
+        guard try load(intent.postID)?.id == intent.id else { throw CommunityPostWriteFailure.unconfirmed }
+        defaults.removeObject(forKey: key(intent.postID))
+        guard defaults.synchronize() else { throw CommunityPostWriteFailure.storageUnavailable }
     }
 }

@@ -191,6 +191,72 @@ struct ThreadConversationModelTests {
         #expect(await repository.keys.isEmpty)
     }
 
+    @Test func kickedDetailClearsBothWindowsAndPreservesOtherRoomsAndAccounts() async throws {
+        let repository = ConversationTestRepository()
+        let suite = UUID().uuidString
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        func open(room: String = "71", account: String = "101") -> ThreadConversationModel {
+            ThreadConversationModel(threadID: room, accountID: account,
+                                    repository: repository, defaults: defaults)
+        }
+        let main = open()
+        let separate = open()
+        let otherRoom = open(room: "72")
+        let otherAccount = open(account: "102")
+        await repository.seedHistory()
+        for model in [main, separate, otherRoom, otherAccount] {
+            await model.refresh()
+            model.text = "초안"
+        }
+        let url = FileManager.default.temporaryDirectory.appending(path: suite + ".png")
+        try Data([1]).write(to: url)
+        defer { try? FileManager.default.removeItem(at: url) }
+        separate.send()
+        try await settle(separate)
+        #expect(await repository.keys.count == 1 && separate.canRetry)
+        main.attach([url])
+        otherRoom.attach([url])
+        let file = try #require(main.attachments.first)
+        let unrelated = try #require(otherRoom.attachments.first)
+        defer { otherRoom.removeFile(unrelated.id) }
+        await repository.pauseUploads()
+        main.send()
+        let deadline = ContinuousClock.now + .seconds(2)
+        while await repository.uploadCount == 0 && ContinuousClock.now < deadline {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        #expect(await repository.uploadCount == 1)
+        let store = ThreadConversationModel.WindowStore.shared(
+            defaults: defaults, accountID: "101", threadID: "71")
+        func detail(_ id: String, _ state: String) -> CommunityThread {
+            CommunityThread(id: id, title: "대화", description: nil, icon: "💬", isPinned: false,
+                            isMuted: false, isJoined: state == "ACTIVE", membershipState: state,
+                            unread: "0")
+        }
+        _ = try await store.refreshDetail { detail($0, "KICKED") }
+        let late = try await store.refreshDetail { detail($0, "ACTIVE") }
+        #expect(late.membershipState == "KICKED")
+        try await settle(main)
+        for model in [main, separate, open()] {
+            model.retry()
+            model.send()
+            model.attach([url])
+            model.text = "늦은 입력"
+            await model.refresh()
+            #expect(model.messages.isEmpty && model.attachments.isEmpty && model.text.isEmpty)
+            #expect(!model.canRetry && !model.canSend && !model.loaded)
+        }
+        #expect(await repository.uploadCancelled)
+        #expect(await repository.keys.count == 1)
+        #expect(!FileManager.default.fileExists(atPath: file.localURL.path))
+        #expect(defaults.object(forKey: "community.conversation.101.71") == nil)
+        for model in [otherRoom, otherAccount] {
+            #expect(model.loaded && model.canSend && model.messages.count == 1)
+        }
+        #expect(FileManager.default.fileExists(atPath: unrelated.localURL.path))
+    }
+
     @Test func commandDenialPreservesMembershipAndAmbiguousSendCanRetry() async throws {
         let repository = ConversationTestRepository()
         let suite = UUID().uuidString

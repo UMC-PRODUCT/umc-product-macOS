@@ -48,26 +48,57 @@ extension CommunityPostResponseTests {
         let environment = NetworkEnvironment(baseURL: URL(string: "https://board.example.test")!)
         let client = AuthSystemFactory.makeNetworkClient(
             environment: environment, tokenStore: BoardTestTokens(), session: session)
-        let repository = LiveCommunityPostRepository(
-            adapter: .init(networkClient: client), environment: environment)
+        let suite = "community-post-tests." + UUID().uuidString
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        func make(_ account: String = "101", environment env: NetworkEnvironment? = nil)
+            -> LiveCommunityPostRepository {
+            LiveCommunityPostRepository(adapter: .init(networkClient: client),
+                environment: env ?? environment, accountID: account, defaults: defaults)
+        }
+        var repository = make()
         LostWriteProtocol.counts.withLock { $0 = [:] }
         func submitPost() async throws -> CommunityPost {
             try await repository.save(
                 id: nil, title: "제목", content: "합성", category: .free, meeting: nil)
         }
-        // The first read after each committed write still shows the old identical row.
-        await #expect(throws: (any Error).self) { try await submitPost() }
-        #expect(try await submitPost().id == "21")
+        await #expect(throws: CommunityPostWriteFailure.unconfirmed) { try await submitPost() }
+        let original = try #require(try repository.pendingWrite(postID: nil))
+        repository = make()
+        let restored = try #require(try repository.pendingWrite(postID: nil))
+        #expect(original.id == restored.id)
+        #expect(try make("102").pendingWrite(postID: nil) == nil)
+        let other = NetworkEnvironment(baseURL: URL(string: "https://other.example.test")!)
+        #expect(try make(environment: other).pendingWrite(postID: nil) == nil)
+        await #expect(throws: CommunityPostWriteFailure.unconfirmed) { try await submitPost() }
+        _ = try await repository.check(restored)
+        #expect(try await repository.check(restored).contains("21"))
+        #expect(try repository.pendingWrite(postID: nil)?.id == restored.id)
         func reply() async throws {
             _ = try await repository.perform(.comment("합성", parentID: "20"), id: "21")
         }
-        await #expect(throws: (any Error).self) { try await reply() }
-        try await reply()
+        await #expect(throws: CommunityPostWriteFailure.unconfirmed) { try await reply() }
+        repository = make()
+        let comment = try #require(try repository.pendingWrite(postID: "21"))
+        guard case .comment("21", "20", "합성") = comment.draft else {
+            Issue.record("원래 답글 대상과 입력이 복구되어야 합니다.")
+            return
+        }
+        await #expect(throws: CommunityPostWriteFailure.unconfirmed) { try await reply() }
+        _ = try await repository.check(comment)
+        #expect(try await repository.check(comment).contains("답글인지는 확인할 수 없어요"))
+        #expect(try repository.pendingWrite(postID: "21")?.id == comment.id)
         let counts = LostWriteProtocol.counts.withLock { $0 }
         #expect(counts["POST /api/v1/posts"] == 1)
         #expect(counts["POST /api/v1/posts/21/comments"] == 1)
-        #expect(counts["GET /api/v1/posts/my"] == 3)
-        #expect(counts["GET /api/v1/posts/21/comments"] == 3)
+        try repository.discard(restored)
+        await #expect(throws: CommunityPostWriteFailure.unconfirmed) { try await submitPost() }
+        #expect(try repository.pendingWrite(postID: nil)?.id != restored.id)
+        #expect(throws: CommunityPostWriteFailure.unconfirmed) { try repository.discard(restored) }
+        try repository.discard(comment)
+        await #expect(throws: CommunityPostWriteFailure.unconfirmed) { try await reply() }
+        #expect(try repository.pendingWrite(postID: "21")?.id != comment.id)
+        #expect(LostWriteProtocol.counts.withLock { $0["POST /api/v1/posts/21/comments"] } == 2)
     }
 }
 

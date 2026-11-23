@@ -18,14 +18,22 @@ final class WorkspaceDirectoryModel {
     var sheet: WorkspaceSheet?
     private var pendingProjectID: String?
 
+    private(set) var unavailableProjectID: String?
+
+    init(initialProjectID: String? = nil) {
+        pendingProjectID = initialProjectID
+    }
+
     var isOpening: Bool { pendingProjectID != nil }
 
     func open(_ project: WorkspaceProject) {
+        unavailableProjectID = nil
         pendingProjectID = project.id
         requestRefresh()
     }
 
     func close() {
+        unavailableProjectID = nil
         sheet = nil
         selected = nil
         pendingProjectID = nil
@@ -49,6 +57,11 @@ final class WorkspaceDirectoryModel {
             projects = fetched.filter { seen.insert($0.id).inserted }
             let requestedID = pendingProjectID ?? selected?.id
             let verified = projects?.first { $0.id == requestedID }
+            if let requestedID {
+                unavailableProjectID = verified == nil ? requestedID : nil
+            } else if let unavailableProjectID, seen.contains(unavailableProjectID) {
+                self.unavailableProjectID = nil
+            }
             if selected?.id != verified?.id { sheet = nil }
             selected = verified
             pendingProjectID = nil

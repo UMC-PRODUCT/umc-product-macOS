@@ -238,6 +238,8 @@ public struct NoticeEntry: Codable, Sendable, Identifiable {
     public let mustRead: Bool
     public let viewCount: String
     public let createdAt: String
+    public let authorMemberId: String?
+    public let shouldSendNotification: Bool?
     public let author: NoticeAuthor?
     public let targetInfo: NoticeAudience?
     public let hasImages: Bool?
@@ -254,6 +256,7 @@ public struct NoticeEntry: Codable, Sendable, Identifiable {
         mustRead: Bool,
         viewCount: String,
         createdAt: String,
+        authorMemberId: String? = nil, shouldSendNotification: Bool? = nil,
         author: NoticeAuthor?,
         targetInfo: NoticeAudience?,
         hasImages: Bool?,
@@ -269,6 +272,8 @@ public struct NoticeEntry: Codable, Sendable, Identifiable {
         self.mustRead = mustRead
         self.viewCount = viewCount
         self.createdAt = createdAt
+        self.authorMemberId = authorMemberId
+        self.shouldSendNotification = shouldSendNotification
         self.author = author
         self.targetInfo = targetInfo
         self.hasImages = hasImages
@@ -286,6 +291,7 @@ public struct NoticeEntry: Codable, Sendable, Identifiable {
         case mustRead
         case viewCount
         case createdAt
+        case authorMemberId, shouldSendNotification
         case author
         case targetInfo
         case hasImages
@@ -304,6 +310,9 @@ public struct NoticeEntry: Codable, Sendable, Identifiable {
         mustRead = try values.decode(Bool.self, forKey: .mustRead)
         viewCount = try values.decodeFlexibleString(forKey: .viewCount)
         createdAt = try values.decode(String.self, forKey: .createdAt)
+        authorMemberId = try values.decodeFlexibleStringIfPresent(forKey: .authorMemberId)
+        shouldSendNotification = try values.decodeIfPresent(
+            Bool.self, forKey: .shouldSendNotification)
         author = try values.decodeIfPresent(NoticeAuthor.self, forKey: .author)
         targetInfo = try values.decodeIfPresent(NoticeAudience.self, forKey: .targetInfo)
         hasImages = try values.decodeIfPresent(Bool.self, forKey: .hasImages)
@@ -322,6 +331,8 @@ public struct NoticeEntry: Codable, Sendable, Identifiable {
         try values.encode(mustRead, forKey: .mustRead)
         try values.encode(viewCount, forKey: .viewCount)
         try values.encode(createdAt, forKey: .createdAt)
+        try values.encodeIfPresent(authorMemberId, forKey: .authorMemberId)
+        try values.encodeIfPresent(shouldSendNotification, forKey: .shouldSendNotification)
         try values.encodeIfPresent(author, forKey: .author)
         try values.encodeIfPresent(targetInfo, forKey: .targetInfo)
         try values.encodeIfPresent(hasImages, forKey: .hasImages)
@@ -495,6 +506,7 @@ public struct NoticePollDraft: Sendable {
 }
 
 public protocol NoticeRepository: Sendable {
+    func currentMemberID() async throws -> String
     func activeGisu() async throws -> String
     func canCompose(gisu: String) async throws -> Bool
     func organization(gisu: String) async throws -> NoticeOrganization?
@@ -624,6 +636,7 @@ public struct NoticeOrganization: Codable, Sendable {
 public enum NoticeRequestFailure: LocalizedError, Equatable, Sendable {
     case accessDenied
     case rejected(String)
+    case recipientsChanged
     case publicationUnconfirmed
     case pollMissing
     case pollUnconfirmed
@@ -632,7 +645,8 @@ public enum NoticeRequestFailure: LocalizedError, Equatable, Sendable {
         switch self {
         case .accessDenied: "이 공지를 열거나 변경할 권한이 없습니다."
         case .rejected(let message): message
-        case .publicationUnconfirmed: "서버에서 게시 결과를 확인하지 못했습니다. 목록에서 제목을 확인하세요."
+        case .recipientsChanged: "미열람 대상이 변경되었습니다. 목록에서 다시 선택하세요."
+        case .publicationUnconfirmed: "서버에서 게시 결과를 확인하지 못했습니다. 게시 결과를 조회하고 작성한 공지를 선택하세요."
         case .pollMissing: "공지 상세에서 투표가 없는 것을 확인했습니다. 투표를 다시 등록할 수 있습니다."
         case .pollUnconfirmed: "투표 등록 결과를 확인하지 못했습니다. 공지 상세에서 다시 확인하세요."
         }
@@ -649,6 +663,84 @@ public final class NoticePublication {
 
     public init() {}
 
+    private var previousIDs = Set<String>()
+    public private(set) var candidates: [NoticeEntry] = []
+
+    public func submit(_ draft: NoticeDraft, gisu: String, repository: any NoticeRepository)
+        async throws -> String
+    {
+        if noticeID == nil && !needsListCheck {
+            previousIDs = Set(
+                try await search(draft, gisu: gisu, repository: repository).map(\.id))
+        }
+        return try await publish { try await repository.create(draft, gisu: gisu) }
+    }
+
+    private func search(_ draft: NoticeDraft, gisu: String, repository: any NoticeRepository)
+        async throws -> [NoticeEntry]
+    {
+        var results: [NoticeEntry] = []
+        var seen = Set<String>()
+        var index = 0
+        while true {
+            try Task.checkCancellation()
+            let page = try await repository.notices(
+                gisu: gisu, tab: draft.noticeTab,
+                keyword: draft.title, part: nil, page: index)
+            let fresh = page.content.filter { seen.insert($0.id).inserted }
+            results += fresh
+            guard page.hasNext else { return results }
+            guard !fresh.isEmpty else { throw URLError(.cannotParseResponse) }
+            index += 1
+        }
+    }
+
+    private func matches(_ entry: NoticeEntry, draft: NoticeDraft, gisu: String, member: String)
+        -> Bool
+    {
+        guard let target = entry.targetInfo else { return false }
+        return entry.authorMemberId == member && entry.title == draft.title
+            && entry.content == draft.content && entry.mustRead == draft.mustRead
+            && target.targetGisuId == gisu && target.targetChapterId == draft.chapterId
+            && target.targetSchoolId == draft.schoolId && target.targetNoticeTab == draft.noticeTab
+            && Set(target.targetParts ?? []) == Set(draft.parts)
+    }
+
+    public func findCandidates(
+        _ draft: NoticeDraft, gisu: String, repository: any NoticeRepository
+    ) async throws {
+        candidates = []
+        guard needsListCheck else { return }
+        let member = try await repository.currentMemberID()
+        candidates = try await search(draft, gisu: gisu, repository: repository).filter {
+            !previousIDs.contains($0.id) && matches($0, draft: draft, gisu: gisu, member: member)
+                && $0.shouldSendNotification == draft.shouldNotify
+                && $0.hasImages == false && $0.hasLinks == false && $0.hasVote == false
+        }
+    }
+
+    public func confirmCandidate(
+        _ id: String, draft: NoticeDraft, gisu: String,
+        repository: any NoticeRepository
+    ) async throws {
+        guard needsListCheck, candidates.contains(where: { $0.id == id }) else {
+            throw NoticeRequestFailure.publicationUnconfirmed
+        }
+        let member = try await repository.currentMemberID()
+        let entry = try await repository.detail(id: id)
+        guard entry.id == id, matches(entry, draft: draft, gisu: gisu, member: member),
+            entry.images?.isEmpty == true, entry.links?.isEmpty == true, entry.vote == nil,
+            try await repository.permissions(id: id).contains("EDIT")
+        else {
+            candidates.removeAll { $0.id == id }
+            throw NoticeRequestFailure.rejected("후보 공지의 내용 또는 권한이 변경되었습니다. 다시 확인하세요.")
+        }
+        try Task.checkCancellation()
+        noticeID = id
+        needsListCheck = false
+        candidates = []
+    }
+
     public func publish(_ create: () async throws -> String) async throws -> String {
         if let noticeID { return noticeID }
         guard !needsListCheck else { throw NoticeRequestFailure.publicationUnconfirmed }
@@ -664,6 +756,45 @@ public final class NoticePublication {
             throw error
         } catch {
             throw NoticeRequestFailure.publicationUnconfirmed
+        }
+    }
+
+    private var uploaded: [URL: String] = [:]
+    public private(set) var imagesAttached = false
+    public private(set) var linksAttached = false
+
+    public func saveAttachments(
+        files: [URL], links: [String], poll: NoticePollDraft?,
+        repository: any NoticeRepository
+    ) async throws {
+        guard let id = noticeID else { throw NoticeRequestFailure.publicationUnconfirmed }
+        for file in files where uploaded[file] == nil {
+            uploaded[file] = try await repository.uploadImage(file: file)
+        }
+        if !files.isEmpty && !imagesAttached {
+            try await repository.replaceImages(files.compactMap { uploaded[$0] }, id: id)
+            imagesAttached = true
+        }
+        if !links.isEmpty && !linksAttached {
+            try await repository.replaceLinks(links, id: id)
+            linksAttached = true
+        }
+        if let poll {
+            try await publishPoll {
+                try await repository.addPoll(poll, id: id)
+            } check: {
+                guard let result = try await repository.detail(id: id).vote else {
+                    return .absent
+                }
+                let matches =
+                    result.title == poll.title
+                    && result.options.map(\.content) == poll.options
+                    && result.isAnonymous == poll.isAnonymous
+                    && result.allowMultipleChoice == poll.allowMultipleChoice
+                    && (try? Date(result.endsAtExclusive, strategy: .iso8601))
+                        == (try? Date(poll.endsAt.ISO8601Format(), strategy: .iso8601))
+                return matches ? .matching : .different
+            }
         }
     }
 

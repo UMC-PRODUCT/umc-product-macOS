@@ -8,84 +8,68 @@ import ActivityDomain
 import Foundation
 import UMCFoundation
 
-struct PointGrant: Hashable, Sendable {
-    let challengerID: String
-    let value: Int
-    let reason: String
-}
-
-/// The server has a grant ledger but no request identifier. After an ambiguous write,
-/// only a ledger read may resolve the same grant.
 actor PointGrantCoordinator {
-    private struct Pending {
-        let existingIDs: Set<String>
-        var operations: Set<UUID>
-    }
-    private var pending: [PointGrant: Pending] = [:]
-    private struct Flight {
-        let task: Task<PointGrantResult, Error>
-        var operations: Set<UUID>
-    }
-    private var flights: [PointGrant: Flight] = [:]
-    private var completed: [UUID: PointGrantResult] = [:]
+    let journal: PointGrantJournal
+    private var flights: [UUID: (PointGrantIntent, Task<PointGrantResult, Error>)] = [:]
+
+    init(journal: PointGrantJournal) { self.journal = journal }
 
     func submit(
-        id: UUID, grant: PointGrant,
+        grant: PointGrantIntent,
         read: @escaping @Sendable () async throws -> PointLedgerDTO,
         write: @escaping @Sendable () async throws -> Void
     ) async throws -> PointGrantResult {
         try Task.checkCancellation()
-        if let result = completed[id] { return result }
-        if var flight = flights[grant] {
-            flight.operations.insert(id)
-            flights[grant] = flight
-            return try await flight.task.value
+        if let (prior, flight) = flights[grant.id] {
+            guard prior == grant else { throw PointJournalError.reusedID }
+            return try await flight.value
         }
         let flight = Task {
-            defer {
-                if let flight = flights.removeValue(forKey: grant) {
-                    pending[grant]?.operations.formUnion(flight.operations)
-                }
-            }
-            if pending[grant] == nil {
+            defer { flights.removeValue(forKey: grant.id) }
+            var entry = try journal.lookup(grant)
+            if entry == nil {
                 let baseline = try await read()
-                pending[grant] = Pending(
-                    existingIDs: Set(baseline.points.map(\.id)), operations: [id])
-                do {
-                    try await write()
-                    finish(.recorded, grant: grant)
-                    return PointGrantResult.recorded
-                } catch let NetworkError.requestFailed(code, data)
-                    where [400, 401, 403, 404, 422].contains(code)
-                {
-                    pending.removeValue(forKey: grant)
-                    throw NetworkError.requestFailed(statusCode: code, data: data)
-                } catch {
-                    // A lost response, cancellation, or a malformed receipt may follow a commit.
+                entry = try journal.reserve(grant, baseline: Set(baseline.points.map(\.id)))
+            }
+            if let entry {
+                switch entry.status {
+                case .recorded: return PointGrantResult.recorded
+                case .reviewed: throw PointJournalError.manuallyReviewed
+                case .pending: return await reconcile(entry, read: read)
                 }
             }
-            pending[grant]?.operations.insert(id)
-            guard let baseline = pending[grant]?.existingIDs, let ledger = try? await read(),
-                ledger.points.contains(where: {
-                    !baseline.contains($0.id) && $0.challengerId == grant.challengerID
-                        && $0.pointType == "CUSTOM" && $0.point == Double(grant.value)
-                        && $0.description == grant.reason
-                })
-            else { return .awaitingLedger }
-            finish(.ledgerMatch, grant: grant)
-            return .ledgerMatch
+            do {
+                try await write()
+            } catch let NetworkError.requestFailed(code, data)
+                where [400, 401, 403, 404, 422].contains(code)
+            {
+                try journal.close(grant.id, as: nil)
+                throw NetworkError.requestFailed(statusCode: code, data: data)
+            } catch {
+                guard let entry = try journal.lookup(grant) else { throw error }
+                return await reconcile(entry, read: read)
+            }
+            try journal.close(grant.id, as: .recorded)
+            return .recorded
         }
-        flights[grant] = Flight(task: flight, operations: [id])
+        flights[grant.id] = (grant, flight)
         return try await flight.value
     }
 
-    private func finish(_ result: PointGrantResult, grant: PointGrant) {
-        let earlier = pending.removeValue(forKey: grant)?.operations ?? []
-        for operation in earlier.union(flights[grant]?.operations ?? []) {
-            completed[operation] = result
+    private func reconcile(
+        _ entry: PointGrantJournal.Entry,
+        read: () async throws -> PointLedgerDTO
+    ) async -> PointGrantResult {
+        guard let ledger = try? await read() else { return .awaitingLedger }
+        let grant = entry.intent
+        let candidate = ledger.points.contains {
+            !entry.baseline.contains($0.id) && $0.challengerId == grant.challengerID
+                && $0.pointType == "CUSTOM" && $0.point == Double(grant.value)
+                && $0.description == grant.reason
         }
+        // The ledger identifies neither the requesting operator nor the client operation.
+        return candidate ? .matchingUnverified : .awaitingLedger
     }
-
 }
 
 struct PointLedgerDTO: Codable, Sendable {

@@ -14,12 +14,14 @@ struct CommunityPostDetailView: View {
     let accountID: String
     let repository: any CommunityPostRepository
     let changed: (Bool) -> Void
+    @State private var showsHeaderTitle = false
     @State private var post: CommunityPost?
     @State private var comments: [CommunityPostComment] = []
     @State private var input = ""
     @State private var reply: CommunityPostComment?
     @State private var failure: String?
-    @State private var awaitingConfirmation = false
+    @State private var pending: CommunityPostIntent?
+    private var awaitingConfirmation: Bool { pending != nil }
     @State private var feedback: String?
     @State private var editing = false
     @State private var removal: Removal?
@@ -39,7 +41,7 @@ struct CommunityPostDetailView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .disabled(busy)
         .overlay { if busy { ProgressView("처리 중") } }
-        .task(id: reload) { await fetch() }
+        .task(id: reload) { restoreComment(); await fetch() }
         .onDisappear { operation?.cancel() }
         .sheet(isPresented: $editing) {
             if let post {
@@ -77,6 +79,9 @@ struct CommunityPostDetailView: View {
                 }
                 if let post {
                     Text(post.title).umcTypography(.title1Bold).textSelection(.enabled)
+                        .onScrollVisibilityChange(threshold: 0.01) { visible in
+                            showsHeaderTitle = !visible
+                        }
                     HStack {
                         if let author = post.author { Text(author) }
                         if let date = post.date { Text(CommunityPostDate.display(date)) }
@@ -133,12 +138,22 @@ struct CommunityPostDetailView: View {
                             .disabled(
                                 input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                     }
-                    if awaitingConfirmation {
-                        Button("댓글 작성 취소") {
-                            awaitingConfirmation = false
-                            input = ""
-                            reply = nil
-                            feedback = nil
+                    if let pending {
+                        Button("확인 마침") {
+                            do {
+                                try repository.discard(pending)
+                                self.pending = nil
+                                input = ""
+                                reply = nil
+                                feedback = nil
+                            } catch { feedback = error.localizedDescription }
+                        }
+                        Button("이전 확인 종료 후 새 댓글로 작성") {
+                            do {
+                                try repository.discard(pending)
+                                self.pending = nil
+                                feedback = nil
+                            } catch { feedback = error.localizedDescription }
                         }
                     }
                     if let feedback { Text(feedback).font(.callout) }
@@ -157,6 +172,9 @@ struct CommunityPostDetailView: View {
                 CommunityPostCategory(rawValue: post.category)?.label ?? post.category
             )
             .foregroundStyle(UMCColor.Semantic.textBrandDefault)
+            if showsHeaderTitle {
+                Text(post.title).font(.body).lineLimit(1).truncationMode(.tail)
+            }
             Spacer()
             if post.authorMemberID == accountID {
                 Menu("게시글 관리", systemImage: "ellipsis.circle") {
@@ -189,7 +207,9 @@ struct CommunityPostDetailView: View {
             guard revision == expected else { return }
             post = current
             comments = values
-            if !awaitingConfirmation, let reply, !values.contains(where: { $0.id == reply.id }) { self.reply = nil }
+            if let reply, let parent = values.first(where: { $0.id == reply.id }) {
+                self.reply = parent
+            }
             failure = nil
         } catch {
             if !Task.isCancelled && revision == expected {
@@ -200,6 +220,20 @@ struct CommunityPostDetailView: View {
         }
     }
 
+    private func restoreComment() {
+        do {
+            guard let intent = try repository.pendingWrite(postID: id),
+                  case let .comment(_, parentID, content) = intent.draft else { return }
+            pending = intent
+            input = content
+            reply = parentID.map { parent in
+                comments.first { $0.id == parent } ?? CommunityPostComment(
+                    id: parent, author: "댓글 번호 " + parent, content: "", isAuthor: false, date: nil)
+            }
+            feedback = "이전에 보낸 댓글의 등록 결과를 확인해 주세요."
+        } catch { feedback = error.localizedDescription }
+    }
+
     private func act(_ action: CommunityPostAction) {
         guard !busy else { return }
         busy = true
@@ -208,6 +242,16 @@ struct CommunityPostDetailView: View {
         operation = Task { @MainActor in
             defer { busy = false }
             do {
+                if case .comment = action, let pending {
+                    feedback = try await repository.check(pending)
+                    await fetch()
+                    return
+                }
+                if case .comment(_, let parentID?) = action,
+                   !comments.contains(where: { $0.id == parentID }) {
+                    feedback = "원댓글을 찾을 수 없어요. 답글을 취소하거나 다른 댓글을 선택해 주세요."
+                    return
+                }
                 let result = try await repository.perform(action, id: id)
                 try Task.checkCancellation()
                 switch action {
@@ -215,7 +259,7 @@ struct CommunityPostDetailView: View {
                     changed(true)
                     return
                 case .comment:
-                    awaitingConfirmation = false
+                    pending = nil
                     input = ""
                     reply = nil
                 case .likeComment: feedback = result == true ? "댓글에 좋아요를 눌렀어요." : "댓글 좋아요를 취소했어요."
@@ -226,7 +270,7 @@ struct CommunityPostDetailView: View {
             } catch {
                 if !Task.isCancelled {
                     if error as? CommunityPostWriteFailure == .unconfirmed {
-                        awaitingConfirmation = true
+                        restoreComment()
                         feedback = error.localizedDescription
                         return
                     }

@@ -16,7 +16,7 @@ final class ThreadConversationModel {
     let accountID: String
     let threadID: String
     private let repository: any ThreadConversationRepository
-    private let store: DraftStore
+    private let store: WindowStore
     private var accessRevoked = false
     private var revision = 0
     private var pages = 1
@@ -39,7 +39,7 @@ final class ThreadConversationModel {
     var text: String {
         get { draft.text }
         set {
-            if draft.text != newValue {
+            if !accessRevoked, draft.text != newValue {
                 retryOperation = nil
                 draft.key = UUID().uuidString.lowercased()
                 draft.text = newValue
@@ -59,9 +59,9 @@ final class ThreadConversationModel {
         self.threadID = threadID
         self.accountID = accountID
         self.repository = repository
-        store = DraftStore.shared(
-            defaults: defaults, key: "community.conversation.\(accountID).\(threadID)")
+        store = WindowStore.shared(defaults: defaults, accountID: accountID, threadID: threadID)
         store.windows.add(self)
+        if store.kickedDetail != nil { revokeAccess(WindowStore.kickError) }
     }
 
     func observe(active: Bool) async {
@@ -136,10 +136,14 @@ final class ThreadConversationModel {
     }
 
     func members(query: String) async throws -> [ThreadManagementPerson] {
-        try await repository.members(thread: threadID, query: query)
+        guard !accessRevoked else { throw CancellationError() }
+        let members = try await repository.members(thread: threadID, query: query)
+        guard !accessRevoked else { throw CancellationError() }
+        return members
     }
 
     func mention(_ person: ThreadManagementPerson) {
+        guard !accessRevoked else { return }
         var selected = draft.mentions ?? [:]
         guard selected.count < 100 else { return }
         selected[person.memberId] = person.name
@@ -149,12 +153,14 @@ final class ThreadConversationModel {
     }
 
     func selectReply(_ id: String?) {
+        guard !accessRevoked else { return }
         retryOperation = nil
         draft.key = UUID().uuidString.lowercased()
         draft.reply = id
     }
 
     func removeFile(_ id: String) {
+        guard !accessRevoked else { return }
         retryOperation = nil
         draft.key = UUID().uuidString.lowercased()
         if let file = draft.files.first(where: { $0.id == id }) { file.discardLocalCopy() }
@@ -162,6 +168,7 @@ final class ThreadConversationModel {
     }
 
     func attach(_ urls: [URL]) {
+        guard !accessRevoked else { return }
         guard !urls.isEmpty, attachments.count + urls.count <= 4 else {
             failure = "사진은 한 번에 네 장까지 첨부할 수 있어요."
             return
@@ -352,14 +359,17 @@ final class ThreadConversationModel {
     }
 
     @MainActor @Observable
-    fileprivate final class DraftStore {
+    final class WindowStore {
+        fileprivate static let kickError = ThreadConversationRejection.denied("이 스레드에서 내보내졌어요.")
+        private(set) var kickedDetail: CommunityThread?
+        private let threadID: String
         // Separate UserDefaults instances can refer to the same persistent suite.
-        private static let stores = NSMapTable<NSString, DraftStore>.strongToWeakObjects()
+        private static let stores = NSMapTable<NSString, WindowStore>.strongToWeakObjects()
         private let defaults: UserDefaults
         private let key: String
-        let windows = NSHashTable<ThreadConversationModel>.weakObjects()
-        var sending = false
-        var draft: Draft {
+        fileprivate let windows = NSHashTable<ThreadConversationModel>.weakObjects()
+        fileprivate var sending = false
+        fileprivate var draft: Draft {
             didSet {
                 if draft.text.isEmpty, draft.reply == nil, draft.files.isEmpty {
                     defaults.removeObject(forKey: key)
@@ -369,7 +379,29 @@ final class ThreadConversationModel {
             }
         }
 
-        static func shared(defaults: UserDefaults, key: String) -> DraftStore {
+        func refreshDetail(
+            using fetch: (String) async throws -> CommunityThread
+        ) async throws -> CommunityThread {
+            let detail = try await fetch(threadID)
+            try Task.checkCancellation()
+            receive(detail)
+            return kickedDetail ?? detail
+        }
+
+        func receive(_ detail: CommunityThread) {
+            guard detail.id == threadID, detail.membershipState == "KICKED",
+                  kickedDetail == nil else { return }
+            kickedDetail = detail
+            for window in windows.allObjects { window.revokeAccess(Self.kickError) }
+            let files = draft.files
+            draft = Draft()
+            files.forEach { $0.discardLocalCopy() }
+        }
+
+        static func shared(
+            defaults: UserDefaults, accountID: String, threadID: String
+        ) -> WindowStore {
+            let key = "community.conversation.\(accountID).\(threadID)"
             let suiteKey = "community.conversation.storageID"
             let suite: String
             if let stored = defaults.string(forKey: suiteKey) {
@@ -380,12 +412,13 @@ final class ThreadConversationModel {
             }
             let identity = (suite + "." + key) as NSString
             if let existing = stores.object(forKey: identity) { return existing }
-            let store = DraftStore(defaults: defaults, key: key)
+            let store = WindowStore(defaults: defaults, key: key, threadID: threadID)
             stores.setObject(store, forKey: identity)
             return store
         }
 
-        private init(defaults: UserDefaults, key: String) {
+        private init(defaults: UserDefaults, key: String, threadID: String) {
+            self.threadID = threadID
             self.defaults = defaults
             self.key = key
             draft = defaults.data(forKey: key).flatMap {
@@ -405,6 +438,7 @@ final class ThreadConversationModel {
         }
 
         func discardLocalCopy() {
+            guard UUID(uuidString: id) != nil else { return }
             try? FileManager.default.removeItem(at: localURL)
         }
     }
