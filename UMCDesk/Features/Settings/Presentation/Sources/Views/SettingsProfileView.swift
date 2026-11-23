@@ -14,12 +14,10 @@ import SwiftUI
 struct SettingsProfileView: View {
     @Environment(\.settingsAppearancePalette) private var palette
     @Environment(\.openWindow) private var openWindow
-    @FocusState private var focus: ProfileFocus?
+    @FocusState private var focusesScroll: Bool
     @State private var position = ScrollPosition()
     @State private var visiblePage = CGRect.zero
-    @State private var supportIsVisible = false
 
-    private enum ProfileFocus { case scroll, support }
     @Bindable var viewModel: SettingsViewModel
     @Environment(\.openURL) private var openURL
 
@@ -48,17 +46,10 @@ struct SettingsProfileView: View {
                             message: AppLocalization.string("이름, 학교, 활동 정보가 다르면 운영진에게 문의해 주세요."),
                             typography: .bodyRegular)
                         Spacer(minLength: 0)
-                        SettingsActionButton(title: AppLocalization.string("문의하기")) {
-                            focus = .support
+                        SettingsProfileSupportButton {
                             openWindow(id: DeskWindow.support)
                         }
-                        .focusable(interactions: .edit)
-                        .focused($focus, equals: .support)
-                        .onScrollVisibilityChange { supportIsVisible = $0 }
-                        .onKeyPress(.return) {
-                            openWindow(id: DeskWindow.support)
-                            return .handled
-                        }
+                        .fixedSize()
                     }
                     .padding(.horizontal, UMCSpacing.value16)
                 }
@@ -77,14 +68,8 @@ struct SettingsProfileView: View {
             visiblePage = rect
         }
         .focusable(interactions: .edit)
-        .focused($focus, equals: .scroll)
-        .defaultFocus($focus, .scroll)
-        .onKeyPress(keys: [.tab]) { press in
-            guard focus == .scroll, press.modifiers.isEmpty, visiblePage.minY > 0,
-                  supportIsVisible else { return .ignored }
-            focus = .support
-            return .handled
-        }
+        .focused($focusesScroll)
+        .defaultFocus($focusesScroll, true)
         .onKeyPress(keys: [.pageDown, .pageUp, .home, .end]) { press in
             guard press.modifiers.subtracting(.numericPad).subtracting(.function).isEmpty
             else { return .ignored }
@@ -795,7 +780,7 @@ private struct SettingsProfileRegistrationButton: NSViewRepresentable {
             nsView.intrinsicContentSize.width, height: 40)
     }
 
-    final class RegistrationButton: NSButton {
+    final class RegistrationButton: SettingsProfileKeyButton {
         var open: (() -> Void)?
         private var isPresentingRegistration = false
 
@@ -820,23 +805,103 @@ private struct SettingsProfileRegistrationButton: NSViewRepresentable {
             }
         }
 
-        override var acceptsFirstResponder: Bool { isEnabled }
-        override var canBecomeKeyView: Bool { isEnabled && !isHiddenOrHasHiddenAncestor }
-
         @objc func openRegistration() {
             guard isEnabled, let window else { return }
             window.makeFirstResponder(self)
             isPresentingRegistration = true
             open?()
         }
+    }
+}
 
-        override func keyDown(with event: NSEvent) {
-            if event.charactersIgnoringModifiers == "\r",
-               event.modifierFlags.intersection([.command, .control, .option, .shift]).isEmpty {
-                performClick(nil)
-            } else {
-                super.keyDown(with: event)
+/// AppKit resolves Tab before a SwiftUI key handler when a native control is in the key loop.
+private struct SettingsProfileSupportButton: NSViewRepresentable {
+    let action: () -> Void
+
+    func makeNSView(context: Context) -> SupportButton {
+        let button = SupportButton()
+        button.bezelStyle = .rounded
+        button.controlSize = .large
+        button.target = button
+        button.action = #selector(SupportButton.openSupport)
+        return button
+    }
+
+    func updateNSView(_ button: SupportButton, context: Context) {
+        button.title = AppLocalization.string("문의하기")
+        button.setAccessibilityLabel(button.title)
+        button.open = action
+    }
+
+    final class SupportButton: SettingsProfileKeyButton {
+        var open: (() -> Void)?
+        private var pageNavigationPending = false
+        private var returnsFromSupport = false
+        private var keyMonitor: Any?
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            if let keyMonitor { NSEvent.removeMonitor(keyMonitor) }
+            keyMonitor = nil
+            pageNavigationPending = false
+            returnsFromSupport = false
+            NotificationCenter.default.removeObserver(self, name: NSWindow.didBecomeKeyNotification,
+                                                      object: nil)
+            guard let window else { return }
+            NotificationCenter.default.addObserver(self, selector: #selector(restoreFocus),
+                name: NSWindow.didBecomeKeyNotification, object: window)
+            keyMonitor = NSEvent.addLocalMonitorForEvents(
+                matching: [.keyDown, .leftMouseDown, .rightMouseDown]
+            ) { [weak self] event in
+                self?.handlesNavigation(event) == true ? nil : event
             }
+        }
+
+        private func handlesNavigation(_ event: NSEvent) -> Bool {
+            guard let window, event.window === window, window.attachedSheet == nil,
+                  event.type == .keyDown else {
+                pageNavigationPending = false
+                return false
+            }
+            let modifiers = event.modifierFlags.intersection([.command, .control, .shift, .option])
+            let key = event.specialKey
+            let followsPageNavigation = pageNavigationPending
+            pageNavigationPending = modifiers.isEmpty && (key == .pageDown || key == .end)
+            guard followsPageNavigation, modifiers.isEmpty, event.characters == "\t",
+                  let scroll = enclosingScrollView, let document = scroll.documentView
+            else { return false }
+            let viewport = scroll.documentVisibleRect
+            guard viewport.minY > document.bounds.minY,
+                  viewport.maxY >= document.bounds.maxY - 1,
+                  visibleRect.intersects(bounds) else { return false }
+            return window.makeFirstResponder(self)
+        }
+
+        @objc func openSupport() {
+            guard let window else { return }
+            window.makeFirstResponder(self)
+            returnsFromSupport = true
+            open?()
+        }
+
+        @objc private func restoreFocus() {
+            guard returnsFromSupport else { return }
+            returnsFromSupport = false
+            window?.makeFirstResponder(self)
+        }
+    }
+}
+
+private class SettingsProfileKeyButton: NSButton {
+    override var acceptsFirstResponder: Bool { isEnabled }
+    override var canBecomeKeyView: Bool { isEnabled && !isHiddenOrHasHiddenAncestor }
+
+    override func keyDown(with event: NSEvent) {
+        if event.charactersIgnoringModifiers == "\r",
+           event.modifierFlags.intersection([.command, .control, .option, .shift]).isEmpty {
+            performClick(nil)
+        } else {
+            super.keyDown(with: event)
         }
     }
 }
