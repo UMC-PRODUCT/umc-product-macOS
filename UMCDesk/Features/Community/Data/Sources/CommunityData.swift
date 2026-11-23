@@ -22,8 +22,35 @@ public struct LiveCommunityThreadRepository: CommunityThreadRepository {
 
     public func thread(id: String) async throws -> CommunityThread {
         try ConversationIdentifier.validate(id)
-        let detail: ThreadResponse = try await request("/" + id)
-        return detail.model
+        let response: Response
+        do {
+            response = try await adapter.request(ThreadTarget(environment: environment,
+                path: "/api/v1/community/threads/" + id, method: .get, task: .requestPlain))
+        } catch NetworkError.requestFailed(let status, let data) {
+            throw Self.detailError(status: status, data: data)
+        }
+        guard (200..<300).contains(response.statusCode) else {
+            throw Self.detailError(status: response.statusCode, data: response.data)
+        }
+        let envelope = try JSONDecoder().decode(APIResponse<ThreadResponse>.self, from: response.data)
+        if !envelope.isSuccess {
+            switch envelope.code {
+            case "COMMUNITY-0037": throw ThreadDetailError.deleted
+            case "COMMUNITY-0034", "COMMUNITY-0033": throw ThreadDetailError.accessDenied
+            default: break
+            }
+        }
+        return try envelope.unwrap().model
+    }
+
+    static func detailError(status: Int, data: Data?) -> any Error {
+        if status == 410, let data,
+           let error = try? JSONDecoder().decode(APIResponse<EmptyResult>.self, from: data),
+           !error.isSuccess, error.code == "COMMUNITY-0037" {
+            return ThreadDetailError.deleted
+        }
+        if status == 403 || status == 404 { return ThreadDetailError.accessDenied }
+        return NetworkError.requestFailed(statusCode: status, data: data)
     }
 
     public func threads(query: String, filter: String, offset: String?) async throws -> ThreadPage<CommunityThread> {
@@ -92,7 +119,8 @@ private struct CreateThread: Encodable {
     let icon: String
 }
 
-private struct ThreadResponse: Codable {
+struct ThreadResponse: Codable {
+    let category: String?
     let threadId: String
     let title: String
     let description: String?
@@ -104,13 +132,15 @@ private struct ThreadResponse: Codable {
     let unreadCount: String
     let myRole: ThreadManagementRole?
     let memberCount: String?
+    let shareUrl: String?
     enum CodingKeys: CodingKey {
-        case threadId, title, description, icon, isPinned, isMuted, isJoined, membershipState
-        case unreadCount, myRole, memberCount
+        case category, threadId, title, description, icon, isPinned, isMuted, isJoined, membershipState
+        case unreadCount, myRole, memberCount, shareUrl
     }
 
     init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
+        category = try values.decodeIfPresent(String.self, forKey: .category)
         threadId = try values.decodeFlexibleString(forKey: .threadId)
         title = try values.decode(String.self, forKey: .title)
         description = try values.decodeIfPresent(String.self, forKey: .description)
@@ -121,11 +151,13 @@ private struct ThreadResponse: Codable {
         membershipState = try values.decodeIfPresent(String.self, forKey: .membershipState)
         myRole = try values.decodeIfPresent(ThreadManagementRole.self, forKey: .myRole)
         memberCount = try values.decodeFlexibleStringIfPresent(forKey: .memberCount)
+        shareUrl = try? values.decode(String.self, forKey: .shareUrl)
         unreadCount = try values.decodeFlexibleString(forKey: .unreadCount)
     }
 
     func encode(to encoder: Encoder) throws {
         var values = encoder.container(keyedBy: CodingKeys.self)
+        try values.encodeIfPresent(category, forKey: .category)
         try values.encode(threadId, forKey: .threadId)
         try values.encode(title, forKey: .title)
         try values.encodeIfPresent(description, forKey: .description)
@@ -136,13 +168,15 @@ private struct ThreadResponse: Codable {
         try values.encodeIfPresent(membershipState, forKey: .membershipState)
         try values.encodeIfPresent(myRole, forKey: .myRole)
         try values.encodeIfPresent(memberCount, forKey: .memberCount)
+        try values.encodeIfPresent(shareUrl, forKey: .shareUrl)
         try values.encode(unreadCount, forKey: .unreadCount)
     }
 
     var model: CommunityThread {
         CommunityThread(id: threadId, title: title, description: description, icon: icon,
             isPinned: isPinned, isMuted: isMuted, isJoined: isJoined, membershipState: membershipState,
-            unread: unreadCount, myRole: myRole, memberCount: memberCount)
+            unread: unreadCount, category: category, myRole: myRole, memberCount: memberCount,
+            shareURL: shareUrl.flatMap { URL(string: $0, encodingInvalidCharacters: false) })
     }
 }
 

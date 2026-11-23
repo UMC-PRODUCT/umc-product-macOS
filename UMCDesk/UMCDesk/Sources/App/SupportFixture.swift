@@ -43,10 +43,10 @@ struct SupportTicket: Identifiable {
 
     mutating func reply(_ input: String, from author: Author) {
         let text = input.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard status != .closed, !text.isEmpty else { return }
+        guard !text.isEmpty, status != .closed || author == .requester else { return }
         guard author == .agent || belongsToCurrentUser else { return }
         replies.append(Reply(author: author, text: text))
-        if author == .agent { status = .active }
+        if author == .agent || status == .closed { status = .active }
     }
 }
 
@@ -94,10 +94,11 @@ final class SupportFixture {
     ]
     var drafts: [SupportDraft]
 
-    init() {
+    init(emptyInquiries: Bool = false) {
         let example = SupportArticle(id: "fixture-attendance", question: "출석 기록이 실제와 다르게 보여요",
                                      answer: "활동 메뉴를 새로고침하고 해당 일정의 출석 상태를 확인해 주세요.")
         drafts = [SupportDraft(article: example, published: example)]
+        if emptyInquiries { tickets.removeAll() }
     }
 
     var myTickets: [SupportTicket] { tickets.filter(\.belongsToCurrentUser) }

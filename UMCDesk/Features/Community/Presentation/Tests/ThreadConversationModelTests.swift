@@ -191,7 +191,14 @@ struct ThreadConversationModelTests {
         #expect(await repository.keys.isEmpty)
     }
 
-    @Test func kickedDetailClearsBothWindowsAndPreservesOtherRoomsAndAccounts() async throws {
+    enum DetailChange: CaseIterable {
+        case kicked, acknowledgedKick, left, denied, deleted
+    }
+
+    @Test(arguments: DetailChange.allCases)
+    func endedDetailClearsBothWindowsAndPreservesOtherRoomsAndAccounts(
+        change: DetailChange
+    ) async throws {
         let repository = ConversationTestRepository()
         let suite = UUID().uuidString
         let defaults = try #require(UserDefaults(suiteName: suite))
@@ -234,9 +241,31 @@ struct ThreadConversationModelTests {
                             isMuted: false, isJoined: state == "ACTIVE", membershipState: state,
                             unread: "0")
         }
-        _ = try await store.refreshDetail { detail($0, "KICKED") }
-        let late = try await store.refreshDetail { detail($0, "ACTIVE") }
-        #expect(late.membershipState == "KICKED")
+        // A transport failure neither cancels the upload nor changes membership.
+        await #expect(throws: URLError.self) {
+            _ = try await store.refreshDetail { _ in throw URLError(.timedOut) }
+        }
+        #expect(store.accessEnd == nil && main.loaded && separate.loaded && separate.canRetry)
+        #expect(!main.attachments.isEmpty)
+        switch change {
+        case .kicked, .left:
+            let state = change == .left ? "LEFT" : "KICKED"
+            _ = try await store.refreshDetail { detail($0, state) }
+            let late = try await store.refreshDetail { detail($0, "ACTIVE") }
+            #expect(late.membershipState == state)
+        case .denied, .deleted, .acknowledgedKick:
+            let failure: ThreadDetailError = change == .deleted ? .deleted : .accessDenied
+            await #expect(throws: ThreadDetailError.self) {
+                _ = try await store.refreshDetail { id in
+                    if change == .acknowledgedKick { return detail(id, "KICKED_ACKNOWLEDGED") }
+                    throw failure
+                }
+            }
+            await #expect(throws: ThreadDetailError.self) {
+                _ = try await store.refreshDetail { detail($0, "ACTIVE") }
+            }
+            #expect(store.accessEnd == (change == .deleted ? .deleted : .denied))
+        }
         try await settle(main)
         for model in [main, separate, open()] {
             model.retry()
@@ -279,6 +308,33 @@ struct ThreadConversationModelTests {
         #expect(keys.count == 2 && Set(keys).count == 1 && model.text.isEmpty)
     }
 
+    @Test func retriesOnlySelectedBubbleAndPreservesNewerDraft() async throws {
+        let repository = ConversationTestRepository()
+        let suite = UUID().uuidString
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let model = ThreadConversationModel(threadID: "71", accountID: "101",
+                                            repository: repository, defaults: defaults)
+        await model.refresh()
+        model.text = "첫 메시지"
+        model.send()
+        let original = try #require(model.outgoing.first?.id)
+        try await settle(model)
+        #expect(model.outgoing.first?.failure != nil)
+        model.text = "다음 메시지"
+        await repository.failNextSend()
+        model.send()
+        try await settle(model)
+        let latest = try #require(model.outgoing.last?.id)
+        #expect(original != latest && model.outgoing.count == 2)
+        model.retryOutgoing(original)
+        model.retryOutgoing(original)
+        try await settle(model)
+        #expect(model.outgoing.map(\.id) == [latest])
+        #expect(model.text == "다음 메시지")
+        #expect(await repository.keys == [original, latest, original])
+    }
+
     private func settle(_ model: ThreadConversationModel) async throws {
         let deadline = ContinuousClock.now + .seconds(2)
         while model.busy && ContinuousClock.now < deadline {
@@ -290,6 +346,8 @@ struct ThreadConversationModelTests {
 
 private actor ConversationTestRepository: ThreadConversationRepository {
     var keys: [String] = []
+    private var failCreate = false
+    func failNextSend() { failCreate = true }
     var uploadCount = 0
     var uploadCancelled = false
     private var messages: [ThreadConversationMessage] = []
@@ -345,7 +403,10 @@ private actor ConversationTestRepository: ThreadConversationRepository {
             }
             return
         }
-        if keys.count == 1 { throw URLError(.timedOut) }
+        if keys.count == 1 || failCreate {
+            failCreate = false
+            throw URLError(.timedOut)
+        }
     }
 
     func observeChanges(thread: String, changed: @escaping @Sendable () async -> Void) async throws

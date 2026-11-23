@@ -21,7 +21,7 @@ public struct LiveThreadManagementRepository: ThreadManagementRepository {
     }
 
     public func detail(threadID: String) async throws -> ThreadManagementDetail {
-        let response: ThreadManagementDetailResponse = try await get(threadPath(threadID))
+        let response: ThreadManagementDetailResponse = try await request(threadPath(threadID))
         return response.model
     }
 
@@ -31,19 +31,49 @@ public struct LiveThreadManagementRepository: ThreadManagementRepository {
         let fields = PeopleQuery(text: query, offset: offset)
         let task = Moya.Task.requestParameters(parameters: fields.parameters,
                                                encoding: URLEncoding.queryString)
-        let response: ThreadManagementPageResponse = try await get(threadPath(threadID) + suffix,
-                                                                   task: task)
+        let response: ThreadManagementPageResponse = try await request(
+            threadPath(threadID) + suffix, task: task)
         return response.model
     }
 
     public func profile(memberID: String) async throws -> ThreadManagementProfile {
-        let response: ThreadManagementProfileResponse = try await get(
+        let response: ThreadManagementProfileResponse = try await request(
             "/api/v1/member/profile/" + identifier(memberID))
         return response.model
     }
 
+    public func report(_ target: ThreadReportTarget, reasons: [ThreadReportReason], detail: String)
+        async throws -> String {
+        let id = try identifier(target.identifier)
+        let body = ReportBody(reasons: reasons, detail: target.isMember ? detail : nil)
+        let path = target.isMember ? "/api/v1/reports/members/" + id
+            : "/api/v1/community/messages/" + id + "/report"
+        let receipt: ReportReceipt = try await request(path, method: .post,
+                                                       task: .requestJSONEncodable(body))
+        _ = try numericID(receipt.reportID)
+        guard (target.isMember ? receipt.memberID : receipt.messageID) == id else {
+            throw URLError(.cannotParseResponse)
+        }
+        return receipt.reportID
+    }
+
+    public func isBlocked(memberID: String) async throws -> Bool {
+        let id = try identifier(memberID)
+        let result: BlockedMembers = try await request("/api/v1/member/blocks")
+        return result.members.contains { $0.memberID == id }
+    }
+
+    public func setBlocked(_ blocked: Bool, memberID: String) async throws {
+        let id = try identifier(memberID)
+        let result: BlockEntry = try await request("/api/v1/member/blocks/" + id,
+                                                   method: blocked ? .post : .delete)
+        guard result.memberID == id, result.isBlocked == blocked else {
+            throw URLError(.cannotParseResponse)
+        }
+    }
+
     public func currentMemberID() async throws -> String {
-        let response: CurrentMember = try await get("/api/v1/member/me")
+        let response: CurrentMember = try await request("/api/v1/member/me")
         return response.id
     }
 
@@ -86,10 +116,11 @@ public struct LiveThreadManagementRepository: ThreadManagementRepository {
             .validateSuccess()
     }
 
-    private func get<T: Codable>(_ path: String, task: Moya.Task = .requestPlain)
+    private func request<T: Codable>(_ path: String, method: Moya.Method = .get,
+                                     task: Moya.Task = .requestPlain)
         async throws -> T {
         let target = ManagementTarget(environment: environment, path: path,
-                                      method: .get, task: task)
+                                      method: method, task: task)
         let response = try await adapter.request(target)
         return try JSONDecoder().decode(APIResponse<T>.self, from: response.data).unwrap()
     }
@@ -143,5 +174,63 @@ private struct CurrentMember: Codable {
     func encode(to encoder: Encoder) throws {
         var values = encoder.container(keyedBy: CodingKeys.self)
         try values.encode(id, forKey: .id)
+    }
+}
+
+private struct ReportBody: Encodable {
+    let reasons: [ThreadReportReason]
+    let detail: String?
+}
+
+private struct ReportReceipt: Codable {
+    let reportID: String
+    let messageID: String?
+    let memberID: String?
+
+    enum CodingKeys: String, CodingKey {
+        case reportID = "reportId"
+        case messageID = "messageId"
+        case memberID = "memberId"
+    }
+    init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        reportID = try values.decodeFlexibleString(forKey: .reportID)
+        messageID = try values.decodeFlexibleStringIfPresent(forKey: .messageID)
+        memberID = try values.decodeFlexibleStringIfPresent(forKey: .memberID)
+    }
+    func encode(to encoder: Encoder) throws {
+        var values = encoder.container(keyedBy: CodingKeys.self)
+        try values.encode(reportID, forKey: .reportID)
+        try values.encodeIfPresent(messageID, forKey: .messageID)
+        try values.encodeIfPresent(memberID, forKey: .memberID)
+    }
+}
+
+private struct BlockEntry: Codable {
+    let memberID: String
+    let isBlocked: Bool?
+    enum CodingKeys: String, CodingKey { case memberID = "memberId", isBlocked }
+    init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        memberID = try values.decodeFlexibleString(forKey: .memberID)
+        isBlocked = try values.decodeIfPresent(Bool.self, forKey: .isBlocked)
+    }
+    func encode(to encoder: Encoder) throws {
+        var values = encoder.container(keyedBy: CodingKeys.self)
+        try values.encode(memberID, forKey: .memberID)
+        try values.encodeIfPresent(isBlocked, forKey: .isBlocked)
+    }
+}
+
+private struct BlockedMembers: Codable {
+    let members: [BlockEntry]
+    enum CodingKeys: CodingKey { case members }
+    init(from decoder: Decoder) throws {
+        members = try decoder.container(keyedBy: CodingKeys.self)
+            .decode([BlockEntry].self, forKey: .members)
+    }
+    func encode(to encoder: Encoder) throws {
+        var values = encoder.container(keyedBy: CodingKeys.self)
+        try values.encode(members, forKey: .members)
     }
 }

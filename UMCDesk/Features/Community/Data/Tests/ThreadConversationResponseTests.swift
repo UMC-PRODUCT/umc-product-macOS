@@ -6,6 +6,7 @@
 //
 
 import CommunityDomain
+import CoreNetwork
 import Foundation
 import Testing
 
@@ -118,4 +119,66 @@ private actor UploadProbe {
         if !started { await withCheckedContinuation { waiting = $0 } }
     }
     func recordCancellation() { cancelled = true }
+}
+
+extension ThreadConversationResponseTests {
+    @Test func validatesReportAndBlockReceiptsAgainstTheRequestedTarget() async throws {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [ModerationReceiptProtocol.self]
+        let session = URLSession(configuration: configuration)
+        defer { session.invalidateAndCancel() }
+        let environment = NetworkEnvironment(
+            baseURL: try #require(URL(string: "https://thread.example.test")))
+        let client = AuthSystemFactory.makeNetworkClient(
+            environment: environment, tokenStore: ModerationTokens(), session: session)
+        let repository = LiveThreadManagementRepository(
+            adapter: .init(networkClient: client), environment: environment)
+        #expect(try await repository.report(.message("7"), reasons: [.spam], detail: "") == "51")
+        #expect(try await repository.report(.member("8"), reasons: [.other], detail: "내용") == "52")
+        await #expect(throws: (any Error).self) {
+            try await repository.report(.message("9"), reasons: [.privacy], detail: "")
+        }
+        #expect(try await repository.isBlocked(memberID: "8"))
+        #expect(try await !repository.isBlocked(memberID: "7"))
+        try await repository.setBlocked(true, memberID: "8")
+        await #expect(throws: (any Error).self) {
+            try await repository.setBlocked(false, memberID: "8")
+        }
+    }
+}
+
+private actor ModerationTokens: TokenStore {
+    func getAccessToken() async -> String? { "synthetic-thread" }
+    func getRefreshToken() async -> String? { nil }
+    func save(accessToken: String, refreshToken: String) async throws {}
+    func clear() async throws {}
+}
+
+private final class ModerationReceiptProtocol: URLProtocol, @unchecked Sendable {
+    override class func canInit(with request: URLRequest) -> Bool { true }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+    override func stopLoading() {}
+
+    override func startLoading() {
+        guard let url = request.url else { return }
+        let result: String
+        switch (request.httpMethod, url.path) {
+        case ("POST", "/api/v1/community/messages/7/report"),
+             ("POST", "/api/v1/community/messages/9/report"):
+            result = #"{"reportId":"51","messageId":"7"}"#
+        case ("POST", "/api/v1/reports/members/8"):
+            result = #"{"reportId":"52","memberId":"8"}"#
+        case ("GET", "/api/v1/member/blocks"):
+            result = #"{"members":[{"memberId":8,"name":"합성 회원"}]}"#
+        case ("POST", "/api/v1/member/blocks/8"), ("DELETE", "/api/v1/member/blocks/8"):
+            result = #"{"memberId":8,"isBlocked":true}"#
+        default:
+            client?.urlProtocol(self, didFailWithError: URLError(.unsupportedURL))
+            return
+        }
+        let response = HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: nil)!
+        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+        client?.urlProtocol(self, didLoad: Data("{\"success\":true,\"result\":\(result)}".utf8))
+        client?.urlProtocolDidFinishLoading(self)
+    }
 }

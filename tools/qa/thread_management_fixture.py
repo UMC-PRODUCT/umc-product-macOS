@@ -252,9 +252,84 @@ def _mutation(room, member_id, old_role=None):
             "memberCount": str(len(room["roles"]))}
 
 
+def safety_route(path):
+    return re.fullmatch(r"/api/v1/(member/blocks(?:/\d+)?|reports/members/\d+"
+                        r"|community/messages/\d+/report)", path)
+
+
+def blocked_ids(server, member):
+    with _LOCK:
+        return set(getattr(server, "thread_blocks", {}).get(member, ()))
+
+
+def save_report(server, actor, target_key, target, body):
+    # Caller holds _LOCK, including when active_membership validates the thread.
+    reasons = body.get("reasons")
+    allowed = ({"SPAM", "ABUSE", "INAPPROPRIATE", "PRIVACY", "ETC"} if target_key == "messageId"
+               else {"HARASSMENT", "IMPERSONATION", "SPAM", "ETC"})
+    if not isinstance(reasons, list) or not reasons or any(
+            not isinstance(r, str) or r not in allowed for r in reasons):
+        return 400, None
+    if target_key == "memberId":
+        detail = body.get("detail")
+        if not isinstance(detail, str) or not detail.strip() or len(detail.encode("utf-16-le")) > 1000:
+            return 400, None
+    if not hasattr(server, "thread_reports"):
+        server.thread_reports = {}
+    key = actor, target_key, target
+    if key in server.thread_reports:
+        return 409, None
+    receipt = {"reportId": str(len(server.thread_reports) + 1), target_key: target,
+               "reasons": list(dict.fromkeys(reasons)), "createdAt": "2026-11-23T12:00:00Z"}
+    if target_key == "messageId":
+        receipt["reason"] = reasons[0]
+    server.thread_reports[key] = receipt
+    return 201, receipt
+
+
+def _safety(server, path, method, actor, body):
+    if method != "GET" and hasattr(server, "control"):
+        try:
+            (server.control / "fail-thread-safety-once").unlink()
+        except FileNotFoundError:
+            pass
+        else:
+            return 503, None
+    if path.startswith("/api/v1/community/messages/") and method == "POST":
+        from thread_conversation_fixture import report_message
+        return report_message(server, actor, path.split("/")[-2], body)
+    with _LOCK:
+        if not hasattr(server, "thread_blocks"):
+            server.thread_blocks = {}
+        blocks = server.thread_blocks.setdefault(actor, set())
+        if path == "/api/v1/member/blocks" and method == "GET":
+            return 200, {"members": [{"memberId": i, "name": _PEOPLE[i][0],
+                                      "blockedAt": "2026-11-23T12:00:00Z"} for i in sorted(blocks)]}
+        target = path.split("/")[-1]
+        if target not in _PEOPLE:
+            return 404, None
+        if target == actor:
+            return 400, None
+        if path.startswith("/api/v1/reports/members/") and method == "POST":
+            return save_report(server, actor, "memberId", target, body)
+        if path.startswith("/api/v1/member/blocks/") and method in ("POST", "DELETE"):
+            block = method == "POST"
+            if (target in blocks) == block:
+                return 409, None
+            if block:
+                blocks.add(target)
+            else:
+                blocks.remove(target)
+            return 200, {"memberId": target, "isBlocked": block}
+        return 405, None
+
+
 def handle_thread_management(handler, identifier, body=None):
     """Call after authentication. Return True if a response was written."""
     url = urlsplit(handler.path)
+    if safety_route(url.path):
+        handler.send_result(*_safety(handler.server, url.path, handler.command, identifier, body or {}))
+        return True
     profile = re.fullmatch(r"/api/v1/member/profile/(\d+)", url.path)
     if profile and handler.command == "GET":
         i = profile[1]

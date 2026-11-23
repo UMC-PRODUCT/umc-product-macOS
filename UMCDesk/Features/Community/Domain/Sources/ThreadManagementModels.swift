@@ -155,11 +155,46 @@ public enum ThreadManagementAction: Sendable {
     case acknowledgeKick
 }
 
+public enum ThreadReportTarget: Sendable {
+    case message(String)
+    case member(String)
+
+    public var identifier: String {
+        switch self {
+        case .message(let id), .member(let id): id
+        }
+    }
+
+    public var isMember: Bool {
+        if case .member = self { return true }
+        return false
+    }
+
+    public var reasons: [ThreadReportReason] {
+        isMember ? [.harassment, .impersonation, .spam, .other]
+            : [.spam, .abuse, .inappropriate, .privacy, .other]
+    }
+}
+
+public enum ThreadReportReason: String, Sendable, Encodable {
+    case spam = "SPAM"
+    case abuse = "ABUSE"
+    case inappropriate = "INAPPROPRIATE"
+    case privacy = "PRIVACY"
+    case harassment = "HARASSMENT"
+    case impersonation = "IMPERSONATION"
+    case other = "ETC"
+}
+
 public protocol ThreadManagementRepository: Sendable {
     func detail(threadID: String) async throws -> ThreadManagementDetail
     func people(threadID: String, invitable: Bool, query: String, offset: String?)
         async throws -> ThreadManagementPage
     func profile(memberID: String) async throws -> ThreadManagementProfile
+    func report(_ target: ThreadReportTarget, reasons: [ThreadReportReason], detail: String)
+        async throws -> String
+    func isBlocked(memberID: String) async throws -> Bool
+    func setBlocked(_ blocked: Bool, memberID: String) async throws
     func currentMemberID() async throws -> String
     func apply(_ action: ThreadManagementAction, threadID: String) async throws
 }

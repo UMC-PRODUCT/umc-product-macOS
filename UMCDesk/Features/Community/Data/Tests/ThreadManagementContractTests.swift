@@ -5,12 +5,38 @@
 //  Created by euijjang97 on 11/23/26.
 //
 
+import CommunityDomain
 import Foundation
 import Testing
 @testable import CommunityData
 
 @Suite("스레드 관리 서버 계약")
 struct ThreadManagementContractTests {
+    @Test func onlyConfirmedDeletionEndsTheThreadAsDeleted() {
+        let deleted = Data(#"{"success":false,"code":"COMMUNITY-0037"}"#.utf8)
+        let wrongCode = Data(#"{"success":false,"code":"COMMUNITY-0033"}"#.utf8)
+        let classify = LiveCommunityThreadRepository.detailError(status:data:)
+        #expect(classify(410, deleted) as? ThreadDetailError == .deleted)
+        #expect(classify(404, wrongCode) as? ThreadDetailError == .accessDenied)
+        #expect(classify(403, nil) as? ThreadDetailError == .accessDenied)
+        #expect(!(classify(410, wrongCode) is ThreadDetailError))
+        #expect(!(classify(503, deleted) is ThreadDetailError))
+    }
+
+    @Test func shareLinkMustComeFromDetailAndIdentifyTheSameThread() throws {
+        let detail: [String: Any] = ["threadId": 42, "title": "합성", "icon": "T",
+            "isPinned": false, "isMuted": false, "isJoined": true, "unreadCount": "0"]
+        let canonical = "https://threads.example.org/community/threads/42"
+        for link in [canonical, "umc://thread/42", canonical + "?token=secret",
+                     "https://threads.example.org/community/threads/43", "", nil] {
+            var fields = detail
+            fields["shareUrl"] = link
+            let input = try JSONSerialization.data(withJSONObject: fields)
+            let model = try JSONDecoder().decode(ThreadResponse.self, from: input).model
+            #expect(model.shareURL?.absoluteString == (link == canonical ? canonical : nil))
+        }
+    }
+
     @Test("참여자와 초대 후보에서 문자열·숫자 식별자와 nullable 필드 지원")
     func memberPage() throws {
         let input = Data("""

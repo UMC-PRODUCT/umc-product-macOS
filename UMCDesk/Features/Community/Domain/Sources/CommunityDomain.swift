@@ -7,10 +7,23 @@
 
 import Foundation
 
+public enum ThreadDetailError: LocalizedError {
+    case accessDenied
+    case deleted
+
+    public var errorDescription: String? {
+        switch self {
+        case .accessDenied: "대화에 접근할 수 없어요."
+        case .deleted: "삭제된 스레드예요"
+        }
+    }
+}
+
 public struct CommunityThread: Identifiable, Equatable, Sendable {
     public let id: String
     public let title: String
     public let description: String?
+    public let category: String?
     public let icon: String
     public let isPinned: Bool
     public let isMuted: Bool
@@ -19,13 +32,15 @@ public struct CommunityThread: Identifiable, Equatable, Sendable {
     public let myRole: ThreadManagementRole?
     public let memberCount: String?
     public let unread: String
+    public let shareURL: URL?
 
     public init(id: String, title: String, description: String?, icon: String,
                 isPinned: Bool, isMuted: Bool, isJoined: Bool, membershipState: String?, unread: String,
-                myRole: ThreadManagementRole? = nil, memberCount: String? = nil) {
+                category: String? = nil, myRole: ThreadManagementRole? = nil, memberCount: String? = nil, shareURL: URL? = nil) {
         self.id = id
         self.title = title
         self.description = description
+        self.category = category
         self.icon = icon
         self.isPinned = isPinned
         self.isMuted = isMuted
@@ -34,6 +49,15 @@ public struct CommunityThread: Identifiable, Equatable, Sendable {
         self.myRole = myRole
         self.memberCount = memberCount
         self.unread = unread
+        if let shareURL, let parts = URLComponents(url: shareURL, resolvingAgainstBaseURL: false),
+           parts.scheme?.lowercased() == "https", let host = parts.host, !host.isEmpty,
+           parts.user == nil, parts.password == nil, parts.query == nil, parts.fragment == nil,
+           let numericID = Int64(id), numericID > 0, String(numericID) == id,
+           parts.percentEncodedPath == "/community/threads/" + id {
+            self.shareURL = shareURL
+        } else {
+            self.shareURL = nil
+        }
     }
 }
 

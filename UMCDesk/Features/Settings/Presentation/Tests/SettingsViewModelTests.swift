@@ -84,7 +84,7 @@ struct SettingsViewModelTests {
         model.linkDraft.github = "https://github.com/edited"
         model.dismissDialog()
         model.editLinks()
-        #expect(model.linkEditorFocus == .github)
+        #expect(model.linkEditorFocus == nil)
         #expect(model.linkDraft.github == "https://github.com/original")
         model.linkDraft.github = "https://github.com/edited"
         await useCase.failNextSave()
@@ -92,6 +92,58 @@ struct SettingsViewModelTests {
         #expect(model.dialog == .editLinks)
         #expect(model.linkDraft.github == "https://github.com/edited")
         #expect(model.profile?.links.github == "https://github.com/original")
+    }
+
+    @Test("The link preview fixtures start with the same account and different editing focus")
+    func linkPreviewFocus() throws {
+        let preferences = SettingsPreferences(defaults: UserDefaults(suiteName:
+            "SettingsLinkPreviewTests.\(UUID().uuidString)")!)
+        let idle = try #require(SettingsDesignPreview.makeViewModel(id: "766:2895",
+            preferences: preferences))
+        let typing = try #require(SettingsDesignPreview.makeViewModel(id: "770:4216",
+            preferences: preferences))
+        #expect(idle.linkDraft == typing.linkDraft)
+        #expect(idle.linkEditorFocus == nil)
+        #expect(typing.linkEditorFocus == .github)
+    }
+
+    @Test("Clearing one link and saving reloads the current account's links")
+    func savedLinksFollowAccount() async {
+        let useCase = ControlledSettingsUseCase()
+        let model = makeModel(useCase: useCase)
+        await model.refreshProfile()
+        model.editLinks()
+        model.linkDraft.github = ""
+        model.linkDraft.blog = "https://example.org/member"
+        await model.saveLinks()
+        #expect(model.dialog == nil)
+        await model.refreshProfile()
+        model.editLinks()
+        #expect(model.linkDraft.github.isEmpty)
+        #expect(model.linkDraft.blog == "https://example.org/member")
+        model.dismissDialog()
+        await useCase.useReplacementProfile()
+        await model.refreshSignedInAccount()
+        model.editLinks()
+        #expect(model.profile?.id == "replacement")
+        #expect(model.linkDraft == SettingsProfileLinks())
+    }
+
+    @Test("The consumed-code error survives editor initialization until the code changes")
+    func unchangedCodePreservesError() async throws {
+        let useCase = ControlledSettingsUseCase()
+        let model = makeModel(useCase: useCase)
+        await model.refreshProfile()
+        model.addPermission()
+        model.challengerCode = "A7B2C9"
+        await useCase.rejectNextCode()
+        await model.submitChallengerCode()
+        let error = try #require(model.dialogMessage)
+        let existingCode = model.challengerCode
+        model.challengerCode = existingCode
+        #expect(model.dialogMessage == error)
+        model.challengerCode = "B7B2C9"
+        #expect(model.dialogMessage == nil)
     }
 
     @Test("Invalid links show a field error before a request can mutate the profile")
@@ -388,6 +440,7 @@ private actor ControlledSettingsUseCase: SettingsUseCase {
         links: SettingsProfileLinks(github: "https://github.com/original"))
     private var fetchFails = false
     private var saveFails = false
+    private var rejectsCode = false
     private var holdsFetch = false
     private var requiresAuthentication = false
     private var continuation: CheckedContinuation<Void, Never>?
@@ -395,6 +448,7 @@ private actor ControlledSettingsUseCase: SettingsUseCase {
 
     func failNextFetch() { fetchFails = true }
     func failNextSave() { saveFails = true }
+    func rejectNextCode() { rejectsCode = true }
     func holdNextFetch() { holdsFetch = true }
     func requireAuthentication() { requiresAuthentication = true }
 
@@ -422,7 +476,13 @@ private actor ControlledSettingsUseCase: SettingsUseCase {
         return profile
     }
 
-    func registerChallenger(code: String) async throws { registeredCodes.append(code) }
+    func registerChallenger(code: String) async throws {
+        if rejectsCode {
+            rejectsCode = false
+            throw TestSettingsFailure.unavailable
+        }
+        registeredCodes.append(code)
+    }
     private var holdsLogout = false
     private var logoutContinuation: CheckedContinuation<Void, Never>?
     func holdLogout() { holdsLogout = true }

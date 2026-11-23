@@ -14,6 +14,11 @@ public enum ThreadManagementDestination: Hashable, Identifiable {
     case profile(memberID: String)
     public var id: Self { self }
 
+    var isProfile: Bool {
+        if case .profile = self { return true }
+        return false
+    }
+
     var title: String {
         switch self {
         case .members: "참여자"
@@ -22,7 +27,7 @@ public enum ThreadManagementDestination: Hashable, Identifiable {
         case .leave: "스레드 나가기"
         case .delete: "스레드 삭제"
         case .acknowledgeKick: "이 스레드에서 내보내졌어요"
-        case .profile: "공개 프로필"
+        case .profile: "회원 프로필"
         }
     }
 }
@@ -55,23 +60,25 @@ public struct ThreadManagementView: View {
 
     public var body: some View {
         VStack(alignment: .leading, spacing: UMCSpacing.value16) {
-            HStack {
-                Text(destination.title).umcTypography(.title1Bold)
-                if destination == .members, let detail {
-                    Text(detail.memberCount + "명").padding(.horizontal, 8)
-                        .background(UMCColor.Semantic.fillNeutralWeak75, in: Capsule())
-                }
-                Spacer()
-                Group {
-                    if destination == .members {
-                        Button("대화로 돌아가기") { dismiss() }
-                    } else {
-                        Button("닫기", systemImage: "xmark") { dismiss() }
-                            .labelStyle(.iconOnly).buttonStyle(.plain)
+            if !destination.isProfile {
+                HStack {
+                    Text(destination.title).umcTypography(.title1Bold)
+                    if destination == .members, let detail {
+                        Text(detail.memberCount + "명").padding(.horizontal, 8)
+                            .background(UMCColor.Semantic.fillNeutralWeak75, in: Capsule())
                     }
+                    Spacer()
+                    Group {
+                        if destination == .members {
+                            Button("대화로 돌아가기") { dismiss() }
+                        } else {
+                            Button("닫기", systemImage: "xmark") { dismiss() }
+                                .labelStyle(.iconOnly).buttonStyle(.plain)
+                        }
+                    }
+                    .keyboardShortcut(.cancelAction)
+                    .disabled(saving)
                 }
-                .keyboardShortcut(.cancelAction)
-                .disabled(saving)
             }
             if let failure {
                 Text(failure).foregroundStyle(UMCColor.Semantic.iconError)

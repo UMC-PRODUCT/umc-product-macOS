@@ -10,12 +10,13 @@ import SwiftUI
 
 struct ThreadSearchField: NSViewRepresentable {
     @Binding var query: String
+    var focusRequest = 0
     let selectResult: () -> Void
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
 
     func makeNSView(context: Context) -> NSSearchField {
-        let field = NSSearchField()
+        let field = ConversationSearchControl()
         field.placeholderString = "스레드 검색"
         field.setAccessibilityLabel("스레드 검색")
         field.delegate = context.coordinator
@@ -25,11 +26,16 @@ struct ThreadSearchField: NSViewRepresentable {
 
     func updateNSView(_ field: NSSearchField, context: Context) {
         context.coordinator.parent = self
+        if context.coordinator.focusRequest != focusRequest {
+            context.coordinator.focusRequest = focusRequest
+            field.selectText(nil)
+        }
         if let editor = field.currentEditor() as? NSTextView, editor.hasMarkedText() { return }
         if field.stringValue != query { field.stringValue = query }
     }
 
     @MainActor final class Coordinator: NSObject, NSSearchFieldDelegate {
+        var focusRequest = 0
         var parent: ThreadSearchField
         init(_ parent: ThreadSearchField) { self.parent = parent }
 
@@ -49,5 +55,17 @@ struct ThreadSearchField: NSViewRepresentable {
             parent.selectResult()
             return true
         }
+    }
+}
+
+private final class ConversationSearchControl: NSSearchField {
+    override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        if event.modifierFlags.intersection([.command, .shift, .option, .control]) == .command,
+           event.charactersIgnoringModifiers?.lowercased() == "f", let window,
+           window.makeFirstResponder(self) {
+            selectText(nil)
+            return true
+        }
+        return super.performKeyEquivalent(with: event)
     }
 }

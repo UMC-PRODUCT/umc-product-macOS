@@ -52,7 +52,7 @@ struct SupportTicketDetail: View {
                         if let id { scroll.scrollTo(id, anchor: .bottom) }
                     }
                 }
-                if ticket.status == .closed {
+                if isOperator && ticket.status == .closed {
                     Label("종료된 문의예요. 이전 대화를 읽을 수 있어요.", systemImage: "lock")
                         .foregroundStyle(.secondary)
                 } else {
@@ -73,6 +73,11 @@ struct SupportTicketDetail: View {
                     .padding(UMCSpacing.value16)
                     .background(UMCColor.Custom.backgroundSurface,
                                 in: .rect(cornerRadius: UMCRadius.value12))
+                    if ticket.status == .closed {
+                        Text("메시지를 보내면 문의가 다시 열려요")
+                            .umcTypography(.footnoteRegular)
+                            .foregroundStyle(.secondary)
+                    }
                 }
             }
             .padding(UMCSpacing.value16)

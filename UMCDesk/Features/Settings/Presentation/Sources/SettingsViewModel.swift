@@ -50,10 +50,14 @@ public final class SettingsViewModel {
     }
     var dialog: SettingsDialog?
     var dialogMessage: String?
-    private(set) var linkEditorFocus: SettingsLinkKind = .github
+    private(set) var linkEditorFocus: SettingsLinkKind?
     var linkDraft = SettingsProfileLinks()
     var linkErrors: [SettingsLinkKind: String] = [:]
-    var challengerCode = "" { didSet { if codeStep == .entry { dialogMessage = nil } } }
+    var challengerCode = "" {
+        didSet {
+            if challengerCode != oldValue, codeStep == .entry { dialogMessage = nil }
+        }
+    }
     var codeStep: SettingsCodeStep = .entry
     var registeredActivities: [SettingsActivity] = []
     var toast: SettingsToast?
@@ -218,7 +222,7 @@ public final class SettingsViewModel {
         }
     }
 
-    func editLinks(focusing kind: SettingsLinkKind = .github) {
+    func editLinks(focusing kind: SettingsLinkKind? = nil) {
         guard let profile, !isAccountBusy else { return }
         linkEditorFocus = kind
         linkDraft = profile.links

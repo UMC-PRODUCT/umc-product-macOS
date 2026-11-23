@@ -58,11 +58,14 @@ private struct DetachedThread: View {
     @Environment(\.dismissWindow) private var dismissWindow
     @State private var thread: CommunityThread?
     @State private var failure: String?
+    @State private var deleted = false
     @State private var reload = 0
 
     var body: some View {
         Group {
-            if let thread {
+            if deleted {
+                DeletedThreadView(actionTitle: "창 닫기") { dismissWindow(value: key) }
+            } else if let thread {
                 ThreadDestination(accountID: key.accountID, thread: thread, detached: true,
                                   repository: repository, conversations: conversations,
                                   management: management, defaults: defaults)
@@ -92,6 +95,8 @@ private struct DetachedThread: View {
                 let store = ThreadConversationModel.WindowStore.shared(
                     defaults: defaults, accountID: key.accountID, threadID: key.threadID)
                 thread = try await store.refreshDetail(using: repository.thread(id:))
+            } catch ThreadDetailError.deleted {
+                if !Task.isCancelled { deleted = true }
             } catch {
                 if !Task.isCancelled {
                     thread = nil
@@ -123,7 +128,9 @@ struct ThreadDestination: View {
     @State private var updated: CommunityThread?
     @State private var mutating = false
     @State private var failure: String?
+    @State private var deleted = false
     @State private var accessFailure: String?
+    @State private var shareDetail: CommunityThread?
     @State private var refresh = 0
 
     private let windowStore: ThreadConversationModel.WindowStore
@@ -141,7 +148,7 @@ struct ThreadDestination: View {
         windowStore = .shared(defaults: defaults, accountID: accountID, threadID: thread.id)
     }
 
-    private var item: CommunityThread { windowStore.kickedDetail ?? updated ?? thread }
+    private var item: CommunityThread { windowStore.endedDetail ?? updated ?? thread }
     private var active: Bool { item.isJoined && item.membershipState == "ACTIVE" }
     private var key: ThreadWindowKey { .init(accountID: accountID, threadID: thread.id) }
 
@@ -161,24 +168,31 @@ struct ThreadDestination: View {
                         openWindow(value: key)
                     }.labelStyle(.iconOnly)
                 }
-                if active && accessFailure == nil {
+                if windowStore.accessEnd == nil, accessFailure == nil, item.membershipState != "KICKED",
+                   item.membershipState != "KICKED_ACKNOWLEDGED", active || shareDetail != nil {
                     Menu("스레드 설정", systemImage: "ellipsis.circle") {
-                        Button("참여자") { destination = .members }
-                        if item.myRole == .owner || item.myRole == .admin {
-                            Button("참여자 초대") { destination = .invite }
-                            Button("스레드 편집") { destination = .edit }
+                        if let shareDetail {
+                            ThreadShareMenu(thread: shareDetail)
+                            if active { Divider() }
                         }
-                        Divider()
-                        Button(item.isPinned ? "고정 해제" : "스레드 고정") {
-                            change(.pin, !item.isPinned)
-                        }
-                        Button(item.isMuted ? "알림 켜기" : "알림 끄기") {
-                            change(.mute, !item.isMuted)
-                        }
-                        Divider()
-                        Button("스레드 나가기") { destination = .leave }
-                        if item.myRole == .owner || item.myRole == .admin {
-                            Button("스레드 삭제", role: .destructive) { destination = .delete }
+                        if active {
+                            Button("참여자") { destination = .members }
+                            if item.myRole == .owner || item.myRole == .admin {
+                                Button("참여자 초대") { destination = .invite }
+                                Button("스레드 편집") { destination = .edit }
+                            }
+                            Divider()
+                            Button(item.isPinned ? "고정 해제" : "스레드 고정") {
+                                change(.pin, !item.isPinned)
+                            }
+                            Button(item.isMuted ? "알림 켜기" : "알림 끄기") {
+                                change(.mute, !item.isMuted)
+                            }
+                            Divider()
+                            Button("스레드 나가기") { destination = .leave }
+                            if item.myRole == .owner || item.myRole == .admin {
+                                Button("스레드 삭제", role: .destructive) { destination = .delete }
+                            }
                         }
                     }.labelStyle(.iconOnly).fixedSize().disabled(mutating)
                 }
@@ -189,12 +203,19 @@ struct ThreadDestination: View {
             if let failure {
                 Text(failure).font(.callout).padding(.horizontal, 16)
             }
-            if item.membershipState == "KICKED" {
+            if item.membershipState == "KICKED",
+               windowStore.accessEnd != .denied, windowStore.accessEnd != .deleted {
                 ContentUnavailableView {
                     Label("이 스레드에서 내보내졌어요", systemImage: "person.crop.circle.badge.minus")
                 } actions: {
                     Button("내보내짐 확인") { destination = .acknowledgeKick }
                 }
+            } else if deleted || windowStore.accessEnd == .deleted {
+                DeletedThreadView(actionTitle: detached ? "창 닫기" : "목록으로 돌아가기") {
+                    broadcast(exit: true)
+                }
+            } else if let end = windowStore.accessEnd {
+                ContentUnavailableView(end.localizedDescription, systemImage: "lock")
             } else if let accessFailure {
                 ContentUnavailableView {
                     Label("대화를 불러올 수 없어요", systemImage: "bubble.left")
@@ -203,7 +224,8 @@ struct ThreadDestination: View {
                 }
             } else {
                 ThreadConversationView(thread: item, accountID: accountID,
-                                       repository: conversations, defaults: defaults)
+                                       repository: conversations, management: management,
+                                       defaults: defaults)
             }
         }
         .frame(minWidth: 0, maxWidth: .infinity, minHeight: 0, maxHeight: .infinity,
@@ -218,16 +240,29 @@ struct ThreadDestination: View {
             windowStore.receive(fresh)
             updated = fresh
         }
-        .onChange(of: windowStore.kickedDetail) { _, kicked in
-            if kicked != nil, destination != .acknowledgeKick { destination = nil }
+        .onChange(of: windowStore.accessEnd) { _, end in
+            guard end != nil else { return }
+            shareDetail = nil
+            if item.membershipState != "KICKED" || destination != .acknowledgeKick {
+                destination = nil
+            }
         }
         .task(id: refresh) {
             while !Task.isCancelled {
                 do {
-                    updated = try await windowStore.refreshDetail(using: repository.thread(id:))
+                    let fresh = try await windowStore.refreshDetail(using: repository.thread(id:))
+                    shareDetail = fresh
+                    updated = fresh
                     accessFailure = nil
+                } catch ThreadDetailError.deleted {
+                    guard !Task.isCancelled else { return }
+                    deleted = true
+                    accessFailure = ThreadDetailError.deleted.localizedDescription
+                    destination = nil
+                    return
                 } catch {
                     if !Task.isCancelled {
+                        shareDetail = nil
                         accessFailure = error.localizedDescription
                         if item.membershipState != "KICKED" { destination = nil }
                     }
@@ -256,5 +291,20 @@ struct ThreadDestination: View {
         if !exit { refresh += 1 }
         NotificationCenter.default.post(name: .threadBrowserChanged, object: key,
                                         userInfo: ["exit": exit])
+    }
+}
+
+private struct DeletedThreadView: View {
+    let actionTitle: String
+    let action: () -> Void
+
+    var body: some View {
+        ContentUnavailableView {
+            Label("삭제된 스레드예요", systemImage: "bubble.left")
+        } description: {
+            Text("이 스레드의 대화를 더 이상 볼 수 없어요.")
+        } actions: {
+            Button(actionTitle, action: action)
+        }
     }
 }

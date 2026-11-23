@@ -34,8 +34,36 @@ struct SupportFlowTests {
         fixture.tickets[index].reply("확인 중", from: .agent)
         #expect(fixture.tickets[index].status == .active)
         fixture.tickets[index].status = .closed
-        fixture.tickets[index].reply("종료 뒤 입력", from: .requester)
+        fixture.tickets[index].reply("종료 뒤 운영자 입력", from: .agent)
         #expect(fixture.tickets[index].replies.map(\.text) == ["확인 중"])
+    }
+
+    @Test func emptyPreviewAcceptsFirstInquiryWithoutOtherUsersData() throws {
+        let fixture = SupportFixture(emptyInquiries: true)
+        #expect(fixture.tickets.isEmpty)
+        #expect(!fixture.publishedArticles.isEmpty)
+        let id = try #require(fixture.create(subject: "첫 문의", content: "내용", team: .product))
+        #expect(fixture.myTickets.map(\.id) == [id])
+        #expect(fixture.myTickets[0].status == .received)
+    }
+
+    @Test func requesterMessageReopensOriginalTicketOnlyAfterSending() throws {
+        let fixture = SupportFixture()
+        let closed = try #require(fixture.myTickets.first { $0.status == .closed })
+        let index = try #require(fixture.tickets.firstIndex { $0.id == closed.id })
+        let count = fixture.tickets.count
+        for blank in ["", "  \n "] {
+            fixture.tickets[index].reply(blank, from: .requester)
+            #expect(fixture.tickets[index].status == .closed)
+            #expect(fixture.tickets[index].replies.count == closed.replies.count)
+        }
+        fixture.tickets[index].reply(" 다시 확인해 주세요 ", from: .requester)
+        let reopened = try #require(fixture.myTickets.first { $0.id == closed.id })
+        #expect(fixture.tickets.count == count)
+        #expect(reopened.status == .active)
+        #expect(reopened.replies.dropLast().map(\.id) == closed.replies.map(\.id))
+        #expect(reopened.replies.last?.author == .requester)
+        #expect(reopened.replies.last?.text == "다시 확인해 주세요")
     }
 
     @Test func myInquiriesExcludeOtherUsersAndKeepReplyAuthors() throws {

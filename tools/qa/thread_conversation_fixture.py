@@ -14,7 +14,7 @@ import threading
 import uuid
 from types import SimpleNamespace
 
-from thread_management_fixture import active_membership, room_access
+from thread_management_fixture import active_membership, room_access, blocked_ids
 
 _lock = threading.Lock()
 
@@ -37,11 +37,12 @@ def _room(state, thread):
     if thread not in state.rooms and thread not in ("101", "102"):
         state.rooms[thread] = []
     if thread not in state.rooms:
-        blocked = _message(2, "9001", "숨겨야 하는 차단 본문")
+        base = 0 if thread == "101" else 100
+        blocked = _message(base + 2, "9001", "숨겨야 하는 차단 본문")
         blocked["isSenderBlocked"] = True
-        deleted = _message(3, "9002", "숨겨야 하는 삭제 본문")
+        deleted = _message(base + 3, "9002", "숨겨야 하는 삭제 본문")
         deleted["deletedAt"] = "2026-11-23T09:01:00Z"
-        state.rooms[thread] = [_message(1, thread, "로컬 계정별 테스트 메시지"), blocked, deleted]
+        state.rooms[thread] = [_message(base + 1, thread, "로컬 계정별 테스트 메시지"), blocked, deleted]
     return state.rooms[thread]
 
 
@@ -51,7 +52,9 @@ def history(server, thread_id, member, before=None, limit=30):
         rows = [row for row in reversed(_room(state, thread_id))
                 if before is None or int(row["messageId"]) < int(before)]
         messages = json.loads(json.dumps(rows[:limit]))
+        blocked = blocked_ids(server, member)
         for row in messages:
+            row["isSenderBlocked"] |= row["senderId"] in blocked
             reactions = state.reactions.get((thread_id, row["messageId"]), {})
             row["reactions"] = [dict(emoji=emoji, count=str(len(people)), reactedByMe=member in people)
                                 for emoji, people in reactions.items()]
@@ -83,7 +86,8 @@ def _apply(server, member, destination, body):
                 return identifier, True
             if len(body["content"]) > 2000 or not (body["content"].strip() or body["fileMetadataIds"]):
                 raise ValueError("INVALID_MESSAGE")
-            identifier = str(int(rows[-1]["messageId"]) + 1 if rows else 1)
+            identifier = str(getattr(server, "thread_message_sequence", 1000) + 1)
+            server.thread_message_sequence = int(identifier)
             row = _message(identifier, member, body["content"])
             if body.get("replyToId"):
                 row["replyTo"] = dict(messageId=str(body["replyToId"]))
@@ -120,6 +124,26 @@ def _apply(server, member, destination, body):
         else:
             raise ValueError("COMMAND_DENIED")
         return message, False
+
+
+def report_message(server, member, message_id, body):
+    from thread_management_fixture import save_report
+    with _lock:
+        state = _state(server)
+        for thread in ("101", "102"):
+            _room(state, thread)
+        for thread, rows in state.rooms.items():
+            row = next((r for r in rows if r["messageId"] == message_id), None)
+            if row is None:
+                continue
+            try:
+                with active_membership(server, thread, member):
+                    if row["senderId"] == member or row["deletedAt"] or row["isSenderBlocked"]:
+                        return 403, None
+                    return save_report(server, member, "messageId", message_id, body)
+            except ValueError:
+                return 403, None
+    return 404, None
 
 
 def _receive(handler):

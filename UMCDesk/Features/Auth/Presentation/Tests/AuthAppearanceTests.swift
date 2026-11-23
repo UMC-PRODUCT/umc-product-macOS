@@ -144,6 +144,46 @@ struct AuthAppearanceTests {
         }
     }
 
+    @Test("Error banner title meets 4.5:1 in standard and increased contrast",
+        arguments: [NSAppearance.Name.aqua, .darkAqua, .accessibilityHighContrastAqua,
+                    .accessibilityHighContrastDarkAqua])
+    func errorBannerTitleContrast(appearanceName: NSAppearance.Name) throws {
+        let appearance = try #require(NSAppearance(named: appearanceName))
+        let host = NSHostingView(rootView: AuthBanner(title: "이미 사용된 챌린저 코드예요.", isError: true)
+            .frame(width: 400))
+        let window = NSWindow(contentRect: CGRect(origin: .zero, size: host.fittingSize),
+            styleMask: .borderless, backing: .buffered, defer: true)
+        window.appearance = appearance
+        window.contentView = host
+        defer { window.contentView = nil }
+        host.layoutSubtreeIfNeeded()
+        let bitmap = try #require(host.bitmapImageRepForCachingDisplay(in: host.bounds))
+        appearance.performAsCurrentDrawingAppearance {
+            host.cacheDisplay(in: host.bounds, to: bitmap)
+        }
+
+        func luminance(x: Int, y: Int) throws -> Double {
+            let color = try #require(bitmap.colorAt(x: x, y: y)?.usingColorSpace(.sRGB))
+            func linear(_ value: Double) -> Double {
+                value <= 0.04045 ? value / 12.92 : pow((value + 0.055) / 1.055, 2.4)
+            }
+            return 0.2126 * linear(color.redComponent) + 0.7152 * linear(color.greenComponent)
+                + 0.0722 * linear(color.blueComponent)
+        }
+
+        // Sample the solid fill on the trailing side and the glyph interiors on the leading side.
+        let background = try luminance(x: bitmap.pixelsWide * 9 / 10, y: bitmap.pixelsHigh / 2)
+        var maximumContrast = 1.0
+        for y in (bitmap.pixelsHigh / 4)..<(bitmap.pixelsHigh * 3 / 4) {
+            for x in (bitmap.pixelsWide / 25)..<(bitmap.pixelsWide / 2) {
+                let ink = try luminance(x: x, y: y)
+                let ratio = (max(ink, background) + 0.05) / (min(ink, background) + 0.05)
+                maximumContrast = max(maximumContrast, ratio)
+            }
+        }
+        #expect(maximumContrast >= 4.5, "\(appearanceName.rawValue): \(maximumContrast)")
+    }
+
     @Test("Status symbols resolve and render centered in both appearances",
         arguments: AuthStatusIcon.allCases, [ColorScheme.light, .dark])
     func statusSymbolsRenderCentered(icon: AuthStatusIcon, scheme: ColorScheme) throws {
