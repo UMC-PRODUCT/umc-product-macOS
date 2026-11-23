@@ -15,6 +15,9 @@ public struct LiveMatchingRepository: MatchingRepository {
     let client: NetworkClient
     private let adapter: MoyaNetworkAdapter
     private let environment: NetworkEnvironment
+    var upload: @Sendable (URLRequest, URL) async throws -> URLResponse = { request, file in
+        try await URLSession.shared.upload(for: request, fromFile: file).1
+    }
     private let projectsPath = "/api/v1/projects"
 
     public init(adapter: MoyaNetworkAdapter, client: NetworkClient, environment: NetworkEnvironment) {
@@ -173,7 +176,7 @@ public struct LiveMatchingRepository: MatchingRepository {
         if let expected = MatchingOperationSession.generation, await client.sessionGeneration != expected {
             throw CancellationError()
         }
-        let (_, response) = try await URLSession.shared.upload(for: request, fromFile: file)
+        let response = try await self.upload(request, file)
         guard let http = response as? HTTPURLResponse, 200..<300 ~= http.statusCode else {
             throw URLError(.badServerResponse)
         }
