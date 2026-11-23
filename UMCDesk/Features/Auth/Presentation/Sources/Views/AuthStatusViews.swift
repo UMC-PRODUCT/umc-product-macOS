@@ -7,6 +7,7 @@
 
 import UMCFoundation
 import CoreDesignSystem
+import CoreRouting
 import SwiftUI
 
 struct AuthStatusPage: View {
@@ -95,7 +96,7 @@ private struct AuthStatusActions: View {
                     viewModel.navigate(to: .sessionChecking)
                 }
                 AuthButton(title: AppLocalization.string("고객센터 문의"), kind: .tertiary) {
-                    showsSupport = true
+                    openWindow(id: DeskWindow.support)
                 }
             case .loginFailure:
                 AuthButton(title: AppLocalization.string("다시 확인")) {
@@ -105,7 +106,7 @@ private struct AuthStatusActions: View {
                     viewModel.navigate(to: .loginSelection)
                 }
                 AuthButton(title: AppLocalization.string("고객센터 문의"), kind: .tertiary) {
-                    showsSupport = true
+                    openWindow(id: DeskWindow.support)
                 }
             case .memberFailure:
                 AuthButton(title: AppLocalization.string("회원 정보 다시 확인")) {
@@ -171,14 +172,10 @@ private struct AuthStatusActions: View {
                 EmptyView()
             }
         }
-        .alert(AppLocalization.string("고객센터 연결 준비 중"), isPresented: $showsSupport) {
-            Button(AppLocalization.string("확인"), role: .cancel) { }
-        } message: {
-            Text(AppLocalization.string("고객센터 연결은 추후 제공될 예정이에요."))
-        }
+
     }
 
-    @State private var showsSupport = false
+    @Environment(\.openWindow) private var openWindow
 }
 
 struct AuthChallengerIntro: View {

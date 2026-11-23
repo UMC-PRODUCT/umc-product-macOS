@@ -176,7 +176,7 @@ struct SettingsSearchResult: Identifiable {
             summary: AppLocalization.string("앱에 사용한 오픈소스 정보를 확인해요.", language: language)),
             .init(
                 id: "contact", page: .about,
-                title: AppLocalization.string("문의하기(카카오톡)", language: language),
-            summary: AppLocalization.string("도움이 필요하거나 의견이 있나요? 준비 중", language: language)),
+                title: AppLocalization.string("고객센터", language: language),
+            summary: AppLocalization.string("도움이 필요하거나 의견이 있나요?", language: language)),
     ] }
 }

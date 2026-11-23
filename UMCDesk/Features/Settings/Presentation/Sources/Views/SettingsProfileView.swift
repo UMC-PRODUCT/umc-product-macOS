@@ -8,10 +8,12 @@
 import UMCFoundation
 import CoreDesignSystem
 import SettingsDomain
+import CoreRouting
 import SwiftUI
 
 struct SettingsProfileView: View {
     @Environment(\.settingsAppearancePalette) private var palette
+    @Environment(\.openWindow) private var openWindow
     @Bindable var viewModel: SettingsViewModel
     @Environment(\.openURL) private var openURL
 
@@ -41,7 +43,7 @@ struct SettingsProfileView: View {
                             typography: .bodyRegular)
                         Spacer(minLength: 0)
                         SettingsActionButton(title: AppLocalization.string("문의하기")) {
-                            viewModel.navigate(to: .about)
+                            openWindow(id: DeskWindow.support)
                         }
                     }
                     .padding(.horizontal, UMCSpacing.value16)

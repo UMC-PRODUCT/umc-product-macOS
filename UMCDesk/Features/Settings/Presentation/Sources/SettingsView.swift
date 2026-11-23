@@ -9,11 +9,13 @@ import UMCFoundation
 import AppKit
 import CoreDesignSystem
 import SettingsDomain
+import CoreRouting
 import SwiftUI
 
 public struct SettingsView: View {
     // MARK: - Property
 
+    @Environment(\.openWindow) private var openWindow
     @State private var viewModel: SettingsViewModel
     @State private var showsSearchSuggestions = false
     @FocusState private var searchFocus: SearchFocus?
@@ -193,7 +195,17 @@ public struct SettingsView: View {
                 railItem(AppLocalization.string("스레드"), symbol: "bubble.left")
                 railItem(AppLocalization.string("프로젝트"), symbol: "square.grid.2x2")
                 railItem(AppLocalization.string("커뮤니티"), symbol: "person.2")
-                railItem(AppLocalization.string("도움말"), symbol: "questionmark.circle")
+                Button { openWindow(id: DeskWindow.support) } label: {
+                    Image(systemName: "questionmark.circle")
+                        .font(.system(size: 16, weight: .medium))
+                        .frame(width: 44, height: 44)
+                        .contentShape(.rect)
+                }
+                .buttonStyle(SettingsPlainButtonStyle())
+                .foregroundStyle(sidebarChromeForeground.opacity(0.75))
+                .accessibilityLabel(AppLocalization.string("도움말"))
+                .modifier(SettingsTooltip(
+                    title: AppLocalization.string("도움말"), isSuppressed: showsProfileMenu))
             }
             Spacer(minLength: UMCSpacing.value24)
             Button { showsProfileMenu.toggle() } label: {

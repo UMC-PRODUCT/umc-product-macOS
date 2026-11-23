@@ -7,10 +7,12 @@
 
 import UMCFoundation
 import CoreDesignSystem
+import CoreRouting
 import SwiftUI
 
 struct SettingsAboutView: View {
     @Environment(\.settingsAppearancePalette) private var palette
+    @Environment(\.openWindow) private var openWindow
     @Bindable var viewModel: SettingsViewModel
     @Environment(\.openURL) private var openURL
 
@@ -87,10 +89,12 @@ struct SettingsAboutView: View {
                         }
                         SettingsDivider()
                         SettingsRow(
-                            title: AppLocalization.string("문의하기(카카오톡)"),
+                            title: AppLocalization.string("고객센터"),
                             description: AppLocalization.string("도움이 필요하거나 의견이 있나요?")
                         ) {
-                            SettingsStatusText(text: AppLocalization.string("준비 중"))
+                            SettingsActionButton(title: AppLocalization.string("열기")) {
+                                openWindow(id: DeskWindow.support)
+                            }
                         }
                     }
                 }

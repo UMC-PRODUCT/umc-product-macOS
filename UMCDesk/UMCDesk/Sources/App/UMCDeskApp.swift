@@ -6,6 +6,7 @@
 //
 
 import UMCFoundation
+import CoreRouting
 import SwiftUI
 import AppKit
 import AuthPresentation
@@ -54,6 +55,17 @@ struct UMCDeskApp: App {
             AuthPreviewCommands()
             #endif
         }
+
+        Window(AppLocalization.string("고객센터"), id: DeskWindow.support) {
+            SupportView()
+                .environment(\.locale, AppLocalization.shared.language.locale)
+                .preferredColorScheme(preferences.theme.colorScheme)
+                .environment(\.umcBodyTextScale, preferences.bodyTextSize.scale)
+                .environment(\.umcFontDesign, preferences.font.design)
+                .environment(\.umcFontFamily, preferences.availableFontFamily)
+        }
+        .defaultSize(width: 980, height: 720)
+        .windowToolbarStyle(.unifiedCompact)
 
         Settings {
             SettingsSceneView(dependencies: dependencies)

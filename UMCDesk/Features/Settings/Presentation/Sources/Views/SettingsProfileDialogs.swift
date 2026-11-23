@@ -8,10 +8,12 @@
 import UMCFoundation
 import CoreDesignSystem
 import SettingsDomain
+import CoreRouting
 import SwiftUI
 
 struct SettingsDialogContent: View {
     @Environment(\.settingsAppearancePalette) private var palette
+    @Environment(\.openWindow) private var openWindow
     let dialog: SettingsDialog
     @Bindable var viewModel: SettingsViewModel
     @FocusState private var focusedLink: SettingsLinkKind?
@@ -220,7 +222,7 @@ struct SettingsDialogContent: View {
                     dialogError
                     Button(AppLocalization.string("담당 운영진에게 문의")) {
                         viewModel.dismissDialog()
-                        viewModel.navigate(to: .about)
+                        openWindow(id: DeskWindow.support)
                     }
                     .buttonStyle(SettingsPlainButtonStyle())
                     .foregroundStyle(palette.textBrandDefault)

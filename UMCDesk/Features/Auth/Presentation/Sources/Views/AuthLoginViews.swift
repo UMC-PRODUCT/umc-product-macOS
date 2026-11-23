@@ -7,6 +7,7 @@
 
 import UMCFoundation
 import CoreDesignSystem
+import CoreRouting
 import SwiftUI
 
 struct AuthLoginSelection: View {
@@ -201,10 +202,10 @@ struct AuthEmailLogin: View {
 
 struct AuthSupportButton: View {
     var isInline = false
-    @State private var showsNotice = false
+    @Environment(\.openWindow) private var openWindow
 
     var body: some View {
-        Button { showsNotice = true } label: {
+        Button { openWindow(id: DeskWindow.support) } label: {
             Text(isInline ? AppLocalization.string("고객센터") : AppLocalization.string("고객센터 문의"))
                 .underline(isInline)
                 .umcTypography(isInline ? .headlineRegular : .title3Regular)
@@ -215,10 +216,6 @@ struct AuthSupportButton: View {
                 .frame(minHeight: isInline ? 20 : 50)
         }
         .buttonStyle(.plain)
-        .alert(AppLocalization.string("고객센터 연결 준비 중"), isPresented: $showsNotice) {
-            Button(AppLocalization.string("확인"), role: .cancel) { }
-        } message: {
-            Text(AppLocalization.string("고객센터 연결은 추후 제공될 예정이에요."))
-        }
+
     }
 }

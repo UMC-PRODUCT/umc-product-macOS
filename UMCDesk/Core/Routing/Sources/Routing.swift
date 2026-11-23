@@ -6,3 +6,7 @@
 //
 
 import Foundation
+
+public enum DeskWindow {
+    public static let support = "support"
+}
