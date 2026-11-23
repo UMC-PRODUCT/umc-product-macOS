@@ -18,7 +18,7 @@ struct SettingsDialogContent: View {
     let dialog: SettingsDialog
     @Bindable var viewModel: SettingsViewModel
     private enum LinkFocus: Hashable {
-        case close, field(SettingsLinkKind), clear(SettingsLinkKind)
+        case field(SettingsLinkKind), clear(SettingsLinkKind)
     }
 
     @FocusState private var linkFocus: LinkFocus?
@@ -40,14 +40,21 @@ struct SettingsDialogContent: View {
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                if dialog != .addPermission {
+                if dialog == .editLinks {
+                    LinkEditorCloseButton(
+                        receivesInitialFocus: viewModel.linkEditorFocus == nil,
+                        focusFirstField: { linkFocus = .field(.github) },
+                        action: viewModel.dismissDialog
+                    )
+                    .frame(width: 32, height: 32)
+                    .disabled(isBusy)
+                } else if dialog != .addPermission {
                     Button(action: viewModel.dismissDialog) {
                         Image(systemName: "xmark")
                             .font(.system(size: 18))
                             .frame(width: 32, height: 32)
                     }
                     .buttonStyle(SettingsPlainButtonStyle())
-                    .focused($linkFocus, equals: .close)
                     .disabled(isBusy)
                     .accessibilityLabel(AppLocalization.string("닫기"))
                 }
@@ -68,12 +75,8 @@ struct SettingsDialogContent: View {
         .background(palette.backgroundDefault)
         .onExitCommand(perform: viewModel.dismissDialog)
         .onAppear {
-            if dialog == .editLinks {
-                if let kind = viewModel.linkEditorFocus {
-                    linkFocus = .field(kind)
-                } else {
-                    linkFocus = .close
-                }
+            if dialog == .editLinks, let kind = viewModel.linkEditorFocus {
+                linkFocus = .field(kind)
             }
             if dialog == .addPermission { focusesCode = true }
         }
@@ -376,6 +379,58 @@ struct SettingsDialogContent: View {
         case .licenses:
             AppLocalization.string("현재 앱의 의존성과 폰트의 원본 라이선스를 확인할 수 있어요.")
         }
+    }
+}
+
+private struct LinkEditorCloseButton: NSViewRepresentable {
+    let receivesInitialFocus: Bool
+    let focusFirstField: () -> Void
+    let action: () -> Void
+
+    func makeNSView(context: Context) -> CloseButton {
+        let button = CloseButton()
+        button.isBordered = false
+        button.imagePosition = .imageOnly
+        button.image = NSImage(systemSymbolName: "xmark", accessibilityDescription: nil)?
+            .withSymbolConfiguration(.init(pointSize: 18, weight: .regular))
+        button.target = button
+        button.action = #selector(CloseButton.closeEditor)
+        return button
+    }
+
+    func updateNSView(_ button: CloseButton, context: Context) {
+        button.receivesInitialFocus = receivesInitialFocus
+        button.focusFirstField = focusFirstField
+        button.onClose = action
+        button.isEnabled = context.environment.isEnabled
+        button.setAccessibilityLabel(AppLocalization.string("닫기"))
+    }
+
+    final class CloseButton: NSButton {
+        var receivesInitialFocus = false
+        var focusFirstField: (() -> Void)?
+        var onClose: (() -> Void)?
+        override var acceptsFirstResponder: Bool { true }
+        override var canBecomeKeyView: Bool { !isHidden && isEnabled }
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            if let window, receivesInitialFocus {
+                window.initialFirstResponder = self
+                window.makeFirstResponder(self)
+            }
+        }
+
+        override func keyDown(with event: NSEvent) {
+            if event.charactersIgnoringModifiers == "\t",
+               event.modifierFlags.intersection([.command, .control, .option, .shift]).isEmpty {
+                focusFirstField?()
+            } else {
+                super.keyDown(with: event)
+            }
+        }
+
+        @objc func closeEditor() { onClose?() }
     }
 }
 
