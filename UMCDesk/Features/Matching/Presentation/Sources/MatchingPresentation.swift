@@ -374,7 +374,8 @@ public struct MatchingView: View {
 
     private func restore(_ target: Location) {
         if target.project != nil { position.scrollTo(edge: .top) }
-        if selectedProject != nil, target.project == nil, target.destination == .explore {
+        if let selectedProject, target.project == nil, target.destination == .explore {
+            explorer.returnProjectId = selectedProject.id
             position.scrollTo(y: explorerY)
         }
         selectedProject = target.project
