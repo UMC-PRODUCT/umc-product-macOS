@@ -97,11 +97,12 @@ public protocol ThreadConversationRepository: Sendable {
 public enum ThreadConversationRejection: LocalizedError {
     case rateLimited
     case denied(String)
+    case commandDenied(String)
 
     public var errorDescription: String? {
         switch self {
         case .rateLimited: "전송 요청이 많아요. 잠시 후 다시 시도해 주세요."
-        case .denied(let reason): reason
+        case .denied(let reason), .commandDenied(let reason): reason
         }
     }
 }

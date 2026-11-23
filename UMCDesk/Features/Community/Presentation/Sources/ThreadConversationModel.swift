@@ -17,6 +17,7 @@ final class ThreadConversationModel {
     let threadID: String
     private let repository: any ThreadConversationRepository
     private let store: DraftStore
+    private var accessRevoked = false
     private var revision = 0
     private var pages = 1
     private var readID: String?
@@ -66,7 +67,7 @@ final class ThreadConversationModel {
     func observe(active: Bool) async {
         let listener = Task { [self] in
             guard active else { return }
-            while !Task.isCancelled {
+            while !Task.isCancelled && !accessRevoked {
                 do {
                     try await repository.observeChanges(thread: threadID) { [weak self] in
                         await self?.refresh()
@@ -76,19 +77,23 @@ final class ThreadConversationModel {
             }
         }
         defer { listener.cancel() }
-        while !Task.isCancelled {
+        while !Task.isCancelled && !accessRevoked {
             await refresh()
             if active, !Task.isCancelled, loaded, let last = messages.last?.id, last != readID {
                 do {
                     try await repository.perform(.read(message: last), thread: threadID)
-                    readID = last
-                } catch { /* Retry the watermark after the next successful history read. */  }
+                    if !accessRevoked { readID = last }
+                } catch {
+                    if !Task.isCancelled { _ = revokeAccessIfNeeded(error) }
+                }
             }
             do { try await Task.sleep(for: .seconds(6)) } catch { return }
         }
     }
 
     func refresh(older: Bool = false) async {
+        // LEFT members may still read history. Only a newly opened membership can restore writes.
+        guard !accessRevoked else { return }
         revision += 1
         let current = revision
         let count = older ? pages + 1 : pages
@@ -290,6 +295,7 @@ final class ThreadConversationModel {
 
     private func revokeAccess(_ error: Error) {
         stop()
+        accessRevoked = true
         messages = []
         summary = nil
         cursor = nil
@@ -332,6 +338,8 @@ final class ThreadConversationModel {
                         try? await Task.sleep(for: .seconds(3))
                         cooldown = false
                     case ThreadConversationRejection.denied:
+                        _ = revokeAccessIfNeeded(error)
+                    case ThreadConversationRejection.commandDenied:
                         canRetry = false
                     case is CancellationError:
                         revokeAccess(error)

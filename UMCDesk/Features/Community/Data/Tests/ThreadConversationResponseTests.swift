@@ -5,6 +5,7 @@
 //  Created by euijjang97 on 11/23/26.
 //
 
+import CommunityDomain
 import Foundation
 import Testing
 
@@ -29,6 +30,24 @@ struct ThreadConversationResponseTests {
                 $0.author.isEmpty && $0.authorID == nil && $0.replyID == nil
                     && $0.isHidden && $0.files.isEmpty && $0.reactions.isEmpty
             })
+    }
+
+    @Test func classifiesCorrelatedCommandErrorsByServerCode() {
+        for code in ["COMMUNITY-0033", "COMMUNITY-0034", "COMMUNITY-0035", "COMMUNITY-0037"] {
+            let error = ConversationSocket.commandError(["code": code, "retryable": false])
+            guard case ThreadConversationRejection.denied = error else {
+                Issue.record("스레드 접근 거절로 분류해야 하는 오류: \(code)")
+                continue
+            }
+        }
+        let command = ConversationSocket.commandError([
+            "status": 403, "code": "COMMUNITY-0040", "retryable": false])
+        guard case ThreadConversationRejection.commandDenied = command else {
+            Issue.record("명령 권한 거절은 멤버십을 유지해야 함")
+            return
+        }
+        #expect(ConversationSocket.commandError(["status": 500, "retryable": true])
+                is ConversationFailure)
     }
 
     @Test func invalidAccountCannotStartSignedTransfer() async {

@@ -141,9 +141,11 @@ struct ThreadConversationModelTests {
         #expect(await repository.keys.isEmpty)
     }
 
-    @Test func membershipDenialInSeparateWindowCancelsMainWindowUpload() async throws {
+    @Test(arguments: [true, false])
+    func membershipDenialInSeparateWindowCancelsMainWindowUpload(socketFirst: Bool) async throws {
         let repository = ConversationTestRepository()
         await repository.pauseUploads()
+        await repository.seedHistory()
         let suite = UUID().uuidString
         let defaults = try #require(UserDefaults(suiteName: suite))
         defer { defaults.removePersistentDomain(forName: suite) }
@@ -166,12 +168,49 @@ struct ThreadConversationModelTests {
             try await Task.sleep(for: .milliseconds(10))
         }
         #expect(await repository.uploadCount == 1)
-        await repository.revoke()
         await separate.refresh()
+        #expect(main.messages.count == 1 && separate.messages.count == 1)
+        if socketFirst {
+            await repository.rejectNextCommand(.denied("참여 권한이 없어요."))
+            separate.perform(.react(message: "1", emoji: "👍", adding: true))
+            try await settle(separate)
+        } else {
+            await repository.revoke()
+            await separate.refresh()
+        }
+        // REST history can succeed after leaving the thread.
+        await main.refresh()
+        await separate.refresh()
+        #expect(main.messages.isEmpty && separate.messages.isEmpty)
+        #expect(!separate.loaded && !separate.canRetry && !separate.canSend)
+        main.retry()
+        main.send()
         try await settle(main)
         #expect(!main.loaded && !main.canRetry)
         #expect(await repository.uploadCancelled)
         #expect(await repository.keys.isEmpty)
+    }
+
+    @Test func commandDenialPreservesMembershipAndAmbiguousSendCanRetry() async throws {
+        let repository = ConversationTestRepository()
+        let suite = UUID().uuidString
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let model = ThreadConversationModel(threadID: "71", accountID: "101",
+                                            repository: repository, defaults: defaults)
+        await model.refresh()
+        model.text = "합성 메시지"
+        await repository.rejectNextCommand(.commandDenied("수정 권한이 없어요."))
+        model.perform(.edit(message: "1", content: "수정"))
+        try await settle(model)
+        #expect(!model.canRetry && model.loaded && model.canSend)
+        model.send()
+        try await settle(model)
+        #expect(model.canRetry && model.loaded && model.text == "합성 메시지")
+        model.retry()
+        try await settle(model)
+        let keys = await repository.keys
+        #expect(keys.count == 2 && Set(keys).count == 1 && model.text.isEmpty)
     }
 
     private func settle(_ model: ThreadConversationModel) async throws {
@@ -187,6 +226,9 @@ private actor ConversationTestRepository: ThreadConversationRepository {
     var keys: [String] = []
     var uploadCount = 0
     var uploadCancelled = false
+    private var messages: [ThreadConversationMessage] = []
+    private var rejection: ThreadConversationRejection?
+    func rejectNextCommand(_ error: ThreadConversationRejection) { rejection = error }
     private var pauseUpload = false
     private var uploadFails = false
     private var denied = false
@@ -194,6 +236,10 @@ private actor ConversationTestRepository: ThreadConversationRepository {
     private var sendStart: CheckedContinuation<Void, Never>?
     private var sendFinish: CheckedContinuation<Void, Never>?
 
+    func seedHistory() {
+        messages = [.init(id: "1", authorID: "101", author: "회원", text: "대화",
+                          createdAt: nil, replyID: nil, files: [], reactions: [], isHidden: false)]
+    }
     func pauseUploads() { pauseUpload = true }
     func failUploads() { uploadFails = true }
     func revoke() { denied = true }
@@ -212,12 +258,16 @@ private actor ConversationTestRepository: ThreadConversationRepository {
         thread: String, before: String?
     ) async throws -> ThreadPage<ThreadConversationMessage> {
         if denied { throw ThreadConversationRejection.denied("참여 권한이 없어요.") }
-        return .init(values: [], cursor: nil)
+        return .init(values: messages, cursor: nil)
     }
 
     func members(thread: String, query: String) async throws -> [ThreadManagementPerson] { [] }
 
     func perform(_ command: ThreadConversationCommand, thread: String) async throws {
+        if let rejection {
+            self.rejection = nil
+            throw rejection
+        }
         guard case .create(let key, _, _, _, _) = command else { return }
         keys.append(key)
         if pause {
