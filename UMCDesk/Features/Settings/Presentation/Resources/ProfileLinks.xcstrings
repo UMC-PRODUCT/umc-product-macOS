@@ -1,0 +1,22 @@
+{
+  "sourceLanguage" : "ko",
+  "strings" : {
+    "profileLinks.description" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Enter links to save to your UMC profile. Blank links will be removed from your profile."
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "UMC 프로필에 저장할 링크를 입력하세요. 비워 둔 링크는 프로필에서 삭제돼요."
+          }
+        }
+      }
+    }
+  },
+  "version" : "1.0"
+}

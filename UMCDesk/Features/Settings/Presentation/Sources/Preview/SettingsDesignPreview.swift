@@ -34,8 +34,8 @@ public enum SettingsDesignPreview {
         model.seedDesignProfile(profile)
         model.showProfile()
         switch normalized {
-        case "766:2895", "770:4216":
-            model.editLinks()
+        case "766:2895": model.editLinks()
+        case "770:4216": model.editLinks(focusing: .github)
         case "770:14893", "771:15573", "771:15714", "771:15995":
             model.addPermission()
             if normalized != "770:14893" { model.challengerCode = "A7B2C9" }
