@@ -7,6 +7,21 @@
 
 import SwiftUI
 
+/// Programmatic keyboard focus for the native control that opens a window.
+@MainActor
+public final class UMCWindowButtonFocus {
+    fileprivate weak var control: NSButton?
+
+    public init() {}
+
+    @discardableResult
+    public func focus() -> Bool {
+        guard let control, control.canBecomeKeyView, let window = control.window
+        else { return false }
+        return window.makeFirstResponder(control)
+    }
+}
+
 /// Opens a window and returns keyboard focus to its caller when the original window is reactivated.
 public struct UMCWindowOpeningButton<Label: View>: View {
     @Environment(\.isEnabled) private var isEnabled
@@ -14,16 +29,19 @@ public struct UMCWindowOpeningButton<Label: View>: View {
     private let title: String
     private let identifier: String?
     private let cornerRadius: CGFloat
+    private let focusTarget: UMCWindowButtonFocus?
     private let action: () -> Void
     private let label: (Bool) -> Label
 
     public init(
         _ title: String, identifier: String? = nil, cornerRadius: CGFloat = 4,
-        action: @escaping () -> Void, @ViewBuilder label: @escaping (Bool) -> Label
+        focusTarget: UMCWindowButtonFocus? = nil, action: @escaping () -> Void,
+        @ViewBuilder label: @escaping (Bool) -> Label
     ) {
         self.title = title
         self.identifier = identifier
         self.cornerRadius = cornerRadius
+        self.focusTarget = focusTarget
         self.action = action
         self.label = label
     }
@@ -34,7 +52,7 @@ public struct UMCWindowOpeningButton<Label: View>: View {
             .allowsHitTesting(false)
             .overlay {
                 WindowButton(title: title, identifier: identifier, cornerRadius: cornerRadius,
-                             isEnabled: isEnabled, action: action)
+                             isEnabled: isEnabled, focusTarget: focusTarget, action: action)
             }
             .onHover { isHovered = $0 }
     }
@@ -45,6 +63,7 @@ private struct WindowButton: NSViewRepresentable {
     let identifier: String?
     let cornerRadius: CGFloat
     let isEnabled: Bool
+    let focusTarget: UMCWindowButtonFocus?
     let action: () -> Void
 
     func makeNSView(context: Context) -> Control {
@@ -58,6 +77,7 @@ private struct WindowButton: NSViewRepresentable {
     }
 
     func updateNSView(_ button: Control, context: Context) {
+        focusTarget?.control = button
         button.open = action
         button.cornerRadius = cornerRadius
         button.isEnabled = isEnabled

@@ -10,6 +10,7 @@ import AppKit
 import CoreDesignSystem
 import SettingsDomain
 import CoreRouting
+import CoreUIComponents
 import SwiftUI
 
 public struct SettingsView: View {
@@ -21,6 +22,8 @@ public struct SettingsView: View {
     private let section: DeskSection?
     private let featureContent: AnyView?
     @State private var showsSearchSuggestions = false
+    @State private var railHelpFocus = UMCWindowButtonFocus()
+    @State private var tabbedPastSearchResults = false
     @FocusState private var searchFocus: SearchFocus?
 
     private enum SearchFocus: Hashable {
@@ -154,8 +157,18 @@ public struct SettingsView: View {
         }
         .defaultFocus($searchFocus, nil)
         .onChange(of: searchFocus) { _, focus in
-            if focus == .field { showsSearchSuggestions = true }
-            else if focus == nil { showsSearchSuggestions = false }
+            if focus == .field {
+                // AppKit wraps back to search when the page has no eligible next key view.
+                let event = NSApp.currentEvent
+                let wrapped = tabbedPastSearchResults && event?.type != .leftMouseDown &&
+                    event?.modifierFlags.contains(.shift) != true
+                tabbedPastSearchResults = false
+                if wrapped, railHelpFocus.focus() {
+                    showsSearchSuggestions = false
+                } else {
+                    showsSearchSuggestions = true
+                }
+            } else if focus == nil { showsSearchSuggestions = false }
         }
         .onChange(of: viewModel.searchText) { _, _ in
             if searchFocus == .field { showsSearchSuggestions = true }
@@ -217,8 +230,7 @@ public struct SettingsView: View {
                         railItem(item.title, symbol: item.symbol)
                     }
                 }
-                railItem(AppLocalization.string("커뮤니티"), symbol: "person.2")
-                SettingsHelpButton(foreground: sidebarChromeForeground) {
+                SettingsHelpButton(foreground: sidebarChromeForeground, focusTarget: railHelpFocus) {
                     openWindow(id: DeskWindow.support)
                 }
                 .modifier(SettingsTooltip(
@@ -630,6 +642,8 @@ public struct SettingsView: View {
         guard positions.indices.contains(next) else {
             if press.key == .tab {
                 showsSearchSuggestions = false
+                if backwards { return railHelpFocus.focus() ? .handled : .ignored }
+                tabbedPastSearchResults = true
                 return .ignored
             }
             return .handled
@@ -639,6 +653,7 @@ public struct SettingsView: View {
     }
 
     private func dismissSearchSuggestions() {
+        tabbedPastSearchResults = false
         showsSearchSuggestions = false
         searchFocus = nil
     }
