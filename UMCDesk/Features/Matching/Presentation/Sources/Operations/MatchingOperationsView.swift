@@ -16,6 +16,10 @@ struct MatchingOperationsView: View {
     let service: any MatchingUseCase
     let gisuId: String
     var chapterId: String?
+    let canCreateOwn: Bool
+    let canChooseOther: Bool
+    let canReadAdjustment: Bool
+    @State private var projectStatusValue: String?
     @State private var projectId: String?
     @State private var keyword = ""
     @State private var search = ""
@@ -25,9 +29,11 @@ struct MatchingOperationsView: View {
 
     var body: some View {
         if section == .statistics {
-            MatchingStatisticsView(service: service, chapterId: chapterId)
+            MatchingStatisticsView(service: service, chapterId: chapterId,
+                                   canReadAdjustment: canReadAdjustment)
+                .id(chapterId)
         } else if let projectId {
-            ProjectOperationsView(service: service, projectId: projectId) {
+            ProjectOperationsView(service: service, projectId: projectId, status: projectStatusValue) {
                 self.projectId = nil
                 revision += 1
             }
@@ -37,8 +43,8 @@ struct MatchingOperationsView: View {
                 HStack {
                     Text("내가 관리하는 프로젝트").umcTypography(.title1Bold)
                     Spacer()
-                    Button("프로젝트 만들기", systemImage: "plus") {
-                        creating = true
+                    if canCreateOwn || canChooseOther {
+                        Button("프로젝트 만들기", systemImage: "plus") { creating = true }
                     }
                 }
                 HStack {
@@ -62,6 +68,7 @@ struct MatchingOperationsView: View {
                             ForEach(result.projects, id: \.id) { project in
                                 Divider()
                                 Button {
+                                    projectStatusValue = project.status
                                     projectId = project.id
                                 } label: {
                                     HStack {
@@ -86,8 +93,10 @@ struct MatchingOperationsView: View {
                 }
             }
             .sheet(isPresented: $creating) {
-                MatchingDraftComposer(service: service, gisuId: gisuId) { id in
+                MatchingDraftComposer(service: service, gisuId: gisuId,
+                                      canCreateOwn: canCreateOwn, canChooseOther: canChooseOther) { id in
                     creating = false
+                    projectStatusValue = "DRAFT"
                     projectId = id
                 }
             }

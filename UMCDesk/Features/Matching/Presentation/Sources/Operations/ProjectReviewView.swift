@@ -192,6 +192,17 @@ struct ProjectTeamView: View {
     @State private var memberStatus = "COMPLETED"
     @State private var reason = ""
 
+    private var canManageRegularMembers: Bool {
+        guard let permission = context.permissions[.unassign] else { return false }
+        // Outside the matching period, the server still distinguishes staff from other members.
+        return permission.allowed
+            || permission.reasonCode == "PROJECT_MANUAL_MATCHING_NOT_ALLOWED_IN_PERIOD"
+    }
+
+    private var canEditTeam: Bool {
+        context.allows(.add) && ["DRAFT", "PENDING_REVIEW", "IN_PROGRESS"].contains(context.status ?? "")
+    }
+
     var body: some View {
         OperationsLoad(key: context.project.id, load: {
             try await context.service.team(projectId: context.project.id)
@@ -213,10 +224,10 @@ struct ProjectTeamView: View {
                 }.matchingPanel()
                 VStack(alignment: .leading, spacing: UMCSpacing.value12) {
                     Text("팀원 관리").umcTypography(.title3Bold)
-                    if context.allows(.add) {
+                    if canEditTeam {
                         TextField("추가할 회원 ID", text: $memberId)
                         Picker("파트", selection: $part) {
-                            ForEach(["PLAN"] + OperationsPart.selectable, id: \.self) {
+                            ForEach(["PLAN"] + (canManageRegularMembers ? OperationsPart.selectable : []), id: \.self) {
                                 Text(MatchingLabel.part($0)).tag($0)
                             }
                         }
@@ -225,7 +236,7 @@ struct ProjectTeamView: View {
                                             .add(memberId: memberId, part: part))
                         }.disabled((Int64(memberId) ?? 0) <= 0)
                     }
-                    if context.allows(.add) {
+                    if canEditTeam {
                         Picker("변경할 상태", selection: $memberStatus) {
                             Text("활동 완료").tag("COMPLETED")
                             Text("자진 이탈").tag("WITHDRAWN")
@@ -233,7 +244,7 @@ struct ProjectTeamView: View {
                         }
                         TextField("상태 변경 사유", text: $reason)
                     }
-                    if !context.allows(.add) && !context.allows(.add) {
+                    if !canEditTeam {
                         Text("팀원 정보를 조회할 수 있어요.").foregroundStyle(.secondary)
                     }
                 }.matchingPanel()
@@ -242,7 +253,8 @@ struct ProjectTeamView: View {
     }
 
     private func row(_ member: OperationsPerson, part: String) -> some View {
-        HStack {
+        let canEditMember = canEditTeam && (part == "보조 PM" || canManageRegularMembers)
+        return HStack {
             Text(member.display)
             MatchingBadge(text: part)
             Spacer()
@@ -253,18 +265,18 @@ struct ProjectTeamView: View {
                                         .transfer(memberId: member.memberId))
                     }
                 }
-                if context.allows(.add) {
+                if canEditMember {
                     Button("팀원 상태 변경") {
                         context.request("팀원 상태를 변경할까요?", member.display + " · " + reason,
                                         .changeStatus(memberId: member.memberId, status: memberStatus, reason: reason))
                     }.disabled(reason.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || reason.count > 255)
                 }
-                if context.allows(.remove) {
+                if canEditMember && context.allows(.remove) {
                     Button("팀원 제거", role: .destructive) {
                         context.request("팀원을 제거할까요?", member.display, .remove(memberId: member.memberId))
                     }
                 }
-            }.disabled(!context.allows(.transfer) && !context.allows(.add) && !context.allows(.remove))
+            }.disabled(!(context.allows(.transfer) && part == "보조 PM") && !canEditMember)
         }
     }
 }

@@ -89,6 +89,9 @@ public struct MatchingView: View {
     @State private var selectedProject: MatchingProject?
     @State private var draftId: String?
     @State private var creating = false
+    @State private var canChooseOtherPM = false
+
+    private var canCreateOwnDraft: Bool { applicantParts.contains("PLAN") }
     @State private var previous: [Location] = []
     @State private var following: [Location] = []
 
@@ -162,7 +165,8 @@ public struct MatchingView: View {
             }
         }
         .sheet(isPresented: $creating) {
-            MatchingDraftComposer(service: repository, gisuId: gisuId) { id in
+            MatchingDraftComposer(service: repository, gisuId: gisuId,
+                                  canCreateOwn: canCreateOwnDraft, canChooseOther: canChooseOtherPM) { id in
                 creating = false
                 go(.init(destination: .management, draftId: id))
             }
@@ -171,6 +175,10 @@ public struct MatchingView: View {
         .foregroundStyle(UMCColor.Semantic.textNeutralDefault)
         .tint(UMCColor.Semantic.textBrandDefault)
         .background(UMCColor.Custom.backgroundDefault)
+        .task(id: gisuId) {
+            let candidates = try? await repository.pmCandidates(gisuId: gisuId, keyword: nil, page: 0)
+            if !Task.isCancelled { canChooseOtherPM = candidates != nil }
+        }
         .task(id: organizationAttempt) {
             await organization.load { try await repository.organization(gisuId: gisuId) }
             guard case .loaded(let value) = organization.phase, chapterId == nil,
@@ -200,7 +208,7 @@ public struct MatchingView: View {
             tab(.status)
             tab(.management)
             Spacer()
-            if selectedProject == nil, destination == .explore {
+            if selectedProject == nil, destination == .explore, canCreateOwnDraft || canChooseOtherPM {
                 Button("프로젝트 만들기") { creating = true }
                     .buttonStyle(MatchingActionStyle(appearance: .primary))
             } else if destination == .applications {
@@ -241,14 +249,16 @@ public struct MatchingView: View {
                 scheduleList
             case .management where draftId != nil:
                 if let draftId {
-                    ProjectOperationsView(service: repository, projectId: draftId) {
+                    ProjectOperationsView(service: repository, projectId: draftId, status: "DRAFT") {
                         navigate(.management)
                     }.id(draftId)
                 }
             case .status, .management:
                 chapterPicker
                 MatchingOperationsView(section: destination == .status ? .statistics : .projects,
-                                       service: repository, gisuId: gisuId, chapterId: chapterId)
+                                       service: repository, gisuId: gisuId, chapterId: chapterId,
+                                       canCreateOwn: canCreateOwnDraft, canChooseOther: canChooseOtherPM,
+                                       canReadAdjustment: chapterId != nil && authorizedChapter == chapterId)
             }
         }
     }
