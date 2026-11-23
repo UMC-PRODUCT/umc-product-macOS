@@ -391,6 +391,57 @@ struct NetworkClientTests {
         #expect(await store.saveCallCount == 1)
     }
 
+    @Test("설정 요청이 끝나기 전 로그아웃하면 기존 REST 요청과 STOMP 토큰 읽기를 즉시 거절한다")
+    func logoutRevokesAccountWhileSettingsRequestDrains() async throws {
+        let store = MockTokenStore(accessToken: "first", refreshToken: "first-refresh")
+        let refresh = MockTokenRefreshService(behavior: .failure(.invalidRefreshToken))
+        let root = makeClient(store: store, refresh: refresh)
+        let first = try await root.boundToCurrentAccount()
+        let generation = await root.sessionGeneration
+        let adapter = MoyaNetworkAdapter(networkClient: root)
+        let (started, signal) = AsyncStream<Void>.makeStream()
+        let release = DispatchSemaphore(value: 0)
+        StubURLProtocol.handler = { _ in
+            signal.yield()
+            guard release.wait(timeout: .now() + 5) == .success else { throw URLError(.timedOut) }
+            return (Data(), 200, nil)
+        }
+        let settings = _Concurrency.Task {
+            defer { signal.finish() }
+            let target = AdapterTarget(query: AdapterQuery(search: "profile"))
+            return try await adapter.request(target, in: generation).statusCode
+        }
+        defer { release.signal() }
+        var arrival = started.makeAsyncIterator()
+        _ = try #require(await arrival.next())
+        let logout = _Concurrency.Task { try await root.logoutReturningRefreshToken() }
+        while await root.sessionGeneration == generation { await _Concurrency.Task.yield() }
+
+        #expect(await store.getAccessToken() == "first")
+        #expect(await first.isLoggedIn() == false)
+        await #expect(throws: CancellationError.self) { _ = try await first.currentAccessToken() }
+        await #expect(throws: CancellationError.self) { _ = try await root.currentAccessToken() }
+        await #expect(throws: CancellationError.self) { _ = try await root.boundToCurrentAccount() }
+        for transport in AccountTransport.allCases {
+            await #expect(throws: CancellationError.self) {
+                _ = try await transport.status(using: first)
+            }
+        }
+        await #expect(throws: CancellationError.self) {
+            try await root.signIn { TokenPair(accessToken: "second", refreshToken: "second-refresh") }
+        }
+        #expect(StubURLProtocol.capturedRequests.count == 1)
+        #expect(await store.clearCallCount == 0)
+
+        release.signal()
+        #expect(try await settings.value == 200)
+        #expect(try await logout.value == "first-refresh")
+        try await root.signIn { TokenPair(accessToken: "second", refreshToken: "second-refresh") }
+        await #expect(throws: CancellationError.self) { _ = try await first.currentAccessToken() }
+        let second = try await root.boundToCurrentAccount()
+        #expect(try await second.currentAccessToken() == "second")
+    }
+
     @Test("만료된 클라이언트는 새 계정에 재바인딩하거나 자격 증명을 갱신·삭제할 수 없다")
     func expiredAccountCannotRebind() async throws {
         let store = MockTokenStore(accessToken: "first", refreshToken: "first-refresh")
