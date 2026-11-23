@@ -30,6 +30,45 @@ struct CommunityPostDetailView: View {
     @FocusState private var commenting: Bool
 
     var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            if let post {
+                header(post).padding([.horizontal, .top], UMCSpacing.value24)
+            }
+            detailScroll
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .disabled(busy)
+        .overlay { if busy { ProgressView("처리 중") } }
+        .task(id: reload) { await fetch() }
+        .onDisappear { operation?.cancel() }
+        .sheet(isPresented: $editing) {
+            if let post {
+                CommunityPostEditor(existing: post, repository: repository) { updated in
+                    self.post = updated
+                    editing = false
+                    changed(false)
+                    reload += 1
+                }
+            }
+        }
+        .confirmationDialog(
+            "삭제할까요?",
+            isPresented: Binding(
+                get: { removal != nil },
+                set: { if !$0 { removal = nil } }), presenting: removal
+        ) { target in
+            Button("삭제", role: .destructive) {
+                switch target {
+                case .post: act(.delete)
+                case .comment(let id): act(.deleteComment(id))
+                }
+            }
+        } message: { _ in
+            Text("삭제한 내용은 복구할 수 없어요.")
+        }
+    }
+
+    private var detailScroll: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: UMCSpacing.value16) {
                 if let failure {
@@ -37,19 +76,6 @@ struct CommunityPostDetailView: View {
                     Button("상세 다시 불러오기") { reload += 1 }
                 }
                 if let post {
-                    HStack {
-                        Text(
-                            CommunityPostCategory(rawValue: post.category)?.label ?? post.category
-                        )
-                        .foregroundStyle(UMCColor.Semantic.textBrandDefault)
-                        Spacer()
-                        if post.authorMemberID == accountID {
-                            Menu("게시글 관리", systemImage: "ellipsis.circle") {
-                                Button("수정") { editing = true }
-                                Button("삭제", role: .destructive) { removal = .post }
-                            }.fixedSize()
-                        }
-                    }
                     Text(post.title).umcTypography(.title1Bold).textSelection(.enabled)
                     HStack {
                         if let author = post.author { Text(author) }
@@ -123,34 +149,21 @@ struct CommunityPostDetailView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(UMCSpacing.value24)
         }
-        .disabled(busy)
-        .overlay { if busy { ProgressView("처리 중") } }
-        .task(id: reload) { await fetch() }
-        .onDisappear { operation?.cancel() }
-        .sheet(isPresented: $editing) {
-            if let post {
-                CommunityPostEditor(existing: post, repository: repository) { updated in
-                    self.post = updated
-                    editing = false
-                    changed(false)
-                    reload += 1
-                }
+    }
+
+    private func header(_ post: CommunityPost) -> some View {
+        HStack {
+            Text(
+                CommunityPostCategory(rawValue: post.category)?.label ?? post.category
+            )
+            .foregroundStyle(UMCColor.Semantic.textBrandDefault)
+            Spacer()
+            if post.authorMemberID == accountID {
+                Menu("게시글 관리", systemImage: "ellipsis.circle") {
+                    Button("수정") { editing = true }
+                    Button("삭제", role: .destructive) { removal = .post }
+                }.fixedSize()
             }
-        }
-        .confirmationDialog(
-            "삭제할까요?",
-            isPresented: Binding(
-                get: { removal != nil },
-                set: { if !$0 { removal = nil } }), presenting: removal
-        ) { target in
-            Button("삭제", role: .destructive) {
-                switch target {
-                case .post: act(.delete)
-                case .comment(let id): act(.deleteComment(id))
-                }
-            }
-        } message: { _ in
-            Text("삭제한 내용은 복구할 수 없어요.")
         }
     }
 

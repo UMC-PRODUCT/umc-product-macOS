@@ -115,13 +115,13 @@ private struct Board: View {
                     if deleted { self.selected = nil }
                     reload += 1
                 }.id(selected)
+                    .onExitCommand { resultsFocused = true }
             } else {
                 ContentUnavailableView("게시글을 선택하세요", systemImage: "text.bubble")
                     .frame(minWidth: 0, maxWidth: .infinity, minHeight: 0, maxHeight: .infinity)
             }
         }
-        .frame(minWidth: 0, maxWidth: .infinity, minHeight: 0, maxHeight: .infinity,
-               alignment: .topLeading)
+        .communitySplitContent()
         .background(UMCColor.Custom.backgroundDefault)
         .task(id: version) {
             if loadedRequest != request {
@@ -131,7 +131,7 @@ private struct Board: View {
             }
             await load(page: "0")
         }
-        .sheet(isPresented: $creating, onDismiss: { reload += 1 }) {
+        .sheet(isPresented: $creating, onDismiss: { resultsFocused = true }) {
             CommunityPostEditor(existing: nil, repository: repository) { created in
                 query = ""
                 scope = .all
@@ -140,6 +140,7 @@ private struct Board: View {
                 rows.insert(created, at: 0)
                 selected = created.id
                 creating = false
+                reload += 1
             }
         }
     }
