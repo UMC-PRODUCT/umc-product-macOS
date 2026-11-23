@@ -20,6 +20,8 @@ public struct SettingsView: View {
     private let onOpenSettingsPage: (() -> Void)?
     private let matchingContent: AnyView?
     @State private var viewModel: SettingsViewModel
+    private let threadContent: (() -> AnyView)?
+    @State private var showsThreads = false
     @State private var showsSearchSuggestions = false
     @FocusState private var searchFocus: SearchFocus?
 
@@ -70,11 +72,13 @@ public struct SettingsView: View {
 
     public init(
         viewModel: SettingsViewModel, onOpenMatching: (() -> Void)? = nil,
-        onOpenSettingsPage: (() -> Void)? = nil, matchingContent: AnyView? = nil
+        onOpenSettingsPage: (() -> Void)? = nil, matchingContent: AnyView? = nil,
+        threadContent: (() -> AnyView)? = nil
     ) {
         self.onOpenMatching = onOpenMatching
         self.onOpenSettingsPage = onOpenSettingsPage
         self.matchingContent = matchingContent
+        self.threadContent = threadContent
         _viewModel = State(initialValue: viewModel)
     }
 
@@ -88,7 +92,7 @@ public struct SettingsView: View {
                 .zIndex(1)
                 .simultaneousGesture(TapGesture().onEnded { dismissSearchSuggestions() })
             HStack(spacing: 0) {
-                if matchingContent == nil, viewModel.page != .myPage {
+                if matchingContent == nil, !showsThreads, viewModel.page != .myPage {
                     settingsSidebar
                         .foregroundStyle(sidebarPalette.textNeutralDefault)
                         .tint(sidebarPalette.textBrandDefault)
@@ -102,6 +106,7 @@ public struct SettingsView: View {
                 }
                 Group {
                     if let matchingContent { matchingContent }
+                    else if showsThreads, let threadContent { threadContent() }
                     else { pageContent }
                 }
                     .environment(\.settingsAppearancePalette, palette)
@@ -168,7 +173,8 @@ public struct SettingsView: View {
                 accessibleProfileMenuFocus = .trigger
             }
         }
-        .toolbar { if matchingContent == nil { navigationToolbar } }
+        .toolbar { if !showsThreads && matchingContent == nil { navigationToolbar } }
+        .onChange(of: viewModel.profile?.id) { showsThreads = false }
         .toolbarBackground(UMCColor.Custom.backgroundAppShell, for: .windowToolbar)
         .toolbarBackgroundVisibility(.visible, for: .windowToolbar)
         .toolbarColorScheme(.dark, for: .windowToolbar)
@@ -204,10 +210,25 @@ public struct SettingsView: View {
                 railItem(AppLocalization.string("홈"), symbol: "house")
                 railItem(AppLocalization.string("공지"), symbol: "megaphone")
                 railItem(AppLocalization.string("활동"), symbol: "calendar.badge.checkmark")
-                railItem(AppLocalization.string("스레드"), symbol: "bubble.left")
+                if threadContent != nil {
+                    Button {
+                        if viewModel.profile == nil { viewModel.onOpenLogin?() }
+                        else { onOpenSettingsPage?(); showsThreads = true }
+                    } label: {
+                        Image(systemName: "bubble.left")
+                            .frame(width: 44, height: 44)
+                            .contentShape(.rect)
+                    }
+                    .buttonStyle(SettingsPlainButtonStyle())
+                    .foregroundStyle(sidebarChromeForeground)
+                    .accessibilityLabel("스레드")
+                    .help("스레드")
+                } else {
+                    railItem(AppLocalization.string("스레드"), symbol: "bubble.left")
+                }
                 railItem(AppLocalization.string("프로젝트"), symbol: "square.grid.2x2")
                 if let onOpenMatching {
-                    Button(action: onOpenMatching) {
+                    Button(action: { showsThreads = false; onOpenMatching() }) {
                         Image(systemName: "person.2")
                             .frame(width: 44, height: 44)
                             .contentShape(.rect)
@@ -295,12 +316,14 @@ public struct SettingsView: View {
                     AppLocalization.string("마이페이지"), symbol: "person.crop.circle", focus: .myPage
                 ) {
                     onOpenSettingsPage?()
+                    showsThreads = false
                     viewModel.showProfile()
                 }
                 profileMenuButton(
                     AppLocalization.string("설정"), symbol: "gearshape", focus: .settings
                 ) {
                     onOpenSettingsPage?()
+                    showsThreads = false
                     viewModel.showSettings()
                 }
             }

@@ -138,12 +138,13 @@ public final class SettingsViewModel {
 
     public func refreshSignedInAccount() async {
         clearAccount()
+        isLoggingOut = false
         await refreshProfile(showsToast: false)
     }
 
     public func invalidateAccount() async {
-        guard !isLoggingOut else { return }
         clearAccount()
+        isLoggingOut = false
         await systemActions.clearAccountNotifications()
     }
 
@@ -320,7 +321,7 @@ public final class SettingsViewModel {
         isLoggingOut = true
         isRefreshing = false
         dialogMessage = nil
-        defer { isLoggingOut = false }
+        defer { if accountGeneration == generation { isLoggingOut = false } }
         do {
             try await useCase.logout()
             guard generation == accountGeneration else { return }
@@ -461,8 +462,10 @@ public final class SettingsViewModel {
 
     private func finishLogout() async {
         clearAccount()
+        isLoggingOut = false
+        let generation = accountGeneration
         await systemActions.clearAccountNotifications()
-        onLogout?()
+        if generation == accountGeneration { onLogout?() }
     }
 
     private func clearAccount() {

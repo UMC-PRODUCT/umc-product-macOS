@@ -150,6 +150,22 @@ struct SettingsViewModelTests {
         #expect(system.didClearNotifications)
     }
 
+    @Test("A replacement account loads while the old server revoke is pending")
+    func slowRevokeKeepsReplacementAccount() async {
+        let useCase = ControlledSettingsUseCase()
+        let model = makeModel(useCase: useCase)
+        await model.load()
+        await useCase.holdLogout()
+        let logout = Task { await model.logout() }
+        await useCase.waitForHeldLogout()
+        await useCase.useReplacementProfile()
+        await model.refreshSignedInAccount()
+        #expect(model.profile?.id == "replacement")
+        await useCase.releaseLogout()
+        await logout.value
+        #expect(model.profile?.id == "replacement")
+    }
+
     @Test("Navigation moves through real history and truncates forward history")
     func navigationHistory() {
         let model = makeModel(useCase: ControlledSettingsUseCase())
@@ -407,7 +423,15 @@ private actor ControlledSettingsUseCase: SettingsUseCase {
     }
 
     func registerChallenger(code: String) async throws { registeredCodes.append(code) }
-    func logout() async throws {}
+    private var holdsLogout = false
+    private var logoutContinuation: CheckedContinuation<Void, Never>?
+    func holdLogout() { holdsLogout = true }
+    func waitForHeldLogout() async { while logoutContinuation == nil { await Task.yield() } }
+    func releaseLogout() { logoutContinuation?.resume(); logoutContinuation = nil }
+    func useReplacementProfile() { profile = .init(id: "replacement", name: "B", nickname: "B") }
+    func logout() async throws {
+        if holdsLogout { await withCheckedContinuation { logoutContinuation = $0 } }
+    }
 }
 
 @MainActor

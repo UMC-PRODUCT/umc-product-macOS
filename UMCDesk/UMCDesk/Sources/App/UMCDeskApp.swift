@@ -9,6 +9,7 @@ import UMCFoundation
 import CoreRouting
 import SwiftUI
 import AppKit
+import CommunityPresentation
 import AuthPresentation
 import CoreDesignSystem
 import CoreUIComponents
@@ -31,7 +32,7 @@ struct UMCDeskApp: App {
         @Bindable var previewPreferences = dependencies.previewSettingsViewModel.preferences
         #endif
 
-        WindowGroup("UMC Desk", id: "main") {
+        Window("UMC Desk", id: "main") {
             AppRootView(dependencies: dependencies)
                 .toggleStyle(UMCCheckboxStyle())
                 .environment(\.locale, AppLocalization.shared.language.locale)
@@ -127,6 +128,7 @@ struct UMCDeskApp: App {
 }
 
 private struct AppRootView: View {
+    @Environment(\.scenePhase) private var scenePhase
     let dependencies: AppDependencies
     @Environment(\.openWindow) private var openWindow
 
@@ -164,6 +166,9 @@ private struct AppRootView: View {
                 NSApplication.shared.activate()
             }
         }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active { Task { await dependencies.restoreSession() } }
+        }
         .onChange(of: dependencies.verifiedMatchingMemberId) { old, current in
             if old != nil { dependencies.navigation.matchingDestination = nil }
             if current != nil, let pending = dependencies.navigation.pendingMatching {
@@ -189,7 +194,7 @@ private struct AppRootView: View {
                     )
                     .id(dependencies.navigation.matchingNavigationID)
                     .id(dependencies.settingsViewModel.profile?.id))
-                }
+                }, threadContent: { AnyView(CommunityThreadsView(repository: dependencies.communityRepository)) }
             )
         } else {
             AuthView(login: dependencies.login)

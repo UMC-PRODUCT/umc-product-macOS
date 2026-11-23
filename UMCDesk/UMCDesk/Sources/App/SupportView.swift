@@ -12,37 +12,28 @@ import UMCFoundation
 struct SupportView: View {
     private enum Page { case answers, inquiries }
     @State private var page = Page.answers
-    @State private var search = ""
-    @State private var selection: Topic?
 
-    private enum Topic: String, Identifiable, CaseIterable {
-        case profile, language, settings
-        var id: Self { self }
+    #if DEBUG
+    @State private var fixture: SupportFixture?
 
-        var question: String {
-            switch self {
-            case .profile: AppLocalization.string("프로필 링크는 어디에서 바꾸나요?")
-            case .language: AppLocalization.string("앱 언어는 어떻게 바꾸나요?")
-            case .settings: AppLocalization.string("설정 창은 어떻게 열고 닫나요?")
-            }
-        }
-
-        var answer: String {
-            switch self {
-            case .profile:
-                AppLocalization.string("마이페이지의 프로필 링크에서 편집을 선택하세요.")
-            case .language:
-                AppLocalization.string("설정의 모양에서 앱 언어를 선택하세요.")
-            case .settings:
-                AppLocalization.string("Command와 쉼표를 함께 누르면 설정이 열려요. Command와 W를 누르면 현재 창이 닫혀요.")
-            }
-        }
+    init(designPreview: Bool = ProcessInfo.processInfo.arguments.contains("--support-preview")) {
+        _fixture = State(initialValue: designPreview ? SupportFixture() : nil)
     }
+    #else
+    init() {}
+    #endif
 
     var body: some View {
         VStack(alignment: .leading, spacing: UMCSpacing.value20) {
-            Text(AppLocalization.string("고객센터")).umcTypography(.largeTitle3Bold)
+            Text(AppLocalization.string("고객센터"))
+                .umcTypography(.largeTitle3Bold)
                 .accessibilityAddTraits(.isHeader)
+            #if DEBUG
+            if fixture != nil {
+                Label("로컬 디자인 프리뷰 · 모든 변경은 이 창에서만 볼 수 있어요.", systemImage: "hammer")
+                    .foregroundStyle(.secondary)
+            }
+            #endif
             Picker(AppLocalization.string("고객센터"), selection: $page) {
                 Text(AppLocalization.string("많이 묻는 질문")).tag(Page.answers)
                 Text(AppLocalization.string("내 문의")).tag(Page.inquiries)
@@ -50,62 +41,145 @@ struct SupportView: View {
             .pickerStyle(.segmented)
             .labelsHidden()
             .frame(maxWidth: 300)
-            if page == .answers {
-                answers
-            } else {
-                ContentUnavailableView {
-                    Label(AppLocalization.string("문의 접수 준비 중"), systemImage: "bubble.left")
-                } description: {
-                    Text(AppLocalization.string("앱에서 문의를 보내거나 답변을 조회하는 기능을 준비하고 있어요."))
-                } actions: {
-                    Button(AppLocalization.string("답변 찾아보기")) { page = .answers }
-                }
+            switch page {
+            case .answers:
+                SupportAnswersView(articles: articles)
+            case .inquiries:
+                inquiries
             }
         }
         .padding(UMCSpacing.value32)
-        .frame(minWidth: 560, minHeight: 420, alignment: .topLeading)
+        .frame(minWidth: 560, maxWidth: .infinity, minHeight: 420, maxHeight: .infinity,
+               alignment: .topLeading)
         .background(UMCColor.Custom.backgroundDefault)
-        .onChange(of: page) { selection = nil }
     }
 
-    @ViewBuilder private var answers: some View {
-        if let selection {
-            Button { self.selection = nil } label: {
+    private var articles: [SupportArticle] {
+        #if DEBUG
+        if let fixture { return fixture.publishedArticles + SupportArticle.appGuide }
+        #endif
+        return SupportArticle.appGuide
+    }
+
+    @ViewBuilder private var inquiries: some View {
+        #if DEBUG
+        if let fixture {
+            SupportInquiryPreview(fixture: fixture)
+        } else {
+            serviceStatus
+        }
+        #else
+        serviceStatus
+        #endif
+    }
+
+    private var serviceStatus: some View {
+        ContentUnavailableView {
+            Label(AppLocalization.string("문의 접수 준비 중"), systemImage: "bubble.left")
+        } description: {
+            Text(AppLocalization.string("앱에서 문의를 보내거나 답변을 조회하는 기능을 준비하고 있어요."))
+        } actions: {
+            Button(AppLocalization.string("답변 찾아보기")) { page = .answers }
+        }
+    }
+}
+
+private struct SupportAnswersView: View {
+    private enum Focus { case search, table, back }
+    let articles: [SupportArticle]
+    @State private var search = ""
+    @State private var selectedID: String?
+    @State private var detail: SupportArticle?
+    @FocusState private var focus: Focus?
+
+    private var matches: [SupportArticle] { articles.filter { $0.matches(search) } }
+
+    var body: some View {
+        if let detail {
+            Button { self.detail = nil } label: {
                 Label(AppLocalization.string("목록으로"), systemImage: "chevron.left")
             }
+            .focused($focus, equals: .back)
+            .keyboardShortcut(.cancelAction)
+            .onAppear { focus = .back }
             ScrollView {
                 VStack(alignment: .leading, spacing: UMCSpacing.value16) {
-                    Text(selection.question).umcTypography(.title2Bold)
+                    Text(detail.question).umcTypography(.title2Bold)
                         .accessibilityAddTraits(.isHeader)
-                    Text(selection.answer).umcTypography(.bodyRegular)
-                        .textSelection(.enabled)
+                    Text(detail.answer).umcTypography(.bodyRegular).textSelection(.enabled)
                 }
+                .padding(UMCSpacing.value24)
                 .frame(maxWidth: .infinity, alignment: .leading)
+                .background(
+                    UMCColor.Custom.backgroundSurface, in: .rect(cornerRadius: UMCRadius.value12)
+                )
             }
         } else {
             TextField(AppLocalization.string("궁금한 내용을 검색하세요"), text: $search)
                 .textFieldStyle(.roundedBorder)
-            let matches = Topic.allCases.filter { topic in
-                search.isEmpty || topic.question.localizedCaseInsensitiveContains(search)
-                    || topic.answer.localizedCaseInsensitiveContains(search)
+                .accessibilityIdentifier("support.search")
+                .focused($focus, equals: .search)
+                .onSubmit { focusResults() }
+                .onKeyPress(.downArrow) {
+                    guard !matches.isEmpty else { return .ignored }
+                    focusResults()
+                    return .handled
+                }
+                .onAppear { if selectedID == nil { focus = .search } }
+                .onChange(of: search) { selectedID = nil }
+            if !search.isEmpty {
+                HStack {
+                    Text("\(AppLocalization.string("많이 묻는 질문")) (\(matches.count))")
+                        .umcTypography(.headlineRegular)
+                    Spacer()
+                    Button(AppLocalization.string("검색어 지우기")) {
+                        search = ""
+                        focus = .search
+                    }
+                }
             }
             if matches.isEmpty {
                 ContentUnavailableView.search(text: search)
             } else {
-                List(matches) { topic in
-                    Button { selection = topic } label: {
-                        HStack {
-                            Text(topic.question).umcTypography(.headlineRegular)
-                            Spacer()
-                            Image(systemName: "chevron.right").accessibilityHidden(true)
-                        }
-                        .padding(.vertical, UMCSpacing.value8)
-                        .contentShape(.rect)
+                Table(matches, selection: $selectedID) {
+                    TableColumn(AppLocalization.string("많이 묻는 질문")) { article in
+                        Text(article.question)
                     }
-                    .buttonStyle(.plain)
+                    TableColumn("") { article in
+                        Button(AppLocalization.string("답변 찾아보기")) { open(article) }
+                            .buttonStyle(.link)
+                            .accessibilityLabel(article.question)
+                            .accessibilityHint(AppLocalization.string("답변 찾아보기"))
+                    }
+                    .width(100)
                 }
-                .listStyle(.inset)
+                .accessibilityIdentifier("support.faq.table")
+                .focused($focus, equals: .table)
+                .onAppear { if selectedID != nil { focus = .table } }
+                .contextMenu(forSelectionType: String.self) { _ in } primaryAction: { ids in
+                    if let article = matches.first(where: { ids.contains($0.id) }) {
+                        open(article)
+                    }
+                }
+                .onKeyPress(.return) {
+                    guard let article = matches.first(where: { $0.id == selectedID }) else {
+                        return .ignored
+                    }
+                    open(article)
+                    return .handled
+                }
             }
         }
+    }
+
+    private func focusResults() {
+        guard let first = matches.first else { return }
+        selectedID = first.id
+        focus = .table
+    }
+
+    private func open(_ article: SupportArticle) {
+        selectedID = article.id
+        detail = article
     }
 }
