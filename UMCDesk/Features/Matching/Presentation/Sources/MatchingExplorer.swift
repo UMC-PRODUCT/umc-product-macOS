@@ -457,31 +457,51 @@ struct MatchingProjectDetail<Tabs: View>: View {
 }
 
 private struct MatchingTeamSheet: View {
-    @Environment(\.dismiss) private var dismiss
     let repository: any MatchingUseCase
     let projectId: String
     @State private var team = MatchingRequest<OperationsTeam>()
     @State private var attempt = 0
 
     var body: some View {
-        VStack(alignment: .leading, spacing: UMCSpacing.value16) {
-            HStack { Text("팀 구성").umcTypography(.title1Bold); Spacer(); Button("닫기") { dismiss() } }
-            ScrollView {
-                MatchingRequestView(request: team, retry: { attempt += 1 }) { value in
-                    VStack(alignment: .leading, spacing: UMCSpacing.value16) {
-                        if let owner = value.productOwner { person(owner, role: "담당 PM") }
-                        ForEach(value.coProductOwners, id: \.memberId) { person($0, role: "보조 PM") }
-                        ForEach(value.partGroups, id: \.part) { group in
-                            ForEach(group.members, id: \.memberId) {
-                                person($0, role: MatchingLabel.part(group.part))
-                            }
-                        }
-                    }.matchingPanel()
-                }
+        MatchingTeamPanel {
+            MatchingRequestView(request: team, retry: { attempt += 1 }) { value in
+                MatchingRosterList(team: value)
             }
         }
-        .padding(UMCSpacing.value24).frame(width: 450, height: 480)
         .task(id: attempt) { await team.load { try await repository.team(projectId: projectId) } }
+    }
+}
+
+struct MatchingTeamPanel<Content: View>: View {
+    @Environment(\.dismiss) private var dismiss
+    @ViewBuilder let content: () -> Content
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: UMCSpacing.value16) {
+            HStack {
+                Text("팀 구성").umcTypography(.title1Bold).accessibilityAddTraits(.isHeader)
+                Spacer()
+                Button("닫기") { dismiss() }.keyboardShortcut(.cancelAction)
+            }
+            ScrollView { content() }
+        }
+        .padding(UMCSpacing.value24).frame(width: 450, height: 480)
+    }
+}
+
+struct MatchingRosterList: View {
+    let team: OperationsTeam
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: UMCSpacing.value16) {
+            if let owner = team.productOwner { person(owner, role: "담당 PM") }
+            ForEach(team.coProductOwners, id: \.memberId) { person($0, role: "보조 PM") }
+            ForEach(team.partGroups, id: \.part) { group in
+                ForEach(group.members, id: \.memberId) {
+                    person($0, role: MatchingLabel.part(group.part))
+                }
+            }
+        }.matchingPanel()
     }
 
     private func person(_ value: OperationsPerson, role: String) -> some View {

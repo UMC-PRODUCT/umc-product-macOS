@@ -77,6 +77,7 @@ public struct MatchingView: View {
     private let gisuId: String
     private let applicantParts: [String]
     private let memberId: String?
+    private let onOpenProject: ((String) -> Void)?
     @State private var explorer = MatchingExplorerState()
     @State private var position = ScrollPosition()
     @State private var destination: MatchingDestination
@@ -106,12 +107,13 @@ public struct MatchingView: View {
     public init(
         repository: any MatchingUseCase, gisuId: String,
         initialDestination: MatchingDestination = .explore, memberId: String? = nil,
-        applicantParts: [String] = []
+        applicantParts: [String] = [], onOpenProject: ((String) -> Void)? = nil
     ) {
         self.repository = repository
         self.gisuId = gisuId
         self.applicantParts = applicantParts
         self.memberId = memberId
+        self.onOpenProject = onOpenProject
         _destination = State(initialValue: initialDestination)
     }
 
@@ -121,6 +123,7 @@ public struct MatchingView: View {
         self.gisuId = gisuId
         self.applicantParts = ["WEB"]
         self.memberId = nil
+        self.onOpenProject = nil
         _destination = State(initialValue: .explore)
         _selectedProject = State(initialValue: previewProject)
     }
@@ -246,7 +249,7 @@ public struct MatchingView: View {
                                  }, state: explorer)
             case .applications:
                 MatchingApplications(repository: repository, gisuId: gisuId, memberId: memberId, rounds: loadedRounds,
-                                     explore: { navigate(.explore) })
+                                     onOpenProject: onOpenProject, explore: { navigate(.explore) })
             case .schedule:
                 scheduleList
             case .management where draftId != nil:

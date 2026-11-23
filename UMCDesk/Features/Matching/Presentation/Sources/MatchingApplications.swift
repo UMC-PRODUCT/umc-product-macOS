@@ -15,6 +15,7 @@ struct MatchingApplications: View {
     let gisuId: String
     let memberId: String?
     let rounds: [MatchingRound]
+    let onOpenProject: ((String) -> Void)?
     let explore: () -> Void
     @State private var request = MatchingRequest<[MatchingApplication]>()
     @State private var attempt = 0
@@ -53,10 +54,15 @@ struct MatchingApplications: View {
                         }
                     }.matchingPanel()
                     VStack(alignment: .leading, spacing: UMCSpacing.value24) {
-                        Text("한 차수, 한 번의 선택.").umcTypography(.largeTitle3Bold)
-                        Text("여러 프로젝트의 초안을 작성할 수 있지만 같은 차수에는 하나의 지원서만 제출할 수 있어요.")
-                        Divider()
-                        Text("지원 기간에는 제출한 답변을 수정할 수 있어요. 철회 후 다시 지원할 수도 있어요.")
+                        if visible.contains(where: { $0.status == "APPROVED" }) {
+                            Text("매칭 결과와 팀 구성").umcTypography(.largeTitle3Bold)
+                            Text("합격한 프로젝트의 공개 팀 명단에서 내 합류 여부를 확인할 수 있어요.")
+                        } else {
+                            Text("한 차수, 한 번의 선택.").umcTypography(.largeTitle3Bold)
+                            Text("여러 프로젝트의 초안을 작성할 수 있지만 같은 차수에는 하나의 지원서만 제출할 수 있어요.")
+                            Divider()
+                            Text("지원 기간에는 제출한 답변을 수정할 수 있어요. 철회 후 다시 지원할 수도 있어요.")
+                        }
                         Button(resultsOnly ? "전체 지원 보기" : "지난 매칭 결과") { resultsOnly.toggle() }
                             .buttonStyle(MatchingActionStyle(appearance: .secondary))
                     }.matchingPanel()
@@ -102,13 +108,17 @@ struct MatchingApplications: View {
 
     private func applicationCard(_ card: MatchingApplication) -> some View {
         VStack(alignment: .leading, spacing: UMCSpacing.value16) {
+            if card.status == "APPROVED", let memberId {
+                MatchingAssignmentResult(
+                    repository: repository, card: card, memberId: memberId,
+                    onOpenProject: onOpenProject
+                )
+                .id(card.projectId)
+            }
             HStack {
                 MatchingBadge(text: card.project?.name ?? "프로젝트")
                 if let round = card.matchingRound { Text(roundLabel(round)).umcTypography(.title3Bold) }
                 Text(MatchingLabel.status(card.status)).umcTypography(.bodyRegular)
-            }
-            if card.status == "APPROVED", let memberId {
-                MatchingAssignmentResult(repository: repository, card: card, memberId: memberId)
             }
             if let applicationId = card.applicationId {
                 let item = MatchingApplicationRoute(id: applicationId, projectId: card.projectId,
@@ -209,26 +219,49 @@ private struct MatchingAssignmentResult: View {
     let repository: any MatchingUseCase
     let card: MatchingApplication
     let memberId: String
+    let onOpenProject: ((String) -> Void)?
     @State private var request = MatchingRequest<OperationsTeam?>()
     @State private var attempt = 0
+    @State private var showingTeam = false
+    @FocusState private var teamButtonFocused: Bool
 
     var body: some View {
         MatchingRequestView(request: request, retry: { attempt += 1 }) { roster in
             if let roster {
-                let members = [roster.productOwner].compactMap { $0 } + roster.coProductOwners
-                    + roster.partGroups.flatMap(\.members)
-                let joined = members.contains { $0.memberId == memberId }
-                VStack(alignment: .leading, spacing: UMCSpacing.value8) {
-                    Label(joined ? "공개 팀 명단에 합류했어요" : "현재 공개 팀 명단에 이름이 없어요",
-                          systemImage: joined ? "person.2.fill" : "clock")
-                    DisclosureGroup("공개 팀 명단") {
-                        ForEach(roster.partGroups, id: \.part) { group in
-                            LabeledContent(MatchingLabel.part(group.part)) {
-                                Text(group.members.map { $0.nickname ?? $0.name ?? "팀원" }
-                                    .joined(separator: ", "))
-                            }
+                VStack(alignment: .leading, spacing: UMCSpacing.value16) {
+                    if let member = roster.publishedMember(withID: memberId) {
+                        MatchingBadge(text: onOpenProject == nil
+                                      ? "합류 확인" : "합류 확인 · 작업 공간 연결됨")
+                        Text((card.project?.name ?? "프로젝트") + "에 합류했어요!")
+                            .umcTypography(.largeTitle3Bold)
+                            .accessibilityAddTraits(.isHeader)
+                        Text([member.person.nickname ?? member.person.name, member.role]
+                            .compactMap { $0 }.joined(separator: " · "))
+                            .umcTypography(.headlineBold)
+                        if onOpenProject != nil {
+                            Text("프로젝트 작업 공간을 열어 보세요.").foregroundStyle(.secondary)
                         }
+                        HStack(spacing: UMCSpacing.value16) {
+                            if let onOpenProject {
+                                Button {
+                                    onOpenProject(card.projectId)
+                                } label: {
+                                    HStack {
+                                        Text("프로젝트 열기")
+                                        Image(systemName: "arrow.right").accessibilityHidden(true)
+                                    }.frame(maxWidth: .infinity)
+                                }
+                                .buttonStyle(MatchingActionStyle(appearance: .text))
+                            }
+                            teamButton
+                        }
+                    } else {
+                        Label("현재 공개 팀 명단에 이름이 없어요", systemImage: "clock")
+                        teamButton
                     }
+                }
+                .sheet(isPresented: $showingTeam, onDismiss: { teamButtonFocused = true }) {
+                    MatchingTeamPanel { MatchingRosterList(team: roster) }
                 }
             } else {
                 Text("공개 팀 명단을 확인할 수 없어요.").foregroundStyle(.secondary)
@@ -237,6 +270,30 @@ private struct MatchingAssignmentResult: View {
         .task(id: attempt) {
             await request.load { try await repository.publishedTeam(projectId: card.projectId) }
         }
+    }
+
+    private var teamButton: some View {
+        Button { showingTeam = true } label: {
+            Text("팀 구성 보기").frame(maxWidth: .infinity)
+        }
+        .buttonStyle(MatchingActionStyle(appearance: .text))
+        .focused($teamButtonFocused)
+    }
+}
+
+extension OperationsTeam {
+    func publishedMember(withID memberId: String) -> (person: OperationsPerson, role: String)? {
+        guard !memberId.isEmpty else { return nil }
+        if let owner = productOwner, owner.memberId == memberId { return (owner, "담당 PM") }
+        if let coOwner = coProductOwners.first(where: { $0.memberId == memberId }) {
+            return (coOwner, "보조 PM")
+        }
+        for group in partGroups {
+            if let member = group.members.first(where: { $0.memberId == memberId }) {
+                return (member, MatchingLabel.part(group.part))
+            }
+        }
+        return nil
     }
 }
 
