@@ -20,6 +20,7 @@ public struct SettingsView: View {
     @State private var viewModel: SettingsViewModel
     private let onSelectSection: ((DeskSection?) -> Void)?
     private let section: DeskSection?
+    private let matchingSelected: Bool
     private let onOpenMatching: (() -> Void)?
     private let featureContent: AnyView?
     @State private var showsSearchSuggestions = false
@@ -73,8 +74,10 @@ public struct SettingsView: View {
     }
 
     public init(viewModel: SettingsViewModel, section: DeskSection? = nil,
-                featureContent: AnyView? = nil, onOpenMatching: (() -> Void)? = nil,
+                featureContent: AnyView? = nil, matchingSelected: Bool = false,
+                onOpenMatching: (() -> Void)? = nil,
                 onSelectSection: ((DeskSection?) -> Void)? = nil) {
+        self.matchingSelected = matchingSelected
         self.onOpenMatching = onOpenMatching
         self.section = section
         self.featureContent = featureContent
@@ -239,6 +242,9 @@ public struct SettingsView: View {
                             .frame(width: 44, height: 44)
                     }
                     .buttonStyle(SettingsPlainButtonStyle())
+                    .background(matchingSelected ? UMCColor.Primitives.teal800 : .clear,
+                                in: .rect(cornerRadius: UMCRadius.value8))
+                    .accessibilityAddTraits(matchingSelected ? .isSelected : [])
                     .accessibilityLabel("프로젝트 매칭")
                     .help("프로젝트 매칭")
                 }

@@ -235,7 +235,8 @@ private struct AppRootView: View {
                     )
                     .id(dependencies.navigation.matchingNavigationID)
                     .id(dependencies.settingsViewModel.profile?.id))
-                } ?? featureContent, onOpenMatching: { dependencies.openMatching() },
+                } ?? featureContent, matchingSelected: dependencies.navigation.matchingDestination != nil,
+                onOpenMatching: { dependencies.openMatching() },
                 onSelectSection: dependencies.selectSection
             )
         } else {

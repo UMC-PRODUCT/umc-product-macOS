@@ -25,6 +25,8 @@ final class AppNavigation {
     }
 
     func openMatching(_ destination: MatchingDestination = .explore, memberId: String?) {
+        section = nil
+        pendingSection = nil
         guard let memberId, !memberId.isEmpty else {
             pendingMatching = destination
             showsSettings = false
