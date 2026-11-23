@@ -65,6 +65,70 @@ struct AppDependenciesTests {
         #expect(barrier.profileCount.withLock { $0 } == 2)
     }
 
+    @Test("두 설정 창의 로그아웃은 갱신 대기 중 이전 계정을 숨기고 늦은 철회 응답에서 새 계정을 보호한다")
+    func settingsLogoutHidesBothWindowsBeforeCredentialCleanup() async throws {
+        for separateWindow in [false, true] {
+            let requests = AsyncStream<LogoutLifecycleProtocol>.makeStream()
+            LogoutLifecycleProtocol.pending.withLock { $0 = requests.continuation }
+            let config = URLSessionConfiguration.ephemeral
+            config.protocolClasses = [LogoutLifecycleProtocol.self]
+            let session = URLSession(configuration: config)
+            defer {
+                requests.continuation.finish()
+                LogoutLifecycleProtocol.pending.withLock { $0 = nil }
+                session.invalidateAndCancel()
+            }
+            let dependencies = AppDependencies(
+                arguments: ["--local-api-port", "19452"], session: session
+            )
+            let client = dependencies.container.resolve(NetworkClient.self)
+            try await client.signIn { TokenPair(accessToken: "first", refreshToken: "first-r") }
+            try await dependencies.refreshAccount()
+            dependencies.selectSection(.projects)
+            let first = try #require(dependencies.navigation.account)
+            #expect(first.memberID == "101")
+            let refresh = Task { try await client.forceRefreshToken() }
+            var arrivals = requests.stream.makeAsyncIterator()
+            let renewal = try #require(await arrivals.next())
+            try #require(renewal.request.url?.lastPathComponent == "renew")
+            let settings = separateWindow
+                ? dependencies.windowSettingsViewModel : dependencies.settingsViewModel
+            let logout = Task {
+                defer { requests.continuation.finish() }
+                await settings.logout()
+            }
+
+            // Keep renewal outstanding while the main actor processes logout.
+            let deadline = ContinuousClock.now + .seconds(5)
+            while dependencies.navigation.account != nil, ContinuousClock.now < deadline {
+                await Task.yield()
+            }
+            #expect(dependencies.navigation.account == nil)
+            #expect(dependencies.navigation.section == nil)
+            #expect(!dependencies.navigation.showsSettings)
+            #expect(dependencies.settingsViewModel.profile == nil)
+            #expect(dependencies.windowSettingsViewModel.profile == nil)
+            await #expect(throws: CancellationError.self) { _ = try await first.client.currentAccessToken() }
+            await #expect(throws: CancellationError.self) {
+                try await client.signIn { TokenPair(accessToken: "second", refreshToken: "second-r") }
+            }
+
+            renewal.respond(result: #"{"accessToken":"rotated","refreshToken":"rotated-r"}"#)
+            _ = await refresh.result
+            let revoke = try #require(await arrivals.next())
+            try #require(revoke.request.url?.lastPathComponent == "logout")
+            try await client.signIn { TokenPair(accessToken: "second", refreshToken: "second-r") }
+            try await dependencies.refreshAccount()
+            dependencies.selectSection(.projects)
+            revoke.respond(result: "{}")
+            await logout.value
+            #expect(dependencies.navigation.account?.memberID == "202")
+            #expect(dependencies.navigation.section == .projects)
+            #expect(dependencies.settingsViewModel.profile?.id == "202")
+            #expect(dependencies.windowSettingsViewModel.profile?.id == "202")
+        }
+    }
+
     @Test("A session reset clears the shared Settings account")
     func sessionResetClearsSettingsAccount() async throws {
         let preferences = AppDependencies.makeSettingsPreferences(arguments: ["--settings-preview"])
@@ -72,9 +136,9 @@ struct AppDependenciesTests {
             id: "757:12600", preferences: preferences
         ))
         #expect(viewModel.profile != nil)
-        let relay = AppSessionResetRelay()
+        let relay = AppSessionResetRelay {}
         relay.settingsViewModel = viewModel
-        await relay.reset()
+        relay.logoutWillBegin()
         #expect(viewModel.profile == nil)
         #expect(preferences.showsMenuBar)
     }
@@ -211,6 +275,38 @@ struct AppDependenciesTests {
 }
 
 #if DEBUG
+private final class LogoutLifecycleProtocol: URLProtocol, @unchecked Sendable {
+    static let pending = Mutex<AsyncStream<LogoutLifecycleProtocol>.Continuation?>(nil)
+
+    override class func canInit(with request: URLRequest) -> Bool { true }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+
+    override func startLoading() {
+        switch request.url?.lastPathComponent {
+        case "me":
+            let token = request.value(forHTTPHeaderField: "Authorization")
+            let id = token == "Bearer first" ? "101" : "202"
+            respond(result: #"{"id":"\#(id)","name":"테스트","nickname":"회원"}"#)
+        case "renew", "logout":
+            _ = Self.pending.withLock { $0?.yield(self) }
+        default:
+            client?.urlProtocol(self, didFailWithError: URLError(.unsupportedURL))
+        }
+    }
+
+    func respond(result: String) {
+        guard let url = request.url,
+              let response = HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil,
+                                            headerFields: ["Content-Type": "application/json"])
+        else { return }
+        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+        client?.urlProtocol(self, didLoad: Data(#"{"success":true,"result":\#(result)}"#.utf8))
+        client?.urlProtocolDidFinishLoading(self)
+    }
+
+    override func stopLoading() {}
+}
+
 private final class ProfileResponseBarrier: Sendable {
     let arrival = AsyncStream<Void>.makeStream()
     let release = DispatchSemaphore(value: 0)

@@ -7,12 +7,19 @@
 
 import Aquila
 import Foundation
+import Synchronization
 import UMCFoundation
+
+/// Hides account-owned UI before logout waits for outstanding requests and credential writes.
+public protocol SessionLogoutObserving: SessionResetting {
+    @MainActor func logoutWillBegin()
+}
 
 public actor NetworkClient {
     // MARK: - Property
 
     nonisolated let aquilaClient: Aquila.NetworkClient
+    private let logoutObserver: (any SessionLogoutObserving)?
     private let logoutTokens: LogoutTokenStore
     nonisolated let accountScope: UUID?
     private var signOutCount: UInt64 = 0
@@ -34,6 +41,7 @@ public actor NetworkClient {
         maxRetryCount: Int = 1,
         sessionResetter: (any SessionResetting)? = nil
     ) {
+        logoutObserver = sessionResetter as? any SessionLogoutObserving
         self.accountScope = nil
         let logoutTokens = LogoutTokenStore(backing: tokenStore)
         self.logoutTokens = logoutTokens
@@ -49,6 +57,7 @@ public actor NetworkClient {
     }
 
     private init(sharing client: NetworkClient, scope: UUID) {
+        logoutObserver = nil
         accountScope = scope
         aquilaClient = client.aquilaClient
         logoutTokens = client.logoutTokens
@@ -59,21 +68,22 @@ public actor NetworkClient {
             try await validateScope()
             return self
         }
-        guard let scope = await logoutTokens.authenticatedScope() else { throw CancellationError() }
+        guard let scope = await logoutTokens.credentials()?.scope else { throw CancellationError() }
         return NetworkClient(sharing: self, scope: scope)
     }
 
     nonisolated func validateScope() async throws {
-        if let accountScope, await logoutTokens.authenticatedScope() != accountScope {
+        if let accountScope, await logoutTokens.credentials()?.scope != accountScope {
             throw CancellationError()
         }
     }
 
     public func currentAccessToken() async throws -> String {
-        try await validateScope()
-        guard let value = await logoutTokens.getAccessToken() else { throw CancellationError() }
-        try await validateScope()
-        return value
+        guard let credentials = await logoutTokens.credentials(),
+              accountScope == nil || accountScope == credentials.scope else {
+            throw CancellationError()
+        }
+        return credentials.accessToken
     }
 
     // MARK: - Function
@@ -143,7 +153,7 @@ public actor NetworkClient {
         let expectedSignOutCount = signOutCount
         guard accountScope == nil, let scope = boundClient.accountScope,
               logoutTokens === boundClient.logoutTokens,
-              await logoutTokens.authenticatedScope() == scope, expectedSignOutCount == signOutCount
+              await logoutTokens.credentials()?.scope == scope, expectedSignOutCount == signOutCount
         else { throw CancellationError() }
         _ = try await logoutReturningRefreshToken()
     }
@@ -158,9 +168,14 @@ public actor NetworkClient {
         signOutCount &+= 1
         let pendingLogin = loginTask
         pendingLogin?.cancel()
+        logoutTokens.suspendAccountAccess()
         let task = Task<String?, Error> {
+            await logoutObserver?.logoutWillBegin()
             _ = await pendingLogin?.result
-            defer { logoutTask = nil }
+            defer {
+                logoutTokens.resumeAccountAccess()
+                logoutTask = nil
+            }
             do {
                 try await aquilaClient.logout()
                 return await logoutTokens.takeClearedRefreshToken()
@@ -173,8 +188,8 @@ public actor NetworkClient {
     }
 
     public func isLoggedIn() async -> Bool {
-        if let accountScope { return await logoutTokens.authenticatedScope() == accountScope }
-        return await aquilaClient.hasAccessToken()
+        guard let credentials = await logoutTokens.credentials() else { return false }
+        return accountScope == nil || accountScope == credentials.scope
     }
 
     nonisolated static func appError(
@@ -224,7 +239,8 @@ private struct AppTokenRefreshService: TokenRefreshService {
 
 private actor LogoutTokenStore: TokenStore {
     private let backing: any TokenStore
-    private var scope = UUID()
+    // Logout revokes all bound clients in the same actor turn that closes sign-in.
+    private let scope = Mutex<UUID?>(UUID())
     private var issuedRefreshToken: String?
     private var clearedRefreshToken: String?
 
@@ -232,10 +248,19 @@ private actor LogoutTokenStore: TokenStore {
         self.backing = backing
     }
 
-    func authenticatedScope() async -> UUID? {
-        let current = scope
-        guard await backing.getAccessToken() != nil, current == scope else { return nil }
-        return current
+    nonisolated func suspendAccountAccess() {
+        scope.withLock { $0 = nil }
+    }
+
+    nonisolated func resumeAccountAccess() {
+        scope.withLock { $0 = UUID() }
+    }
+
+    func credentials() async -> (scope: UUID, accessToken: String)? {
+        guard let current = scope.withLock({ $0 }),
+              let token = await backing.getAccessToken(),
+              scope.withLock({ $0 == current }) else { return nil }
+        return (current, token)
     }
 
     func getAccessToken() async -> String? {
@@ -248,7 +273,10 @@ private actor LogoutTokenStore: TokenStore {
         return permitsRead ? token : nil
     }
 
-    private var permitsRead: Bool { CredentialRequest.scope.map { $0 == scope } ?? true }
+    private var permitsRead: Bool {
+        guard let expected = CredentialRequest.scope else { return true }
+        return scope.withLock { $0 == expected }
+    }
 
     func save(accessToken: String, refreshToken: String) async throws {
         try await backing.save(accessToken: accessToken, refreshToken: refreshToken)
@@ -261,7 +289,9 @@ private actor LogoutTokenStore: TokenStore {
     }
 
     func clear() async throws {
-        scope = UUID()
+        scope.withLock {
+            if $0 != nil { $0 = UUID() }
+        }
         let refreshToken: String?
         if let issuedRefreshToken {
             refreshToken = issuedRefreshToken

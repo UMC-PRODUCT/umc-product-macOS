@@ -59,7 +59,10 @@ final class AppDependencies {
         #else
         tokenStore = KeychainTokenStore()
         #endif
-        let resetRelay = AppSessionResetRelay()
+        let resetRelay = AppSessionResetRelay { [weak userSession, weak container] in
+            userSession?.reset()
+            container?.resetCache()
+        }
         let environment: NetworkEnvironment
         do {
             #if DEBUG
@@ -78,11 +81,7 @@ final class AppDependencies {
             environment: environment,
             tokenStore: tokenStore,
             session: session,
-            sessionResetter: SessionResetHandler {
-                userSession.reset()
-                container.resetCache()
-                await resetRelay.reset()
-            }
+            sessionResetter: resetRelay
         )
         self.environment = environment
         self.client = client

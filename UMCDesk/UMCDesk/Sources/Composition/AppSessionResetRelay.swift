@@ -5,21 +5,33 @@
 //  Created by euijjang97 on 10/20/26.
 //
 
+import CoreNetwork
 import SettingsPresentation
 
 @MainActor
-final class AppSessionResetRelay {
+final class AppSessionResetRelay: SessionLogoutObserving {
+    private let discardSession: @MainActor () -> Void
+
     weak var navigation: AppNavigation?
     weak var windowSettingsViewModel: SettingsViewModel?
     weak var settingsViewModel: SettingsViewModel?
 
-    func reset() async {
+    init(discardSession: @escaping @MainActor () -> Void) {
+        self.discardSession = discardSession
+    }
+
+    func logoutWillBegin() {
+        discardSession()
         navigation?.authEntry = .login
         navigation?.account = nil
         navigation?.section = nil
         navigation?.pendingSection = nil
         navigation?.showsSettings = false
-        await settingsViewModel?.invalidateAccount()
-        await windowSettingsViewModel?.invalidateAccount()
+        settingsViewModel?.discardAccountState()
+        windowSettingsViewModel?.discardAccountState()
+    }
+
+    func resetSession() async {
+        await settingsViewModel?.systemActions.clearAccountNotifications()
     }
 }
