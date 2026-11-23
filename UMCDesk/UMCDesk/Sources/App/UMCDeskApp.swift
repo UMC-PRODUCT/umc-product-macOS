@@ -62,6 +62,12 @@ struct UMCDeskApp: App {
             #endif
         }
 
+        Window("업데이트 확인", id: DeskWindow.updates) {
+            UpdateWindow()
+                .preferredColorScheme(preferences.theme.colorScheme)
+        }
+        .defaultSize(width: 640, height: 440)
+
         Window(AppLocalization.string("고객센터"), id: DeskWindow.support) {
             SupportView()
                 .environment(\.locale, AppLocalization.shared.language.locale)
@@ -76,7 +82,8 @@ struct UMCDeskApp: App {
         WindowGroup("스레드", for: ThreadWindowKey.self) { $key in
             if let key, let account = dependencies.navigation.account, key.accountID == account.memberID {
                 ThreadWindowContent(key: key, repository: account.threads,
-                                    conversations: account.conversations, management: account.members)
+                                    conversations: account.conversations, management: account.members,
+                                    defaults: dependencies.featureDefaults)
                     .id(key)
                     .preferredColorScheme(preferences.theme.colorScheme)
                     .defaultAppStorage(dependencies.featureDefaults)
@@ -144,6 +151,14 @@ struct UMCDeskApp: App {
     }
 }
 
+private struct UpdateWindow: View {
+    @Environment(\.dismissWindow) private var dismissWindow
+
+    var body: some View {
+        AuthUpdateCheckView(onClose: { dismissWindow(id: DeskWindow.updates) })
+    }
+}
+
 private struct AppRootView: View {
     @Environment(\.scenePhase) private var scenePhase
     let dependencies: AppDependencies
@@ -158,7 +173,10 @@ private struct AppRootView: View {
             } else {
                 AuthView(login: dependencies.login, repository: dependencies.loginRepository,
                          entry: dependencies.navigation.authEntry, onSignOut: dependencies.signOut,
-                         onMemberRefresh: dependencies.refreshAccount)
+                         onMemberRefresh: dependencies.refreshAccount, onCloseAccount: {
+                            dependencies.navigation.authEntry = .login
+                            dependencies.navigation.showsSettings = dependencies.navigation.account != nil
+                         })
                     .id(dependencies.navigation.authEntry)
             }
         }
@@ -181,7 +199,8 @@ private struct AppRootView: View {
     private func feature(_ section: DeskSection, account: FeatureAccount) -> some View {
         switch section {
         case .home:
-            HomeView(repository: account.home, memberID: account.memberID) { destination in
+            HomeView(repository: account.home, memberID: account.memberID,
+                     defaults: dependencies.featureDefaults) { destination in
                 switch destination {
                 case .activity: dependencies.selectSection(.activity)
                 case .notice: dependencies.selectSection(.notice)
@@ -194,7 +213,8 @@ private struct AppRootView: View {
             ActivityView(repository: account.activity)
         case .threads:
             CommunityThreadsView(accountID: account.memberID, repository: account.threads,
-                                 conversations: account.conversations, management: account.members)
+                                 conversations: account.conversations, management: account.members,
+                                    defaults: dependencies.featureDefaults)
         case .projects:
             ProjectWorkspaceView(accountID: account.memberID, loadProjects: account.projects,
                                  loadGitHub: WorkspaceGitHubClient.recentWork(repository:))
