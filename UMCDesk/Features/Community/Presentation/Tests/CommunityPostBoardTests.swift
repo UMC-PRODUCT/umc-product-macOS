@@ -73,8 +73,9 @@ struct CommunityPostBoardTests {
         window.titleVisibility = .hidden
         window.contentView = host
         defer { window.contentView = nil }
-        try await Task.sleep(for: .milliseconds(250))
-        host.layoutSubtreeIfNeeded()
+        try await waitUntil(in: host) {
+            descendants(host).compactMap { $0 as? NSTableView }.first?.numberOfRows == 50
+        }
 
         let table = try #require(descendants(host).compactMap { $0 as? NSTableView }.first)
         let field = try #require(firstField(host))
@@ -87,18 +88,34 @@ struct CommunityPostBoardTests {
         // Reserve room for the complete title and compose button above the search field.
         #expect(window.contentLayoutRect.maxY - fieldFrame.maxY >= 40)
         table.selectRowIndexes(IndexSet(integer: 0), byExtendingSelection: false)
-        try await Task.sleep(for: .milliseconds(120))
-        #expect(await repository.opened == "1")
+        try await waitUntil(in: host) { await repository.opened == "1" }
         table.scrollRowToVisible(35)
         table.selectRowIndexes(IndexSet(integer: 35), byExtendingSelection: false)
-        try await Task.sleep(for: .milliseconds(120))
+        try await waitUntil(in: host) {
+            let scrolls = descendants(host).compactMap { $0 as? NSScrollView }
+            return await repository.opened == "36" && scrolls.contains {
+                $0 !== listScroll && ($0.documentView?.frame.height ?? 0) > $0.frame.height
+            }
+        }
         let offset = listScroll.contentView.bounds.minY
         #expect(offset > 0)
         let detailScroll = try #require(descendants(host).compactMap { $0 as? NSScrollView }
             .first { $0 !== listScroll && ($0.documentView?.frame.height ?? 0) > $0.frame.height })
         let detailTop = detailScroll.convert(detailScroll.bounds, to: nil).maxY
         #expect(window.contentLayoutRect.maxY - detailTop >= 40)
-        detailScroll.contentView.scroll(to: NSPoint(x: 0, y: 200))
+        let headerRect = detailScroll.convert(detailScroll.bounds, to: nil)
+        let sample = host.convert(NSRect(
+            x: headerRect.minX + 72, y: headerRect.maxY, width: 120, height: 28), from: nil)
+        let before = try headerPixels(in: sample, host: host)
+        let clip = detailScroll.contentView
+        let end = max(0, (detailScroll.documentView?.frame.height ?? 0) - clip.bounds.height)
+        clip.scroll(to: NSPoint(x: 0, y: end))
+        detailScroll.reflectScrolledClipView(clip)
+        try await waitUntil(in: host) { (try? headerPixels(in: sample, host: host)) != before }
+        #expect(detailScroll.convert(detailScroll.bounds, to: nil).maxY == detailTop)
+        clip.scroll(to: .zero)
+        detailScroll.reflectScrolledClipView(clip)
+        try await waitUntil(in: host) { (try? headerPixels(in: sample, host: host)) == before }
         #expect(listScroll.contentView.bounds.minY == offset)
         #expect(window.makeFirstResponder(table))
         let down = String(UnicodeScalar(NSDownArrowFunctionKey)!)
@@ -107,9 +124,24 @@ struct CommunityPostBoardTests {
             timestamp: 0, windowNumber: window.windowNumber, context: nil,
             characters: down, charactersIgnoringModifiers: down, isARepeat: false, keyCode: 125))
         table.keyDown(with: event)
-        try await Task.sleep(for: .milliseconds(120))
-        #expect(await repository.opened == "37")
+        try await waitUntil(in: host) { await repository.opened == "37" }
         #expect(listScroll.contentView.bounds.minY > 0)
+    }
+
+    private func headerPixels(in rect: NSRect, host: NSView) throws -> Data {
+        let bitmap = try #require(host.bitmapImageRepForCachingDisplay(in: rect))
+        host.cacheDisplay(in: rect, to: bitmap)
+        return try #require(bitmap.representation(using: .png, properties: [:]))
+    }
+
+    private func waitUntil(in host: NSView, condition: () async -> Bool) async throws {
+        let deadline = ContinuousClock.now + .seconds(5)
+        while ContinuousClock.now < deadline {
+            host.layoutSubtreeIfNeeded()
+            if await condition() { return }
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        try #require(await condition())
     }
 
     private func descendants(_ view: NSView) -> [NSView] {
@@ -123,6 +155,9 @@ struct CommunityPostBoardTests {
 }
 
 private actor BoardFixture: CommunityPostRepository {
+    nonisolated func pendingWrite(postID: String?) throws -> CommunityPostIntent? { nil }
+    nonisolated func discard(_ intent: CommunityPostIntent) throws {}
+    func check(_ intent: CommunityPostIntent) async throws -> String { "" }
     var opened: String?
     let item = CommunityPost(
         id: "15", title: "한글 검색", content: "본문", category: "FREE",
@@ -147,7 +182,12 @@ private actor BoardFixture: CommunityPostRepository {
               commentCount: "0", likeCount: "0", liked: false, scrapCount: nil,
               scrapped: false, meeting: nil)
     }
-    func comments(id: String) async throws -> [CommunityPostComment] { [] }
+    func comments(id: String) async throws -> [CommunityPostComment] {
+        (1...80).map {
+            .init(id: String($0), author: "합성 회원", content: "댓글 " + String($0),
+                  isAuthor: false, date: nil)
+        }
+    }
     func save(
         id: String?, title: String, content: String, category: CommunityPostCategory,
         meeting: CommunityPostMeeting?

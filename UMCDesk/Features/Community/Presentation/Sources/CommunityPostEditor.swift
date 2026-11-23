@@ -22,7 +22,8 @@ struct CommunityPostEditor: View {
     @State private var capacity: String
     @State private var link: String
     @State private var busy = false
-    @State private var awaitingConfirmation = false
+    @State private var pending: CommunityPostIntent?
+    private var awaitingConfirmation: Bool { pending != nil }
     @State private var failure: String?
     @State private var operation: Task<Void, Never>?
 
@@ -67,16 +68,53 @@ struct CommunityPostEditor: View {
             }
             .disabled(awaitingConfirmation)
             if let failure { Text(failure).foregroundStyle(.secondary) }
+            if let pending {
+                HStack {
+                    Button("확인 마침") {
+                        do {
+                            try repository.discard(pending)
+                            dismiss()
+                        } catch { failure = error.localizedDescription }
+                    }
+                    Button("이전 확인 종료 후 새 글로 작성") {
+                        do {
+                            try repository.discard(pending)
+                            self.pending = nil
+                            failure = nil
+                        } catch { failure = error.localizedDescription }
+                    }
+                }
+            }
             HStack {
                 Spacer()
-                Button("취소") { dismiss() }.keyboardShortcut(.cancelAction)
+                Button(awaitingConfirmation ? "닫기" : "취소") { dismiss() }.keyboardShortcut(.cancelAction)
                 Button(awaitingConfirmation ? "등록 결과 확인" : "저장") { save() }.keyboardShortcut(.defaultAction)
                     .disabled(!valid)
             }
         }
         .padding(24).frame(minWidth: 360, idealWidth: 520)
         .disabled(busy).interactiveDismissDisabled(busy)
+        .onAppear { restore() }
         .onDisappear { operation?.cancel() }
+    }
+
+    private func restore() {
+        guard existing == nil else { return }
+        do {
+            guard let intent = try repository.pendingWrite(postID: nil),
+                  case let .post(title, content, category, meeting) = intent.draft else { return }
+            pending = intent
+            self.title = title
+            self.content = content
+            self.category = category
+            if let meeting {
+                meetAt = CommunityPostDate.parse(meeting.meetAt) ?? meetAt
+                location = meeting.location
+                capacity = meeting.maxParticipants
+                link = meeting.openChatUrl
+            }
+            failure = "이전에 보낸 글의 등록 결과를 확인해 주세요."
+        } catch { failure = error.localizedDescription }
     }
 
     private var valid: Bool {
@@ -96,6 +134,10 @@ struct CommunityPostEditor: View {
         operation = Task { @MainActor in
             defer { busy = false }
             do {
+                if let pending {
+                    failure = try await repository.check(pending)
+                    return
+                }
                 let meeting: CommunityPostMeeting? =
                     category == .lightning
                     ? .init(
@@ -108,7 +150,7 @@ struct CommunityPostEditor: View {
                 saved(result)
             } catch {
                 if !Task.isCancelled {
-                    awaitingConfirmation = error as? CommunityPostWriteFailure == .unconfirmed
+                    if error as? CommunityPostWriteFailure == .unconfirmed { restore() }
                     failure = error.localizedDescription
                 }
             }
