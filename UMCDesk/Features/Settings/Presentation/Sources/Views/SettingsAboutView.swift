@@ -8,6 +8,7 @@
 import UMCFoundation
 import CoreDesignSystem
 import CoreRouting
+import CoreUIComponents
 import SwiftUI
 
 struct SettingsAboutView: View {
@@ -92,8 +93,23 @@ struct SettingsAboutView: View {
                             title: AppLocalization.string("고객센터"),
                             description: AppLocalization.string("도움이 필요하거나 의견이 있나요?")
                         ) {
-                            SettingsActionButton(title: AppLocalization.string("열기")) {
-                                openWindow(id: DeskWindow.support)
+                            UMCWindowOpeningButton(
+                                AppLocalization.string("열기"), identifier: "settings.openSupport",
+                                cornerRadius: UMCRadius.value12,
+                                action: { openWindow(id: DeskWindow.support) }
+                            ) { hovered in
+                                Text(AppLocalization.string("열기"))
+                                    .umcTypography(.headlineRegular)
+                                    .foregroundStyle(palette.textNeutralMedium600)
+                                    .padding(.horizontal, UMCSpacing.value16)
+                                    .frame(minWidth: 64, minHeight: 40)
+                                    .background(hovered ? palette.fillNeutralWeakerHoverPressed :
+                                        palette.backgroundSurfaceWhite,
+                                        in: .rect(cornerRadius: UMCRadius.value12))
+                                    .overlay {
+                                        RoundedRectangle(cornerRadius: UMCRadius.value12)
+                                            .strokeBorder(palette.borderNeutralWeak200)
+                                    }
                             }
                         }
                     }

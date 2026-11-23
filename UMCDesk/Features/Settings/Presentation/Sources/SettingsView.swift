@@ -218,15 +218,9 @@ public struct SettingsView: View {
                     }
                 }
                 railItem(AppLocalization.string("커뮤니티"), symbol: "person.2")
-                Button { openWindow(id: DeskWindow.support) } label: {
-                    Image(systemName: "questionmark.circle")
-                        .font(.system(size: 16, weight: .medium))
-                        .frame(width: 44, height: 44)
-                        .contentShape(.rect)
+                SettingsHelpButton(foreground: sidebarChromeForeground) {
+                    openWindow(id: DeskWindow.support)
                 }
-                .buttonStyle(SettingsPlainButtonStyle())
-                .foregroundStyle(sidebarChromeForeground.opacity(0.75))
-                .accessibilityLabel(AppLocalization.string("도움말"))
                 .modifier(SettingsTooltip(
                     title: AppLocalization.string("도움말"), isSuppressed: showsProfileMenu))
             }
