@@ -10,7 +10,12 @@ import SwiftUI
 import UMCFoundation
 
 struct SupportView: View {
-    private enum Page { case answers, inquiries }
+    private enum Page {
+        case answers, inquiries
+        #if DEBUG
+        case operations
+        #endif
+    }
     @State private var page = Page.answers
 
     #if DEBUG
@@ -37,6 +42,9 @@ struct SupportView: View {
             Picker(AppLocalization.string("고객센터"), selection: $page) {
                 Text(AppLocalization.string("많이 묻는 질문")).tag(Page.answers)
                 Text(AppLocalization.string("내 문의")).tag(Page.inquiries)
+                #if DEBUG
+                if fixture != nil { Text("운영").tag(Page.operations) }
+                #endif
             }
             .pickerStyle(.segmented)
             .labelsHidden()
@@ -46,6 +54,12 @@ struct SupportView: View {
                 SupportAnswersView(articles: articles)
             case .inquiries:
                 inquiries
+            #if DEBUG
+            case .operations:
+                if let fixture {
+                    SupportInquiryPreview(fixture: fixture, isOperator: true)
+                }
+            #endif
             }
         }
         .padding(UMCSpacing.value32)
