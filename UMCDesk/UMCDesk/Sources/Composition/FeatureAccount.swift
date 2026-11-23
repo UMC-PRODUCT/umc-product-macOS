@@ -25,9 +25,8 @@ struct FeatureAccount: Sendable {
     let client: NetworkClient
     let environment: NetworkEnvironment
 
-    init(memberID: String, client: NetworkClient, environment: NetworkEnvironment) async throws {
+    init(memberID: String, boundClient bound: NetworkClient, environment: NetworkEnvironment) {
         self.memberID = memberID
-        let bound = try await client.boundToCurrentAccount()
         self.client = bound
         self.environment = environment
         let adapter = MoyaNetworkAdapter(networkClient: bound)

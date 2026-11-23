@@ -34,6 +34,7 @@ final class AppDependencies {
     let navigation: AppNavigation
     let environment: NetworkEnvironment
     private let client: NetworkClient
+    private let arguments: [String]
     private var restoration: Task<Void, Never>?
     private var hasRestored = false
     #if DEBUG || UMC_PRERELEASE
@@ -42,21 +43,22 @@ final class AppDependencies {
 
     var isSettingsPreview: Bool {
         #if DEBUG
-        ProcessInfo.processInfo.arguments.contains("--settings-preview")
+        arguments.contains("--settings-preview")
         #else
         false
         #endif
     }
 
-    init() {
+    init(arguments: [String] = ProcessInfo.processInfo.arguments, session: URLSession = .shared) {
+        self.arguments = arguments
         let container = DIContainer()
         let userSession = UserSessionManager()
         let tokenStore: any TokenStore
         #if DEBUG
-        let fixturePort = Self.fixturePort(arguments: ProcessInfo.processInfo.arguments)
+        let fixturePort = Self.fixturePort(arguments: arguments)
         let previewArguments = ["--settings-preview", "--auth-preview", "--matching-preview"]
         let isIsolated = fixturePort != nil || previewArguments.contains {
-            ProcessInfo.processInfo.arguments.contains($0)
+            arguments.contains($0)
         }
         tokenStore = isIsolated ? FixtureTokenStore() : KeychainTokenStore()
         #else
@@ -80,6 +82,7 @@ final class AppDependencies {
         let client = AuthSystemFactory.makeNetworkClient(
             environment: environment,
             tokenStore: tokenStore,
+            session: session,
             sessionResetter: SessionResetHandler {
                 userSession.reset()
                 container.resetCache()
@@ -100,7 +103,7 @@ final class AppDependencies {
         self.userSession = userSession
         #if DEBUG
         let preferences = Self.makeSettingsPreferences(
-            arguments: ProcessInfo.processInfo.arguments
+            arguments: arguments
         )
         #else
         let preferences = SettingsPreferences()
@@ -122,7 +125,6 @@ final class AppDependencies {
         self.settingsPreferences = preferences
         self.navigation = AppNavigation(launchPage: preferences.launchPage)
         #if DEBUG
-        let arguments = ProcessInfo.processInfo.arguments
         if let preview = Self.makeSettingsPreview(arguments: arguments, preferences: preferences) {
             self.settingsViewModel = preview
             self.navigation.showsSettings = true
@@ -181,14 +183,27 @@ final class AppDependencies {
     }
 
     func refreshAccount() async throws {
+        let accountClient = try await client.boundToCurrentAccount()
+        // Token storage has committed. Closing the login window must let account setup finish.
+        try await Task { @MainActor in
+            try await completeAccountSetup(using: accountClient)
+        }.value
+    }
+
+    private func completeAccountSetup(using accountClient: NetworkClient) async throws {
+        _ = try await accountClient.currentAccessToken()
         await settingsViewModel.refreshSignedInAccount()
+        _ = try await accountClient.currentAccessToken()
         await windowSettingsViewModel.refreshSignedInAccount()
-        guard await client.isLoggedIn() else { throw NetworkError.unauthorized }
-        if let id = settingsViewModel.profile?.id {
-            navigation.account = try await FeatureAccount(memberID: id, client: client, environment: environment)
+        _ = try await accountClient.currentAccessToken()
+        guard let id = settingsViewModel.profile?.id, windowSettingsViewModel.profile?.id == id else {
+            hasRestored = false
+            throw NetworkError.invalidResponse
         }
+        navigation.account = FeatureAccount(memberID: id, boundClient: accountClient, environment: environment)
         navigation.section = navigation.pendingSection
         navigation.pendingSection = nil
+        hasRestored = true
         settingsViewModel.showProfile()
         navigation.showsSettings = true
     }
@@ -202,7 +217,7 @@ final class AppDependencies {
         let task = Task { @MainActor in
             defer { restoration = nil }
             #if DEBUG || UMC_PRERELEASE
-            if ProcessInfo.processInfo.arguments.contains("--auth-preview") {
+            if arguments.contains("--auth-preview") {
                 navigation.showsSettings = false
                 hasRestored = true
                 return
@@ -212,15 +227,17 @@ final class AppDependencies {
                 hasRestored = true
                 return
             }
+            guard let accountClient = try? await client.boundToCurrentAccount() else { return }
             await settingsViewModel.refreshProfile(showsToast: false)
             if settingsViewModel.profile == nil, await client.isLoggedIn() {
                 try? await Task.sleep(for: .milliseconds(500))
                 await settingsViewModel.refreshProfile(showsToast: false)
             }
-            guard settingsViewModel.profile != nil, await client.isLoggedIn() else { return }
-            if let id = settingsViewModel.profile?.id {
-                navigation.account = try? await FeatureAccount(memberID: id, client: client, environment: environment)
-            }
+            guard let id = settingsViewModel.profile?.id else { return }
+            await windowSettingsViewModel.refreshProfile(showsToast: false)
+            guard windowSettingsViewModel.profile?.id == id,
+                  (try? await accountClient.currentAccessToken()) != nil else { return }
+            navigation.account = FeatureAccount(memberID: id, boundClient: accountClient, environment: environment)
             navigation.section = navigation.pendingSection
             navigation.pendingSection = nil
             hasRestored = true
@@ -254,7 +271,7 @@ final class AppDependencies {
 
     var featureDefaults: UserDefaults {
         #if DEBUG
-        if let port = Self.fixturePort(arguments: ProcessInfo.processInfo.arguments) {
+        if let port = Self.fixturePort(arguments: arguments) {
             return UserDefaults(suiteName: "com.umc.product.macos.local-api.\(port)")!
         }
         #endif

@@ -5,6 +5,7 @@
 
 """Synthetic thread management contract for the authenticated loopback session fixture."""
 
+from contextlib import contextmanager
 import re
 import threading
 from urllib.parse import parse_qs, urlsplit
@@ -12,6 +13,7 @@ from urllib.parse import parse_qs, urlsplit
 _LOCK = threading.Lock()
 _PEOPLE = {
     "101": ("첫 챌린저", "WEB"), "102": ("둘째 챌린저", "PLAN"),
+    "103": ("디자인 챌린저", "DESIGN"),
     "201": ("테스트 디자인", "DESIGN"), "202": ("테스트 개발", "IOS"),
     "203": ("테스트 서버", "SPRINGBOOT"), "204": ("테스트 기획", "PLAN"),
 }
@@ -25,6 +27,11 @@ def _person(identifier):
 def _store(server):
     if not hasattr(server, "thread_management_rooms"):
         server.thread_management_rooms = {}
+        for owner in ("101", "102"):
+            summary = {"threadId": owner, "title": "테스트 스레드 " + owner,
+                       "description": "로컬 테스트", "icon": "💬", "category": "FREE",
+                       "unreadCount": "0"}
+            _register(server, summary, owner, True)
     return server.thread_management_rooms
 
 
@@ -38,30 +45,100 @@ def _register(server, summary, owner_id, seeded):
     roles = {owner_id: "OWNER"}
     if seeded:
         roles.update({"201": "ADMIN", "202": "MEMBER"})
-    room = {"summary": dict(summary), "roles": roles, "departed": {}, "deleted": False}
+    room = {"summary": dict(summary), "roles": roles, "departed": {}, "deleted": False,
+            "seeded": seeded, "preferences": {}, "unread": {}}
     _store(server)[str(summary["threadId"])] = room
     return room
 
 
 def _detail(room, actor):
     role = room["roles"].get(actor)
-    return {**room["summary"], "myRole": role, "memberCount": str(len(room["roles"])),
+    settings = room["preferences"].get(actor, set()) if role else set()
+    return {**room["summary"], "unreadCount": str(len(room["unread"].get(actor, ()))),
+            "isPinned": "pin" in settings, "isMuted": "mute" in settings,
+            "myRole": role, "memberCount": str(len(room["roles"])),
             "maxMembers": "100", "isJoined": role is not None,
             "membershipState": "ACTIVE" if role else room["departed"].get(actor)}
 
 
+def create_room(server, body, actor):
+    title, description = body.get("title"), body.get("description", "")
+    icon, category = body.get("icon"), body.get("category")
+    if (not isinstance(title, str) or not title.strip() or len(title.strip()) > 80
+            or not isinstance(description, str) or len(description.strip()) > 500
+            or not isinstance(icon, str) or not icon.strip() or len(icon) > 32
+            or category not in ("FREE", "PROJECT", "STUDY", "QNA")):
+        return 400, None
+    with _LOCK:
+        rooms = _store(server)
+        identifier = str(max(1000, *(int(key) for key in rooms)) + 1)
+        summary = dict(threadId=identifier, title=title.strip(), description=description.strip(),
+                       icon=icon, category=category, unreadCount="0")
+        return 200, _detail(_register(server, summary, actor, False), actor)
+
+
+def _visible(room, actor):
+    return not room["seeded"] or actor in room["roles"] or actor in room["departed"]
+
+
 def management_summary(server, summary, actor):
-    """Return current list metadata, or None when the thread is no longer visible."""
+    """Overlay current room metadata for callers composing their own listing."""
     with _LOCK:
         room = _store(server).get(str(summary["threadId"]))
-        if room is None:
+        if not room:
             return summary
-        if room["deleted"] or room["departed"].get(actor) == "KICKED_ACKNOWLEDGED":
+        if (room["deleted"] or not _visible(room, actor)
+                or room["departed"].get(actor) == "KICKED_ACKNOWLEDGED"):
             return None
-        updated = _detail(room, actor)
-        keys = ("title", "description", "category", "icon", "myRole", "memberCount",
-                "maxMembers", "isJoined", "membershipState")
-        return {**summary, **{key: updated[key] for key in keys}}
+        return {**summary, **_detail(room, actor)}
+
+
+def room_access(server, identifier, actor):
+    with _LOCK:
+        room = _store(server).get(identifier)
+        if not room or room["deleted"] or not _visible(room, actor):
+            return 404, None
+        if room["departed"].get(actor, "").startswith("KICKED"):
+            return 403, None
+        return 200, room["roles"].get(actor)
+
+
+@contextmanager
+def active_membership(server, identifier, actor):
+    """Serialize command mutations against a simultaneous leave, kick or delete."""
+    with _LOCK:
+        room = _store(server).get(identifier)
+        if not room or room["deleted"] or actor not in room["roles"]:
+            raise ValueError("THREAD_ACCESS_DENIED")
+        yield room
+
+
+def list_rooms(server, query, actor):
+    with _LOCK:
+        rows = [_detail(room, actor) for room in reversed(_store(server).values())
+                if not room["deleted"] and _visible(room, actor)
+                and room["departed"].get(actor) != "KICKED_ACKNOWLEDGED"]
+    term = query.get("q", [""])[0].strip().casefold()
+    kind = query.get("filter", ["all"])[0]
+    if kind not in ("all", "unread", "STUDY", "PROJECT", "QNA", "FREE"):
+        return 400, None
+    filtered = [r for r in rows if (kind == "all" or kind == r["category"]
+                or (kind == "unread" and r["unreadCount"] != "0"))
+                and (term in r["title"].casefold() or term in r["description"].casefold())]
+    pinned = [r for r in filtered if r["isPinned"]]
+    regular = [r for r in filtered if not r["isPinned"]]
+    if term:
+        regular, pinned = pinned + regular, []
+    try:
+        start = int(query.get("offset", ["0"])[0])
+        limit = int(query.get("limit", ["20"])[0])
+    except ValueError:
+        return 400, None
+    if start < 0 or not 1 <= limit <= 100:
+        return 400, None
+    end = start + limit
+    return 200, dict(pinned=pinned, threads=regular[start:end], total=str(len(regular)),
+                     nextOffset=str(end) if end < len(regular) else None)
 
 
 def _page(rows, query):
@@ -83,19 +160,30 @@ def _route(room, actor, suffix, method, query, body):
     roles, departed = room["roles"], room["departed"]
     role = roles.get(actor)
     manager = role in ("OWNER", "ADMIN")
-    if room["deleted"]:
+    if room["deleted"] or not _visible(room, actor):
         return 404, None
     if method == "POST" and suffix == "kick/acknowledge" and departed.get(actor) == "KICKED":
         departed[actor] = "KICKED_ACKNOWLEDGED"
         return 200, _mutation(room, actor)
     if departed.get(actor, "").startswith("KICKED"):
         return 403, None
+    if suffix in ("pin", "mute") and method in ("POST", "DELETE"):
+        if not role:
+            return 403, None
+        settings = room["preferences"].setdefault(actor, set())
+        if method == "POST":
+            settings.add(suffix)
+        else:
+            settings.discard(suffix)
+        return 200, _detail(room, actor)
     if method == "GET":
         if not suffix:
             return 200, _detail(room, actor)
         if suffix == "members":
             return _page([{**_person(i), "role": r, "state": "ACTIVE",
                            "joinedAt": "2026-10-01T00:00:00Z"} for i, r in roles.items()], query)
+        if suffix != "invitable":
+            return 405, None
         if not manager:
             return 403, None
         return _page([{**_person(i), "challengerId": i} for i in _PEOPLE
@@ -104,6 +192,8 @@ def _route(room, actor, suffix, method, query, body):
         if role not in ("MEMBER", "ADMIN"):
             return 403, None
         roles.pop(actor)
+        room["preferences"].pop(actor, None)
+        room["unread"].pop(actor, None)
         departed[actor] = "LEFT"
         return 200, _mutation(room, actor, role)
     if not manager:
@@ -148,6 +238,8 @@ def _route(room, actor, suffix, method, query, body):
             return 200, _mutation(room, i)
         if not target[2] and method == "DELETE":
             previous = roles.pop(i)
+            room["preferences"].pop(i, None)
+            room["unread"].pop(i, None)
             departed[i] = "KICKED"
             return 200, _mutation(room, i, previous)
     return 404, None
@@ -175,17 +267,12 @@ def handle_thread_management(handler, identifier, body=None):
                 "profile": {"github": "https://example.test/test-profile"}})
         return True
     match = re.fullmatch(r"/api/v1/community/threads/(\d+)(?:/(members(?:/\d+(?:/role)?)?"
-                         r"|invitable|invite|leave|kick/acknowledge))?", url.path)
+                         r"|invitable|invite|leave|pin|mute|kick/acknowledge))?", url.path)
     if not match:
         return False
     thread_id, suffix = match.groups()
     with _LOCK:
         room = _store(handler.server).get(thread_id)
-        if room is None and thread_id in ("101", "102"):
-            summary = {"threadId": thread_id, "title": "테스트 스레드 " + thread_id,
-                       "description": "로컬 테스트", "icon": "💬", "category": "FREE",
-                       "isPinned": False, "isMuted": False, "unreadCount": "0"}
-            room = _register(handler.server, summary, thread_id, True)
         # A one-shot control exercises partial failure and retry in bulk member operations.
         member = re.fullmatch(r"members/(\d+)(?:/role)?", suffix or "")
         if member and handler.command in ("DELETE", "PATCH") and hasattr(handler.server, "control"):

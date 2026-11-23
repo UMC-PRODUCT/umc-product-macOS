@@ -5,7 +5,11 @@
 
 """Run a loopback-only login fixture. SIGUSR1 expires current test sessions."""
 
+import home_activity_fixture
 import matching_fixture
+import notice_fixture
+import project_workspace_fixture
+import thread_feature_fixture
 import argparse
 import json
 import secrets
@@ -27,7 +31,7 @@ PASSWORD = "fixture-only"
 
 class SessionFixture(BaseHTTPRequestHandler):
     def send_result(self, status, result=None):
-        body = json.dumps({"success": status == 200, "result": result}).encode()
+        body = json.dumps({"success": 200 <= status < 300, "result": result}).encode()
         with self.server.log_lock:
             with (self.server.control / "events").open("a") as log:
                 print(self.command, urlsplit(self.path).path, status, file=log)
@@ -48,15 +52,21 @@ class SessionFixture(BaseHTTPRequestHandler):
     def do_POST(self):
         try:
             length = int(self.headers.get("Content-Length", "0"))
-            if not 0 <= length <= 1048576:
+            path = urlsplit(self.path).path
+            is_upload = self.command == "PUT" and path.startswith(("/qa/notice-upload/", "/fixture/thread-photo/"))
+            limit = 10 * 1024 * 1024 if is_upload else 1048576
+            if not 0 <= length <= limit:
                 return self.send_result(400)
-            body = json.loads(self.rfile.read(length)) if length else {}
+            data = self.rfile.read(length)
+            if is_upload:
+                return self.signed_request(path, data)
+            body = json.loads(data) if data else {}
             if not isinstance(body, dict) and not (isinstance(body, list) and self.path.endswith("/attendances/decide")):
                 return self.send_result(400)
         except (ValueError, UnicodeDecodeError):
             return self.send_result(400)
 
-        if self.path == "/api/v1/auth/login/email":
+        if self.command == "POST" and self.path == "/api/v1/auth/login/email":
             email = body.get("email")
             if isinstance(email, str) and email in MEMBERS and body.get("password") == PASSWORD:
                 self.wait_if_held("login")
@@ -65,7 +75,7 @@ class SessionFixture(BaseHTTPRequestHandler):
                 return self.send_result(200, result)
             return self.send_result(401)
 
-        if self.path in ("/api/v1/auth/logout", "/api/v1/auth/token/renew"):
+        if self.command == "POST" and self.path in ("/api/v1/auth/logout", "/api/v1/auth/token/renew"):
             if self.path.endswith("/logout"):
                 self.wait_if_held("revoke")
             refresh = body.get("refreshToken")
@@ -83,9 +93,29 @@ class SessionFixture(BaseHTTPRequestHandler):
         self.send_result(404)
 
     def feature_request(self, email, body):
-        path = urlsplit(self.path)
-        return matching_fixture.handle(self, self.command, path.path, parse_qs(path.query),
-                                       body, MEMBERS[email][0])
+        url = urlsplit(self.path)
+        path, query = url.path, parse_qs(url.query)
+        member = MEMBERS[email][0]
+        if self.command == "GET" and path == "/api/v1/projects/members":
+            self.send_result(200, project_workspace_fixture.published_teams(query))
+            return True
+        if thread_feature_fixture.handle(self, self.command, path, query, body, member):
+            return True
+        if notice_fixture.handle(self, self.command, path, query, body, email):
+            return True
+        result = home_activity_fixture.handle(self.command, path, query, body, member)
+        if result is not None:
+            self.send_result(*result)
+            return True
+        return matching_fixture.handle(self, self.command, path, query, body, member)
+
+    def signed_request(self, path, data):
+        if path.startswith("/fixture/thread-photo/"):
+            if thread_feature_fixture.handle(self, self.command, path, {}, data, None):
+                return
+        elif notice_fixture.handle(self, self.command, path, {}, data, None):
+            return
+        self.send_result(404)
 
     def do_PATCH(self):
         self.do_POST()
@@ -115,6 +145,15 @@ class SessionFixture(BaseHTTPRequestHandler):
         return None
 
     def do_GET(self):
+        path = urlsplit(self.path).path
+        if path == "/ws/websocket":
+            def identify(token):
+                with self.server.session_lock:
+                    return next((MEMBERS[email][0] for access, email in self.server.sessions.values()
+                                 if access == token), None)
+            return thread_feature_fixture.socket(self, identify)
+        if path.startswith(("/qa/notice-upload/", "/fixture/thread-photo/")):
+            return self.signed_request(path, b"")
         if self.path == "/api/v1/system/status":
             return self.send_result(200, {"inMaintenance": False, "current": None, "upcoming": None})
         email = self.current_email()
@@ -126,6 +165,11 @@ class SessionFixture(BaseHTTPRequestHandler):
         if self.feature_request(email, {}):
             return
         if url.path == "/api/v1/member/me":
+            self.wait_if_held("profile-" + identifier)
+            reject = self.server.control / ("fail-profile-once-" + identifier)
+            if reject.exists():
+                reject.unlink(missing_ok=True)
+                return self.send_result(401)
             part = {"101": "WEB", "102": "PLAN", "103": "DESIGN"}[identifier]
             return self.send_result(200, {
                 "id": identifier, "name": name, "nickname": name, "email": email,
@@ -169,24 +213,7 @@ class SessionFixture(BaseHTTPRequestHandler):
             projects = [row for row in projects if query.get("keyword", [""])[0] in row["name"]]
             return self.send_result(200, {"content": projects, "totalElements": str(len(projects)),
                                           "hasNext": False})
-        if url.path == "/api/v1/community/threads":
-            rows = [self.thread(identifier)]
-            if query.get("filter", ["all"])[0] not in ("all", "FREE"):
-                rows = []
-            rows = [row for row in rows if query.get("q", [""])[0] in row["title"]]
-            return self.send_result(200, {"pinned": [], "threads": rows, "nextOffset": None,
-                                          "total": str(len(rows))})
-        if url.path == f"/api/v1/community/threads/{identifier}/messages":
-            return self.send_result(200, {"messages": [
-                {"messageId": "1", "senderName": name, "content": "로컬 계정별 테스트 메시지",
-                 "isSenderBlocked": False}], "hasMore": False, "nextBefore": None})
         self.send_result(404)
-
-    @staticmethod
-    def thread(identifier):
-        return {"threadId": identifier, "title": "테스트 스레드 " + identifier, "description": "로컬 테스트",
-                "icon": "💬", "category": "FREE", "isPinned": False, "isMuted": False,
-                "isJoined": True, "membershipState": "ACTIVE", "unreadCount": "0"}
 
 
 if __name__ == "__main__":

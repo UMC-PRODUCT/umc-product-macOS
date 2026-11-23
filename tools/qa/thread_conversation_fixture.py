@@ -12,11 +12,19 @@ import re
 import struct
 import threading
 import uuid
+from types import SimpleNamespace
+
+from thread_management_fixture import active_membership, room_access
 
 _lock = threading.Lock()
-_rooms = {}
-_keys = {}
-_subscribers = {}
+
+
+def _state(server):
+    # Call under _lock. Separate fixture servers may reuse thread and member identifiers.
+    if not hasattr(server, "thread_conversations"):
+        server.thread_conversations = SimpleNamespace(rooms={}, keys={}, subscribers={},
+                                                      uploads={}, reactions={})
+    return server.thread_conversations
 
 
 def _message(identifier, author, content):
@@ -25,54 +33,71 @@ def _message(identifier, author, content):
                 isSenderBlocked=False, files=[], reactions=[], replyTo=None)
 
 
-def _room(thread):
-    if thread not in _rooms:
+def _room(state, thread):
+    if thread not in state.rooms and thread not in ("101", "102"):
+        state.rooms[thread] = []
+    if thread not in state.rooms:
         blocked = _message(2, "9001", "숨겨야 하는 차단 본문")
         blocked["isSenderBlocked"] = True
         deleted = _message(3, "9002", "숨겨야 하는 삭제 본문")
         deleted["deletedAt"] = "2026-11-23T09:01:00Z"
-        _rooms[thread] = [_message(1, thread, "로컬 계정별 테스트 메시지"), blocked, deleted]
-    return _rooms[thread]
+        state.rooms[thread] = [_message(1, thread, "로컬 계정별 테스트 메시지"), blocked, deleted]
+    return state.rooms[thread]
 
 
-def history(thread_id, before=None):
+def history(server, thread_id, member, before=None, limit=30):
     with _lock:
-        rows = [row for row in reversed(_room(thread_id))
+        state = _state(server)
+        rows = [row for row in reversed(_room(state, thread_id))
                 if before is None or int(row["messageId"]) < int(before)]
-        return json.loads(json.dumps(dict(messages=rows[:30], hasMore=len(rows) > 30,
-                                          nextBefore=rows[29]["messageId"] if len(rows) > 30 else None)))
+        messages = json.loads(json.dumps(rows[:limit]))
+        for row in messages:
+            reactions = state.reactions.get((thread_id, row["messageId"]), {})
+            row["reactions"] = [dict(emoji=emoji, count=str(len(people)), reactedByMe=member in people)
+                                for emoji, people in reactions.items()]
+        return dict(messages=messages, hasMore=len(rows) > limit,
+                    nextBefore=messages[-1]["messageId"] if len(rows) > limit else None)
 
 
-def _apply(member, destination, body):
+def _apply(server, member, destination, body):
     match = re.fullmatch(r"/app/community/threads/([1-9][0-9]*)/(messages|read)(?:/(.+))?", destination)
-    if not match or member != match[1]:
+    if not match or not member:
         raise ValueError("THREAD_ACCESS_DENIED")
     thread, command, suffix = match.groups()
-    with _lock:
-        rows = _room(thread)
+    with _lock, active_membership(server, thread, member) as room:
+        role = room["roles"][member]
+        state = _state(server)
+        rows = _room(state, thread)
         if command == "read":
+            last_read = int(body["lastReadMessageId"])
+            if not any(int(row["messageId"]) == last_read for row in rows):
+                raise ValueError("MESSAGE_UNAVAILABLE")
+            room["unread"][member] = {i for i in room["unread"].get(member, ()) if i > last_read}
             return None, False
         if suffix is None:
             key = member, thread, str(uuid.UUID(body["clientMessageId"]))
-            if key in _keys:
-                previous, identifier = _keys[key]
+            if key in state.keys:
+                previous, identifier = state.keys[key]
                 if previous != body:
                     raise ValueError("IDEMPOTENCY_CONFLICT")
                 return identifier, True
             if len(body["content"]) > 2000 or not (body["content"].strip() or body["fileMetadataIds"]):
                 raise ValueError("INVALID_MESSAGE")
-            identifier = str(int(rows[-1]["messageId"]) + 1)
+            identifier = str(int(rows[-1]["messageId"]) + 1 if rows else 1)
             row = _message(identifier, member, body["content"])
             if body.get("replyToId"):
                 row["replyTo"] = dict(messageId=str(body["replyToId"]))
             for file_id in body.get("fileMetadataIds", []):
-                item = _uploads.get(file_id)
+                item = state.uploads.get(file_id)
                 if not item or item["owner"] != member or not item["confirmed"]:
                     raise ValueError("IMAGE_UNAVAILABLE")
                 row["files"].append(dict(fileId=file_id, fileName=item["name"],
                                          fileSize=str(item["size"]), fileUrl=item["url"]))
             rows.append(row)
-            _keys[key] = body, identifier
+            for recipient in room["roles"]:
+                if recipient != member:
+                    room["unread"].setdefault(recipient, set()).add(int(identifier))
+            state.keys[key] = body, identifier
             return identifier, False
         message, action = suffix.split("/", 1)
         row = next((item for item in rows if item["messageId"] == message), None)
@@ -80,12 +105,17 @@ def _apply(member, destination, body):
             raise ValueError("MESSAGE_UNAVAILABLE")
         if action in ("reactions/add", "reactions/remove"):
             emoji = body["emoji"]
-            row["reactions"] = [item for item in row["reactions"] if item["emoji"] != emoji]
+            reactions = state.reactions.setdefault((thread, message), {})
+            people = reactions.setdefault(emoji, set())
             if action == "reactions/add":
-                row["reactions"].append(dict(emoji=emoji, count="1", reactedByMe=True))
+                people.add(member)
+            else:
+                people.discard(member)
+            if not people:
+                del reactions[emoji]
         elif action == "edit" and row["senderId"] == member:
             row["content"] = body["content"]
-        elif action == "delete" and row["senderId"] == member:
+        elif action == "delete" and (row["senderId"] == member or role in ("OWNER", "ADMIN")):
             row["deletedAt"] = "2026-11-23T10:00:00Z"
         else:
             raise ValueError("COMMAND_DENIED")
@@ -115,19 +145,30 @@ def _send(handler, text):
         handler.wfile.flush()
 
 
-def _broadcast(thread):
+def _broadcast(server, thread):
     event = dict(type="message.updated", threadId=thread, eventId=str(uuid.uuid4()))
     with _lock:
-        subscribers = list(_subscribers.items())
+        subscribers = list(_state(server).subscribers.items())
     queue = "/user/queue/community/threads/events"
     for handler, (identify, token, subscription) in subscribers:
-        if identify(token) != thread:
+        member = identify(token)
+        if not member or not room_access(server, thread, member)[1]:
             continue
         try:
             _send(handler, f"MESSAGE\ndestination:{queue}\nsubscription:{subscription}\n\n"
                   + json.dumps(event) + "\0")
         except OSError:
             pass
+
+
+def _consume_control(server, name):
+    if not hasattr(server, "control"):
+        return False
+    try:
+        (server.control / name).unlink()
+        return True
+    except FileNotFoundError:
+        return False
 
 
 def serve_socket(handler, identify):
@@ -157,30 +198,56 @@ def serve_socket(handler, identify):
             head, _, content = text.rstrip("\0").partition("\n\n")
             command, *headers = head.split("\n")
             fields = dict(line.split(":", 1) for line in headers)
+            if command == "DISCONNECT":
+                return
             if command == "CONNECT":
+                if token is not None:
+                    return
                 token = fields.get("Authorization", "").removeprefix("Bearer ")
                 if not identify(token):
                     _send(handler, "ERROR\n\ninvalid fixture session\0")
                     return
                 _send(handler, "CONNECTED\nversion:1.2\nheart-beat:0,0\n\n\0")
+            elif not token or not identify(token):
+                _send(handler, "ERROR\n\ninvalid fixture session\0")
+                return
             elif command == "SUBSCRIBE":
+                if fields["destination"] not in ("/user/queue/community/threads/events", "/user/queue/errors"):
+                    _send(handler, "ERROR\n\ninvalid queue\0")
+                    return
                 queues[fields["destination"]] = fields["id"]
                 if fields["destination"] == "/user/queue/community/threads/events":
                     with _lock:
-                        _subscribers[handler] = identify, token, fields["id"]
+                        _state(handler.server).subscribers[handler] = identify, token, fields["id"]
+            elif command == "UNSUBSCRIBE":
+                for queue, subscription in list(queues.items()):
+                    if subscription == fields.get("id"):
+                        del queues[queue]
+                        if queue.endswith("/events"):
+                            with _lock:
+                                _state(handler.server).subscribers.pop(handler, None)
             elif command == "SEND":
                 identifier = str(uuid.UUID(fields["x-command-id"]))
                 try:
                     body = json.loads(content)
                     member = identify(token)
-                    message, repeated = _apply(member, fields["destination"], body)
-                    event = dict(type="command.acknowledged", threadId=member,
+                    destination = fields["destination"]
+                    if _consume_control(handler.server, "fail-thread-command-once"):
+                        raise TimeoutError("TEMPORARILY_UNAVAILABLE")
+                    message, repeated = _apply(handler.server, member, destination, body)
+                    thread = destination.split("/")[4]
+                    event = dict(type="command.acknowledged", threadId=thread,
                                  payload=dict(commandId=identifier, messageId=message,
                                               deduplicated=repeated, clientMessageId=body.get("clientMessageId")))
                     queue = "/user/queue/community/threads/events"
                     if message is not None and not repeated:
-                        _broadcast(member)
-                except (KeyError, ValueError) as exc:
+                        _broadcast(handler.server, thread)
+                    if _consume_control(handler.server, "drop-thread-ack-once"):
+                        return
+                except TimeoutError as exc:
+                    event = dict(commandId=identifier, message=str(exc), retryable=True)
+                    queue = "/user/queue/errors"
+                except (KeyError, ValueError, TypeError, AttributeError) as exc:
                     event = dict(commandId=identifier, message=str(exc), retryable=False)
                     queue = "/user/queue/errors"
                 frame = f"MESSAGE\ndestination:{queue}\nsubscription:{queues[queue]}\n\n"
@@ -189,49 +256,58 @@ def serve_socket(handler, identify):
         return
     finally:
         with _lock:
-            _subscribers.pop(handler, None)
-
-_uploads = {}
+            _state(handler.server).subscribers.pop(handler, None)
 
 
-def prepare_photo(member, body, port):
+def prepare_photo(server, member, body):
     """Return a synthetic signed PUT URL to this loopback fixture."""
     if not member or body.get("category") != "POST_IMAGE":
         return 403, None
     size = body.get("fileSize")
-    if not isinstance(size, int) or not 0 < size <= 10 * 1024 * 1024:
+    mime, name = body.get("contentType"), body.get("fileName")
+    if not isinstance(name, str) or not name.strip() or mime not in (
+            "image/jpeg", "image/png", "image/heic", "image/heif", "image/webp", "image/gif"):
         return 400, None
+    if type(size) is not int or not 0 < size <= 10 * 1024 * 1024:
+        return 400, None
+    port = server.server_port
     file_id = str(uuid.uuid4())
     url = f"http://127.0.0.1:{port}/fixture/thread-photo/{file_id}"
     with _lock:
-        _uploads[file_id] = dict(url=url, mime=body["contentType"], owner=member, size=size, name=body["fileName"],
-                                 received=False, confirmed=False, port=port)
-    return 200, dict(fileId=file_id, uploadMethod="PUT", headers={"Content-Type": body["contentType"]},
-                     uploadUrl=f"http://127.0.0.1:{port}/fixture/thread-photo/{file_id}",
+        _state(server).uploads[file_id] = dict(url=url, mime=mime, owner=member, size=size,
+                                              name=name, received=False, confirmed=False)
+    return 200, dict(fileId=file_id, uploadMethod="PUT", headers={"Content-Type": mime},
+                     uploadUrl=url,
                      expiresAt="2099-01-01T00:00:00")
 
 
-def put_photo(file_id, data):
+def put_photo(server, file_id, data, content_type):
     with _lock:
-        item = _uploads.get(file_id)
-        if not item or len(data) != item["size"]:
+        item = _state(server).uploads.get(file_id)
+        if not item:
+            return 404
+        if item["confirmed"]:
+            return 403
+        if not isinstance(data, bytes) or len(data) != item["size"] or content_type != item["mime"]:
             return 400
         item["data"] = data
         item["received"] = True
         return 200
 
 
-def confirm_photo(member, file_id):
+def confirm_photo(server, member, file_id):
     with _lock:
-        item = _uploads.get(file_id)
-        if not item or item["owner"] != member or not item["received"]:
+        item = _state(server).uploads.get(file_id)
+        if not item:
+            return None  # Another storage fixture may own this identifier.
+        if item["owner"] != member or not item["received"]:
             return 403
         item["confirmed"] = True
         return 200
 
 
-def photo(file_id):
+def photo(server, file_id):
     """Resolve the loopback-only signed image URL after confirmation."""
     with _lock:
-        item = _uploads.get(file_id)
+        item = _state(server).uploads.get(file_id)
         return (item["mime"], item["data"]) if item and item["confirmed"] else None
