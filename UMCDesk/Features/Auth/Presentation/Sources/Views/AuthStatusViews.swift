@@ -172,9 +172,7 @@ private struct AuthStatusActions: View {
             case .logoutConfirmation, .withdrawalConfirmation:
                 HStack(spacing: UMCSpacing.value12) {
                     AuthButton(title: AppLocalization.string("취소"), kind: .secondary) {
-                        if viewModel.entry == .withdrawal {
-                            dismiss()
-                        } else { viewModel.cancelAccountAction() }
+                        viewModel.cancelAccountAction()
                     }
                     AuthButton(
                         title: screen == .logoutConfirmation
@@ -191,7 +189,6 @@ private struct AuthStatusActions: View {
 
     }
 
-    @Environment(\.dismiss) private var dismiss
     @Environment(\.openWindow) private var openWindow
 }
 
@@ -226,6 +223,11 @@ struct AuthChallengerIntro: View {
                         AuthButton(title: AppLocalization.string("회원 탈퇴"), kind: .destructiveQuiet)
                         {
                             viewModel.navigate(to: .withdrawalConfirmation)
+                        }
+                    }
+                    if viewModel.entry == .challenger, let close = viewModel.onCloseAccount {
+                        AuthButton(title: authLocalized("마이페이지로 돌아가기"), kind: .tertiary) {
+                            close()
                         }
                     }
                     AuthSupportButton()
