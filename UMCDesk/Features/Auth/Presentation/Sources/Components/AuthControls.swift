@@ -242,7 +242,7 @@ struct AuthBanner: View {
                 Text(title)
                     .umcTypography(isLoginStatus ? .title3Bold : .title4Regular)
                     .foregroundStyle(
-                        isError ? UMCColor.Semantic.textError :
+                        isError ? UMCColor.Semantic.textNeutralStrong800 :
                             symbol == nil ? UMCColor.Semantic.textNeutralDefault :
                             UMCColor.Semantic.textNeutralWeak500
                     )
