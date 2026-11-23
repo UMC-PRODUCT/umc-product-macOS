@@ -14,7 +14,7 @@ import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import urlsplit
+from urllib.parse import parse_qs, urlsplit
 
 MEMBERS = {
     "first@example.test": ("101", "첫 챌린저"),
@@ -81,19 +81,66 @@ class SessionFixture(BaseHTTPRequestHandler):
             return self.send_result(200, result)
         self.send_result(404)
 
-    def do_GET(self):
-        if urlsplit(self.path).path != "/api/v1/member/me":
-            return self.send_result(404)
+    def current_email(self):
         with self.server.session_lock:
-            sessions = tuple(self.server.sessions.values())
-        for access, email in sessions:
-            if self.headers.get("Authorization") == "Bearer " + access:
-                identifier, name = MEMBERS[email]
-                return self.send_result(200, {
-                    "id": identifier, "name": name, "nickname": name, "email": email,
-                    "schoolName": "테스트 대학교", "roles": [], "challengerRecords": [],
-                })
-        self.send_result(401)
+            for access, email in self.server.sessions.values():
+                if self.headers.get("Authorization") == "Bearer " + access:
+                    return email
+        return None
+
+    def do_GET(self):
+        email = self.current_email()
+        if not email:
+            return self.send_result(401)
+        url = urlsplit(self.path)
+        query = parse_qs(url.query)
+        identifier, name = MEMBERS[email]
+        if url.path == "/api/v1/member/me":
+            part = "WEB" if identifier == "101" else "PLAN"
+            return self.send_result(200, {
+                "id": identifier, "name": name, "nickname": name, "email": email,
+                "schoolName": "테스트 대학교", "roles": [], "challengerRecords": [
+                    {"challengerId": identifier, "gisuId": "10", "gisu": "10", "part": part, "roles": []}],
+            })
+        if url.path == "/api/v2/member/me":
+            return self.send_result(200, {"isSuperAdmin": False})
+        if url.path == "/api/v1/gisu/active":
+            return self.send_result(200, {"gisuId": "10"})
+        if url.path == "/api/v2/gisu":
+            return self.send_result(200, {"gisus": [{"gisuId": "10", "schools": [],
+                "chapters": [{"chapterId": "1", "chapterName": "테스트 지부"}]}]})
+        if url.path == "/api/v1/projects/matching-affiliation/me":
+            return self.send_result(200, {"gisuId": "10", "matchingChapter": {"id": "1"}})
+        if url.path == "/api/v1/project/matching-rounds":
+            return self.send_result(200, [])
+        if url.path == "/api/v1/projects/me/applications":
+            return self.send_result(200, [])
+        if url.path == "/api/v1/projects/admin/pm-candidates":
+            return self.send_result(403)
+        if url.path == "/api/v1/projects":
+            projects = [{"id": "1", "name": "모아", "description": "로컬 검증 공고",
+                         "partQuotas": [], "partQuotaStatus": "RECRUITING"}]
+            projects = [row for row in projects if query.get("keyword", [""])[0] in row["name"]]
+            return self.send_result(200, {"content": projects, "totalElements": str(len(projects)),
+                                          "hasNext": False})
+        if url.path == "/api/v1/community/threads":
+            rows = [self.thread(identifier)]
+            if query.get("filter", ["all"])[0] not in ("all", "FREE"):
+                rows = []
+            rows = [row for row in rows if query.get("q", [""])[0] in row["title"]]
+            return self.send_result(200, {"pinned": [], "threads": rows, "nextOffset": None,
+                                          "total": str(len(rows))})
+        if url.path == f"/api/v1/community/threads/{identifier}/messages":
+            return self.send_result(200, {"messages": [
+                {"messageId": "1", "senderName": name, "content": "로컬 계정별 테스트 메시지",
+                 "isSenderBlocked": False}], "hasMore": False, "nextBefore": None})
+        self.send_result(404)
+
+    @staticmethod
+    def thread(identifier):
+        return {"threadId": identifier, "title": "테스트 스레드 " + identifier, "description": "로컬 테스트",
+                "icon": "💬", "category": "FREE", "isPinned": False, "isMuted": False,
+                "isJoined": True, "membershipState": "ACTIVE", "unreadCount": "0"}
 
 
 if __name__ == "__main__":

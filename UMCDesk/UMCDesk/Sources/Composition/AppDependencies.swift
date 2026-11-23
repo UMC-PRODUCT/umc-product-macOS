@@ -5,6 +5,8 @@
 //  Created by euijjang97 on 10/6/26.
 //
 
+import CommunityData
+import CommunityDomain
 import AuthData
 import AuthDomain
 import Foundation
@@ -19,6 +21,7 @@ import SettingsPresentation
 /// One composition root for every window and app-level scene.
 @MainActor
 final class AppDependencies {
+    let communityRepository: any CommunityThreadRepository
     let loginRepository: any EmailLoginRepository
     let container: DIContainer
     let userSession: UserSessionManager
@@ -80,6 +83,7 @@ final class AppDependencies {
         )
         self.client = client
         let adapter = MoyaNetworkAdapter(networkClient: client)
+        communityRepository = LiveCommunityThreadRepository(adapter: adapter, environment: environment)
         self.loginRepository = LiveEmailLoginRepository(
             client: client, adapter: adapter, environment: environment
         )

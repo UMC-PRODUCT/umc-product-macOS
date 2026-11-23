@@ -17,6 +17,8 @@ public struct SettingsView: View {
 
     @Environment(\.openWindow) private var openWindow
     @State private var viewModel: SettingsViewModel
+    private let threadContent: (() -> AnyView)?
+    @State private var showsThreads = false
     @State private var showsSearchSuggestions = false
     @FocusState private var searchFocus: SearchFocus?
 
@@ -65,7 +67,8 @@ public struct SettingsView: View {
         static let contentWidth: CGFloat = 760
     }
 
-    public init(viewModel: SettingsViewModel) {
+    public init(viewModel: SettingsViewModel, threadContent: (() -> AnyView)? = nil) {
+        self.threadContent = threadContent
         _viewModel = State(initialValue: viewModel)
     }
 
@@ -79,7 +82,7 @@ public struct SettingsView: View {
                 .zIndex(1)
                 .simultaneousGesture(TapGesture().onEnded { dismissSearchSuggestions() })
             HStack(spacing: 0) {
-                if viewModel.page != .myPage {
+                if !showsThreads, viewModel.page != .myPage {
                     settingsSidebar
                         .foregroundStyle(sidebarPalette.textNeutralDefault)
                         .tint(sidebarPalette.textBrandDefault)
@@ -91,7 +94,10 @@ public struct SettingsView: View {
                         .frame(width: 1)
                         .accessibilityHidden(true)
                 }
-                pageContent
+                Group {
+                    if showsThreads, let threadContent { threadContent() }
+                    else { pageContent }
+                }
                     .environment(\.settingsAppearancePalette, palette)
                     .background(palette.backgroundDefault)
                     .environment(\.colorScheme, palette.colorScheme ?? colorScheme)
@@ -156,7 +162,8 @@ public struct SettingsView: View {
                 accessibleProfileMenuFocus = .trigger
             }
         }
-        .toolbar { navigationToolbar }
+        .toolbar { if !showsThreads { navigationToolbar } }
+        .onChange(of: viewModel.profile?.id) { showsThreads = false }
         .toolbarBackground(UMCColor.Custom.backgroundAppShell, for: .windowToolbar)
         .toolbarBackgroundVisibility(.visible, for: .windowToolbar)
         .toolbarColorScheme(.dark, for: .windowToolbar)
@@ -192,7 +199,22 @@ public struct SettingsView: View {
                 railItem(AppLocalization.string("홈"), symbol: "house")
                 railItem(AppLocalization.string("공지"), symbol: "megaphone")
                 railItem(AppLocalization.string("활동"), symbol: "calendar.badge.checkmark")
-                railItem(AppLocalization.string("스레드"), symbol: "bubble.left")
+                if threadContent != nil {
+                    Button {
+                        if viewModel.profile == nil { viewModel.onOpenLogin?() }
+                        else { showsThreads = true }
+                    } label: {
+                        Image(systemName: "bubble.left")
+                            .frame(width: 44, height: 44)
+                            .contentShape(.rect)
+                    }
+                    .buttonStyle(SettingsPlainButtonStyle())
+                    .foregroundStyle(sidebarChromeForeground)
+                    .accessibilityLabel("스레드")
+                    .help("스레드")
+                } else {
+                    railItem(AppLocalization.string("스레드"), symbol: "bubble.left")
+                }
                 railItem(AppLocalization.string("프로젝트"), symbol: "square.grid.2x2")
                 railItem(AppLocalization.string("커뮤니티"), symbol: "person.2")
                 Button { openWindow(id: DeskWindow.support) } label: {
@@ -266,11 +288,13 @@ public struct SettingsView: View {
                 profileMenuButton(
                     AppLocalization.string("마이페이지"), symbol: "person.crop.circle", focus: .myPage
                 ) {
+                    showsThreads = false
                     viewModel.showProfile()
                 }
                 profileMenuButton(
                     AppLocalization.string("설정"), symbol: "gearshape", focus: .settings
                 ) {
+                    showsThreads = false
                     viewModel.showSettings()
                 }
             }

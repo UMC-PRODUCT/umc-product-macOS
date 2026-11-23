@@ -9,6 +9,7 @@ import UMCFoundation
 import CoreRouting
 import SwiftUI
 import AppKit
+import CommunityPresentation
 import AuthPresentation
 import CoreDesignSystem
 import CoreUIComponents
@@ -131,7 +132,10 @@ private struct AppRootView: View {
     var body: some View {
         Group {
             if dependencies.navigation.showsSettings {
-                SettingsView(viewModel: dependencies.settingsViewModel)
+                SettingsView(viewModel: dependencies.settingsViewModel, threadContent: {
+                    AnyView(CommunityThreadsView(repository: dependencies.communityRepository)
+                        .id(dependencies.settingsViewModel.profile?.id))
+                })
             } else {
                 AuthView(login: dependencies.login)
             }
