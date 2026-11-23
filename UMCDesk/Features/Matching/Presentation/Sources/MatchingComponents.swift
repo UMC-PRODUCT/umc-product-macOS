@@ -126,27 +126,31 @@ struct MatchingRoundCard: View {
     var body: some View {
         TimelineView(.periodic(from: .now, by: 30)) { timeline in
             VStack(alignment: .leading, spacing: UMCSpacing.value16) {
-                HStack {
+                HStack(spacing: UMCSpacing.value16) {
                     VStack(alignment: .leading, spacing: UMCSpacing.value8) {
-                        MatchingBadge(text: round.isOpen(at: timeline.date) ? "지원 기간" : "매칭 일정")
-                        Text(round.name).umcTypography(.title1Bold)
-                        if let chapterName {
-                            Text(chapterName + " · 참여 가능한 파트를 확인하고 지원하세요.")
-                                .umcTypography(.headlineRegular)
-                                .foregroundStyle(UMCColor.Semantic.textNeutralMedium600)
+                        HStack {
+                            MatchingBadge(text: round.isOpen(at: timeline.date) ? "지원 기간" : "매칭 일정")
+                            if let chapterName { Text(chapterName).foregroundStyle(.secondary) }
                         }
+                        Text(round.name).umcTypography(.title1Bold)
                     }
-                    Spacer()
                     if let showSchedule {
+                        Spacer()
+                        VStack(alignment: .trailing, spacing: UMCSpacing.value4) {
+                            Text("지원 마감").foregroundStyle(.secondary)
+                            Text(MatchingLabel.time(round.endsAt)).umcTypography(.headlineBold)
+                        }
                         Button("전체 일정", action: showSchedule)
                             .buttonStyle(MatchingActionStyle(appearance: .text))
                     }
                 }
-                HStack(alignment: .top, spacing: UMCSpacing.value16) {
-                    milestone("지원 시작", round.startsAt, marked: round.isOpen(at: timeline.date))
-                    milestone("지원 마감", round.endsAt)
-                    milestone("판정 마감", round.decisionDeadline)
-                    milestone("결과 공개 예정", round.resultPublishAt)
+                if showSchedule == nil {
+                    HStack(alignment: .top, spacing: UMCSpacing.value16) {
+                        milestone("지원 시작", round.startsAt, marked: round.isOpen(at: timeline.date))
+                        milestone("지원 마감", round.endsAt)
+                        milestone("판정 마감", round.decisionDeadline)
+                        milestone("결과 공개 예정", round.resultPublishAt)
+                    }
                 }
             }
             .matchingPanel(UMCColor.Semantic.surfaceBrandWeak)

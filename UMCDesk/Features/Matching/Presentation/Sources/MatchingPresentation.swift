@@ -119,25 +119,16 @@ public struct MatchingView: View {
 
     public var body: some View {
         VStack(spacing: 0) {
-            HStack {
-                Spacer()
-                Menu {
-                    Button("전체 일정") { navigate(.schedule) }
-                    Button("내 지원") { navigate(.applications) }
-                    Button("내 프로젝트") { navigate(.management) }
-                } label: { Label("매칭 도구", systemImage: "slider.horizontal.3") }
-                .accessibilityLabel("매칭 도구")
-                .fixedSize()
-            }
-            .padding(.horizontal, UMCSpacing.value24)
-            .frame(height: 44)
-            Divider()
             ScrollView {
                 VStack(alignment: .leading, spacing: UMCSpacing.value24) {
                     if selectedProject == nil {
-                        Text(destination.heading)
-                            .umcTypography(.largeTitle3Bold)
-                            .accessibilityAddTraits(.isHeader)
+                        HStack {
+                            Text(destination.heading)
+                                .umcTypography(.largeTitle3Bold)
+                                .accessibilityAddTraits(.isHeader)
+                            Spacer()
+                            matchingTools
+                        }
                         matchingTabs
                         Divider()
                     }
@@ -148,6 +139,9 @@ public struct MatchingView: View {
             }
         }
         .toolbar {
+            if selectedProject != nil {
+                ToolbarItem(placement: .primaryAction) { matchingTools }
+            }
             ToolbarItemGroup(placement: .navigation) {
                 Button("뒤로", systemImage: "chevron.left") {
                     guard let target = previous.popLast() else { return }
@@ -254,6 +248,17 @@ public struct MatchingView: View {
                                        service: repository, gisuId: gisuId, chapterId: chapterId)
             }
         }
+    }
+
+    private var matchingTools: some View {
+        Menu {
+            Button("전체 일정") { navigate(.schedule) }
+            Button("내 지원") { navigate(.applications) }
+            Button("내 프로젝트") { navigate(.management) }
+        } label: {
+            Label("매칭 도구", systemImage: "slider.horizontal.3")
+        }
+        .fixedSize()
     }
 
     private var detailRoundState: MatchingDetailRoundState {
