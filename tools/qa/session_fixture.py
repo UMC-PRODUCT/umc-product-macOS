@@ -23,6 +23,7 @@ from urllib.parse import parse_qs, urlsplit
 
 MEMBERS = {
     "first@example.test": ("101", "첫 챌린저"),
+    "ops@example.test": ("104", "운영 검증 회원"),
     "design@example.test": ("103", "디자인 챌린저"),
     "second@example.test": ("102", "둘째 챌린저"),
 }
@@ -30,8 +31,13 @@ PASSWORD = "fixture-only"
 
 
 class SessionFixture(BaseHTTPRequestHandler):
-    def send_result(self, status, result=None):
-        body = json.dumps({"success": 200 <= status < 300, "result": result}).encode()
+    def send_result(self, status, result=None, *, code=None, message=None):
+        envelope = {"success": 200 <= status < 300, "result": result}
+        if code is not None:
+            envelope["code"] = code
+        if message is not None:
+            envelope["message"] = message
+        body = json.dumps(envelope).encode()
         with self.server.log_lock:
             with (self.server.control / "events").open("a") as log:
                 print(self.command, urlsplit(self.path).path, status, file=log)
@@ -96,6 +102,29 @@ class SessionFixture(BaseHTTPRequestHandler):
         url = urlsplit(self.path)
         path, query = url.path, parse_qs(url.query)
         member = MEMBERS[email][0]
+        if self.command == "PATCH" and path == "/api/v1/member/profile/links":
+            fields = {"GITHUB": "github", "LINKEDIN": "linkedIn", "INSTAGRAM": "instagram",
+                      "BLOG": "blog", "PERSONAL": "personal"}
+            links = {}
+            try:
+                entries = body["links"]
+                if not isinstance(entries, list):
+                    raise ValueError()
+                for item in entries:
+                    key, address = fields[item["type"]], item["link"]
+                    url = urlsplit(address)
+                    if key in links or url.scheme not in ("http", "https") or not url.hostname:
+                        raise ValueError()
+                    links[key] = address
+            except (KeyError, TypeError, ValueError):
+                self.send_result(400, message="프로필 링크 형식을 확인해 주세요.")
+                return True
+            with self.server.session_lock:
+                if not hasattr(self.server, "profile_links"):
+                    self.server.profile_links = {}
+                self.server.profile_links[member] = links
+            self.send_result(200, self.profile(email))
+            return True
         if self.command == "GET" and path == "/api/v1/projects/members":
             self.send_result(200, project_workspace_fixture.published_teams(query))
             return True
@@ -144,6 +173,19 @@ class SessionFixture(BaseHTTPRequestHandler):
                     return email
         return None
 
+    def profile(self, email):
+        identifier, name = MEMBERS[email]
+        part = {"101": "WEB", "102": "PLAN", "103": "DESIGN", "104": "PLAN"}.get(identifier, "WEB")
+        activities = [{"challengerId": identifier, "gisuId": "10", "gisu": "10", "part": part, "roles": []}]
+        if identifier in ("101", "102", "103", "104"):
+            activities.append({"challengerId": "999", "gisuId": "9", "gisu": "9", "part": "DESIGN", "roles": []})
+        if email in getattr(self.server, "unlinked", set()):
+            activities = []
+        with self.server.session_lock:
+            links = getattr(self.server, "profile_links", {}).get(identifier, {}).copy()
+        return {"id": identifier, "name": name, "nickname": name, "email": email,
+                "profile": links, "schoolName": "테스트 대학교", "roles": [], "challengerRecords": activities}
+
     def do_GET(self):
         path = urlsplit(self.path).path
         if path == "/ws/websocket":
@@ -170,22 +212,18 @@ class SessionFixture(BaseHTTPRequestHandler):
             if reject.exists():
                 reject.unlink(missing_ok=True)
                 return self.send_result(401)
-            part = {"101": "WEB", "102": "PLAN", "103": "DESIGN"}[identifier]
-            return self.send_result(200, {
-                "id": identifier, "name": name, "nickname": name, "email": email,
-                "schoolName": "테스트 대학교", "roles": [], "challengerRecords": [
-                    {"challengerId": identifier, "gisuId": "10", "gisu": "10", "part": part, "roles": []},
-                    {"challengerId": "999", "gisuId": "9", "gisu": "9", "part": "DESIGN", "roles": []}],
-            })
+            return self.send_result(200, self.profile(email))
         if url.path == "/api/v2/member/me":
-            return self.send_result(200, {"isSuperAdmin": False})
+            return self.send_result(200, {"isSuperAdmin": identifier == "104"})
         if url.path == "/api/v1/gisu/active":
             return self.send_result(200, {"gisuId": "10"})
         if url.path == "/api/v2/gisu":
             return self.send_result(200, {"gisus": [{"gisuId": "10", "schools": [],
-                "chapters": [{"chapterId": "1", "chapterName": "테스트 지부"}]}]})
+                "chapters": [{"chapterId": "2" if identifier == "104" else "1",
+                              "chapterName": "운영 검증 지부" if identifier == "104" else "테스트 지부"}]}]})
         if url.path == "/api/v1/projects/matching-affiliation/me":
-            return self.send_result(200, {"gisuId": "10", "matchingChapter": {"id": "1"}})
+            return self.send_result(200, {"gisuId": "10", "matchingChapter": {
+                "id": "2" if identifier == "104" else "1"}})
         if url.path == "/api/v1/project/matching-rounds":
             rounds = []
             for round_id, chapter, kind in [
