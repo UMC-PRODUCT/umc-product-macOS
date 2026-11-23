@@ -17,12 +17,12 @@ struct ThreadConversationModelTests {
         let repository = ConversationTestRepository()
         let account = UUID().uuidString
         let thread = "71"
-        defer {
-            UserDefaults.standard.removeObject(forKey: "community.conversation.\(account).71")
-        }
+        let suite = UUID().uuidString
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
         let original = ThreadConversationModel(
             threadID: thread, accountID: account,
-            repository: repository)
+            repository: repository, defaults: defaults)
         original.text = "합성 초안"
         original.selectReply("11")
         await original.refresh()
@@ -31,11 +31,11 @@ struct ThreadConversationModelTests {
         #expect(original.text == "합성 초안")
         let other = ThreadConversationModel(
             threadID: thread, accountID: UUID().uuidString,
-            repository: repository)
+            repository: repository, defaults: defaults)
         #expect(other.text.isEmpty && other.reply == nil)
         let restored = ThreadConversationModel(
             threadID: thread, accountID: account,
-            repository: repository)
+            repository: repository, defaults: defaults)
         #expect(restored.text == "합성 초안" && restored.reply == "11")
         await restored.refresh()
         restored.send()
@@ -43,6 +43,34 @@ struct ThreadConversationModelTests {
         let keys = await repository.keys
         #expect(keys.count == 2 && Set(keys).count == 1)
         #expect(restored.text.isEmpty && restored.reply == nil)
+    }
+
+    @Test func sameAccountAndThreadKeepSeparateDraftsAcrossSuites() throws {
+        let firstSuite = UUID().uuidString
+        let secondSuite = UUID().uuidString
+        let first = try #require(UserDefaults(suiteName: firstSuite))
+        let second = try #require(UserDefaults(suiteName: secondSuite))
+        defer {
+            first.removePersistentDomain(forName: firstSuite)
+            second.removePersistentDomain(forName: secondSuite)
+        }
+        let repository = ConversationTestRepository()
+        func open(_ defaults: UserDefaults) -> ThreadConversationModel {
+            ThreadConversationModel(threadID: "71", accountID: "101",
+                                    repository: repository, defaults: defaults)
+        }
+        let live = open(first)
+        live.text = "첫 번째 합성 초안"
+        live.selectReply("11")
+        let qa = open(second)
+        #expect(qa.text.isEmpty && qa.reply == nil)
+        qa.text = "두 번째 합성 초안"
+        #expect(open(first).text == "첫 번째 합성 초안")
+        #expect(open(first).reply == "11")
+        #expect(open(second).text == "두 번째 합성 초안")
+        qa.text = ""
+        #expect(second.object(forKey: "community.conversation.101.71") == nil)
+        #expect(open(first).text == "첫 번째 합성 초안")
     }
 
     private func settle(_ model: ThreadConversationModel) async throws {

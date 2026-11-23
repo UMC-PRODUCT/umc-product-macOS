@@ -16,6 +16,7 @@ final class ThreadConversationModel {
     let accountID: String
     let threadID: String
     private let repository: any ThreadConversationRepository
+    private let defaults: UserDefaults
     private let draftKey: String
     private var revision = 0
     private var pages = 1
@@ -50,13 +51,15 @@ final class ThreadConversationModel {
                 || !attachments.isEmpty)
     }
 
-    init(threadID: String, accountID: String, repository: any ThreadConversationRepository) {
+    init(threadID: String, accountID: String, repository: any ThreadConversationRepository,
+         defaults: UserDefaults) {
         self.threadID = threadID
         self.accountID = accountID
         self.repository = repository
+        self.defaults = defaults
         draftKey = "community.conversation.\(accountID).\(threadID)"
         draft =
-            UserDefaults.standard.data(forKey: draftKey).flatMap {
+            defaults.data(forKey: draftKey).flatMap {
                 try? JSONDecoder().decode(Draft.self, from: $0)
             } ?? Draft()
     }
@@ -289,9 +292,9 @@ final class ThreadConversationModel {
 
     private func persist() {
         if draft.text.isEmpty, draft.reply == nil, draft.files.isEmpty {
-            UserDefaults.standard.removeObject(forKey: draftKey)
+            defaults.removeObject(forKey: draftKey)
         } else if let data = try? JSONEncoder().encode(draft) {
-            UserDefaults.standard.set(data, forKey: draftKey)
+            defaults.set(data, forKey: draftKey)
         }
     }
 

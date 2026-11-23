@@ -17,13 +17,16 @@ public struct ThreadConversationView: View {
     private let accountID: String
     private let repository: any ThreadConversationRepository
 
+    private let defaults: UserDefaults
+
     public init(
         thread: CommunityThread, accountID: String,
-        repository: any ThreadConversationRepository
+        repository: any ThreadConversationRepository, defaults: UserDefaults = .standard
     ) {
         self.thread = thread
         self.accountID = accountID
         self.repository = repository
+        self.defaults = defaults
     }
 
     public var body: some View {
@@ -32,7 +35,9 @@ public struct ThreadConversationView: View {
         } else if !thread.isJoined || thread.membershipState != "ACTIVE" {
             ContentUnavailableView("참여자만 대화를 볼 수 있어요", systemImage: "lock")
         } else {
-            ConversationTimeline(thread: thread, accountID: accountID, repository: repository)
+            ConversationTimeline(thread: thread, accountID: accountID, repository: repository,
+                                 defaults: defaults)
+                .id(ObjectIdentifier(defaults))
                 .id([accountID, thread.id, thread.membershipState ?? "", String(thread.isJoined)])
         }
     }
@@ -51,14 +56,14 @@ private struct ConversationTimeline: View {
     @State private var editText = ""
     @State private var summaryRequested = false
 
-    init(thread: CommunityThread, accountID: String, repository: any ThreadConversationRepository)
-    {
+    init(thread: CommunityThread, accountID: String, repository: any ThreadConversationRepository,
+         defaults: UserDefaults) {
         self.thread = thread
         _model = State(
             initialValue: ThreadConversationModel(
                 threadID: thread.id,
                 accountID: accountID,
-                repository: repository))
+                repository: repository, defaults: defaults))
     }
 
     private var active: Bool { thread.isJoined && thread.membershipState == "ACTIVE" }
