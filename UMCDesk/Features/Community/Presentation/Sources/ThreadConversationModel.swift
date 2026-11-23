@@ -27,6 +27,27 @@ final class ThreadConversationModel {
         get { store.draft }
         set { store.draft = newValue }
     }
+    struct Outgoing: Identifiable {
+        fileprivate var snapshot: Draft
+        var id: String { snapshot.key }
+        var content: String { snapshot.text }
+        var files: [Attachment] { snapshot.files }
+        let createdAt = Date()
+        var failure: String?
+        var retryable = true
+    }
+
+    var outgoing: [Outgoing] { store.outgoing }
+    var draftIsOutgoing: Bool { outgoing.contains { $0.id == draft.key } }
+
+    var composerText: String {
+        get { draftIsOutgoing ? "" : text }
+        set {
+            guard !accessRevoked else { return }
+            if draftIsOutgoing { draft = Draft() }
+            text = newValue
+        }
+    }
     var messages: [ThreadConversationMessage] = []
     var cursor: String?
     var loaded = false
@@ -50,6 +71,7 @@ final class ThreadConversationModel {
     var attachments: [Attachment] { draft.files }
     var canSend: Bool {
         loaded && !busy && !cooldown && !store.sending && text.unicodeScalars.count <= 2_000
+            && !outgoing.contains { $0.id == draft.key && !$0.retryable }
             && (!text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                 || !attachments.isEmpty)
     }
@@ -144,6 +166,7 @@ final class ThreadConversationModel {
 
     func mention(_ person: ThreadManagementPerson) {
         guard !accessRevoked else { return }
+        if draftIsOutgoing { draft = Draft() }
         var selected = draft.mentions ?? [:]
         guard selected.count < 100 else { return }
         selected[person.memberId] = person.name
@@ -154,6 +177,7 @@ final class ThreadConversationModel {
 
     func selectReply(_ id: String?) {
         guard !accessRevoked else { return }
+        if draftIsOutgoing { draft = Draft() }
         retryOperation = nil
         draft.key = UUID().uuidString.lowercased()
         draft.reply = id
@@ -163,13 +187,16 @@ final class ThreadConversationModel {
         guard !accessRevoked else { return }
         retryOperation = nil
         draft.key = UUID().uuidString.lowercased()
-        if let file = draft.files.first(where: { $0.id == id }) { file.discardLocalCopy() }
+        if let file = draft.files.first(where: { $0.id == id }),
+           !outgoing.contains(where: { $0.files.contains(where: { $0.id == id }) }) {
+            file.discardLocalCopy()
+        }
         draft.files.removeAll { $0.id == id }
     }
 
     func attach(_ urls: [URL]) {
         guard !accessRevoked else { return }
-        guard !urls.isEmpty, attachments.count + urls.count <= 4 else {
+        guard !urls.isEmpty, (draftIsOutgoing ? 0 : attachments.count) + urls.count <= 4 else {
             failure = "사진은 한 번에 네 장까지 첨부할 수 있어요."
             return
         }
@@ -191,6 +218,7 @@ final class ThreadConversationModel {
                 try FileManager.default.copyItem(at: url, to: file.localURL)
                 staged.append(file)
             }
+            if draftIsOutgoing { draft = Draft() }
             retryOperation = nil
             draft.key = UUID().uuidString.lowercased()
             draft.files += staged
@@ -202,19 +230,29 @@ final class ThreadConversationModel {
 
     func send() {
         guard canSend else { return }
-        let snapshot = draft
-        run { [weak self] in
+        transmit(draft)
+    }
+
+    func retryOutgoing(_ id: String) {
+        guard loaded, !busy, !cooldown, !store.sending,
+              let item = outgoing.first(where: { $0.id == id }),
+              item.failure != nil, item.retryable else { return }
+        transmit(item.snapshot)
+    }
+
+    private func transmit(_ snapshot: Draft) {
+        store.sending = true
+        if let index = store.outgoing.firstIndex(where: { $0.id == snapshot.key }) {
+            store.outgoing[index].failure = nil
+        } else {
+            store.outgoing.append(Outgoing(snapshot: snapshot))
+        }
+        run(outgoingID: snapshot.key) { [weak self] in
             guard let self else { return }
-            guard self.draft.key == snapshot.key, !self.store.sending else { return }
-            self.store.sending = true
-            defer { self.store.sending = false }
             var ids: [String] = []
             for file in snapshot.files {
                 try Task.checkCancellation()
-                guard let current = self.draft.files.first(where: { $0.id == file.id }) else {
-                    return
-                }
-                if let remoteID = current.remoteID {
+                if let remoteID = file.remoteID {
                     ids.append(remoteID)
                     continue
                 }
@@ -223,14 +261,15 @@ final class ThreadConversationModel {
                     name: file.name,
                     contentType: file.mime, data: bytes)
                 try Task.checkCancellation()
-                guard let index = self.draft.files.firstIndex(where: { $0.id == file.id }) else {
-                    return
+                if let index = self.draft.files.firstIndex(where: { $0.id == file.id }) {
+                    self.draft.files[index].remoteID = remoteID
                 }
-                self.draft.files[index].remoteID = remoteID
+                if let row = self.store.outgoing.firstIndex(where: { $0.id == snapshot.key }),
+                   let index = self.store.outgoing[row].files.firstIndex(where: { $0.id == file.id }) {
+                    self.store.outgoing[row].snapshot.files[index].remoteID = remoteID
+                }
                 ids.append(remoteID)
             }
-            let retainedFiles = Set(self.draft.files.map(\.id))
-            guard snapshot.files.allSatisfy({ retainedFiles.contains($0.id) }) else { return }
             try Task.checkCancellation()
             try await self.repository.perform(
                 .create(
@@ -242,8 +281,8 @@ final class ThreadConversationModel {
             try Task.checkCancellation()
             if self.draft.key == snapshot.key {
                 self.draft = Draft()
-                snapshot.files.forEach { $0.discardLocalCopy() }
             }
+            self.store.removeOutgoing(snapshot.key)
             await self.refresh()
         }
     }
@@ -279,7 +318,13 @@ final class ThreadConversationModel {
 
     func retry() {
         guard canRetry else { return }
-        if loaded, let retryOperation { run(retryOperation) } else { Task { await refresh() } }
+        if loaded, let retryOperation {
+            run(retryOperation)
+        } else if loaded, let item = outgoing.first(where: { $0.id == draft.key && $0.failure != nil }) {
+            retryOutgoing(item.id)
+        } else {
+            Task { await refresh() }
+        }
     }
 
     func stop() {
@@ -303,6 +348,7 @@ final class ThreadConversationModel {
     private func revokeAccess(_ error: Error) {
         stop()
         accessRevoked = true
+        for item in outgoing { store.removeOutgoing(item.id) }
         messages = []
         summary = nil
         cursor = nil
@@ -313,7 +359,7 @@ final class ThreadConversationModel {
         failure = error.localizedDescription
     }
 
-    private func run(_ work: @escaping @MainActor () async throws -> Void) {
+    private func run(outgoingID: String? = nil, _ work: @escaping @MainActor () async throws -> Void) {
         guard !busy && !cooldown else { return }
         busy = true
         failure = nil
@@ -321,6 +367,12 @@ final class ThreadConversationModel {
         retryOperation = nil
         operation = Task {
             defer {
+                if let outgoingID {
+                    store.sending = false
+                    if let item = outgoing.first(where: { $0.id == outgoingID }), item.failure == nil {
+                        store.removeOutgoing(outgoingID)
+                    }
+                }
                 busy = false
                 operation = nil
             }
@@ -337,10 +389,18 @@ final class ThreadConversationModel {
                 try await work()
             } catch {
                 if !Task.isCancelled {
-                    failure = error.localizedDescription
+                    if let outgoingID,
+                       let row = store.outgoing.firstIndex(where: { $0.id == outgoingID }) {
+                        store.outgoing[row].failure = error.localizedDescription
+                        if case ThreadConversationRejection.commandDenied = error {
+                            store.outgoing[row].retryable = false
+                        }
+                    } else {
+                        failure = error.localizedDescription
+                    }
                     switch error {
                     case ThreadConversationRejection.rateLimited:
-                        retryOperation = work
+                        retryOperation = outgoingID == nil ? work : nil
                         cooldown = true
                         try? await Task.sleep(for: .seconds(3))
                         cooldown = false
@@ -351,7 +411,7 @@ final class ThreadConversationModel {
                     case is CancellationError:
                         revokeAccess(error)
                     default:
-                        retryOperation = work
+                        retryOperation = outgoingID == nil ? work : nil
                     }
                 }
             }
@@ -386,6 +446,21 @@ final class ThreadConversationModel {
         private let defaults: UserDefaults
         private let key: String
         fileprivate let windows = NSHashTable<ThreadConversationModel>.weakObjects()
+        fileprivate var outgoing: [Outgoing] = []
+        fileprivate func removeOutgoing(_ id: String) {
+            guard let index = outgoing.firstIndex(where: { $0.id == id }) else { return }
+            let files = outgoing.remove(at: index).files
+            for file in files where !draft.files.contains(where: { $0.id == file.id })
+                && !outgoing.contains(where: { $0.files.contains(where: { $0.id == file.id }) }) {
+                file.discardLocalCopy()
+            }
+        }
+
+        isolated deinit {
+            // The persisted draft owns its files after the last window closes.
+            for item in outgoing { removeOutgoing(item.id) }
+        }
+
         fileprivate var sending = false
         fileprivate var draft: Draft {
             didSet {
@@ -437,6 +512,7 @@ final class ThreadConversationModel {
                 else { return }
             }
             accessEnd = end
+            for item in outgoing { removeOutgoing(item.id) }
             for window in windows.allObjects { window.revokeAccess(end) }
             let files = draft.files
             draft = Draft()

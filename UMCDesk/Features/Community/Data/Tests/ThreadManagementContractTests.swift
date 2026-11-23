@@ -5,12 +5,24 @@
 //  Created by euijjang97 on 11/23/26.
 //
 
+import CommunityDomain
 import Foundation
 import Testing
 @testable import CommunityData
 
 @Suite("스레드 관리 서버 계약")
 struct ThreadManagementContractTests {
+    @Test func onlyConfirmedDeletionEndsTheThreadAsDeleted() {
+        let deleted = Data(#"{"isSuccess":false,"code":"COMMUNITY-0037"}"#.utf8)
+        let wrongCode = Data(#"{"isSuccess":false,"code":"COMMUNITY-0033"}"#.utf8)
+        let classify = LiveCommunityThreadRepository.detailError(status:data:)
+        #expect(classify(410, deleted) as? ThreadDetailError == .deleted)
+        #expect(classify(404, wrongCode) as? ThreadDetailError == .accessDenied)
+        #expect(classify(403, nil) as? ThreadDetailError == .accessDenied)
+        #expect(!(classify(410, wrongCode) is ThreadDetailError))
+        #expect(!(classify(503, deleted) is ThreadDetailError))
+    }
+
     @Test func shareLinkMustComeFromDetailAndIdentifyTheSameThread() throws {
         let detail: [String: Any] = ["threadId": 42, "title": "합성", "icon": "T",
             "isPinned": false, "isMuted": false, "isJoined": true, "unreadCount": "0"]

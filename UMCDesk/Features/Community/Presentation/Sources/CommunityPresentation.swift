@@ -101,7 +101,7 @@ private struct ThreadBrowser: View {
                 }
             }
             .padding(UMCSpacing.value16)
-            .frame(minWidth: 220, idealWidth: 344, maxWidth: 400,
+            .frame(minWidth: 220, idealWidth: 344, maxWidth: 344,
                    minHeight: 0, maxHeight: .infinity, alignment: .topLeading)
             if let item = threads.first(where: { $0.id == selection }) {
                 ThreadDestination(accountID: accountID, thread: item, detached: false,
@@ -151,15 +151,11 @@ private struct ThreadBrowser: View {
             HStack(alignment: .top) {
                 Text(item.icon).accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 4) {
-                    HStack(spacing: 6) {
-                        Text(item.title).font(.headline).lineLimit(1)
-                        if let category = item.category {
-                            Text(["PROJECT": "프로젝트", "STUDY": "스터디",
-                                  "FREE": "자유", "QNA": "질문"][category] ?? category)
-                                .font(.caption2).lineLimit(1)
-                                .padding(.horizontal, 5).padding(.vertical, 2)
-                                .background(.quaternary, in: Capsule())
-                        }
+                    Text(item.title).font(.headline).lineLimit(1)
+                    if let category = item.category {
+                        Text(["PROJECT": "프로젝트", "STUDY": "스터디",
+                              "FREE": "자유", "QNA": "질문"][category] ?? category)
+                            .font(.caption).foregroundStyle(.secondary)
                     }
                     if item.membershipState == "KICKED" {
                         Text("내보내짐 · 확인 필요").font(.caption)
@@ -174,7 +170,10 @@ private struct ThreadBrowser: View {
                 Spacer(minLength: 2)
                 if item.isPinned { Image(systemName: "pin.fill").accessibilityLabel("고정됨") }
                 if item.unread != "0" {
-                    Text(item.unread).accessibilityLabel("안 읽은 메시지 " + item.unread)
+                    Text(item.unread).font(.caption.bold())
+                        .padding(.horizontal, 5).padding(.vertical, 2)
+                        .background(UMCColor.Semantic.surfaceBrandMedium, in: Capsule())
+                        .accessibilityLabel("안 읽은 메시지 " + item.unread)
                 }
             }.padding(.vertical, 4).tag(item.id)
         }

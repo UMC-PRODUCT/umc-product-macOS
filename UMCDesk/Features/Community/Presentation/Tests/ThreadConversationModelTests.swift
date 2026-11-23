@@ -308,6 +308,33 @@ struct ThreadConversationModelTests {
         #expect(keys.count == 2 && Set(keys).count == 1 && model.text.isEmpty)
     }
 
+    @Test func retriesOnlySelectedBubbleAndPreservesNewerDraft() async throws {
+        let repository = ConversationTestRepository()
+        let suite = UUID().uuidString
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let model = ThreadConversationModel(threadID: "71", accountID: "101",
+                                            repository: repository, defaults: defaults)
+        await model.refresh()
+        model.text = "첫 메시지"
+        model.send()
+        let original = try #require(model.outgoing.first?.id)
+        try await settle(model)
+        #expect(model.outgoing.first?.failure != nil)
+        model.text = "다음 메시지"
+        await repository.failNextSend()
+        model.send()
+        try await settle(model)
+        let latest = try #require(model.outgoing.last?.id)
+        #expect(original != latest && model.outgoing.count == 2)
+        model.retryOutgoing(original)
+        model.retryOutgoing(original)
+        try await settle(model)
+        #expect(model.outgoing.map(\.id) == [latest])
+        #expect(model.text == "다음 메시지")
+        #expect(await repository.keys == [original, latest, original])
+    }
+
     private func settle(_ model: ThreadConversationModel) async throws {
         let deadline = ContinuousClock.now + .seconds(2)
         while model.busy && ContinuousClock.now < deadline {
@@ -319,6 +346,8 @@ struct ThreadConversationModelTests {
 
 private actor ConversationTestRepository: ThreadConversationRepository {
     var keys: [String] = []
+    private var failCreate = false
+    func failNextSend() { failCreate = true }
     var uploadCount = 0
     var uploadCancelled = false
     private var messages: [ThreadConversationMessage] = []
@@ -374,7 +403,10 @@ private actor ConversationTestRepository: ThreadConversationRepository {
             }
             return
         }
-        if keys.count == 1 { throw URLError(.timedOut) }
+        if keys.count == 1 || failCreate {
+            failCreate = false
+            throw URLError(.timedOut)
+        }
     }
 
     func observeChanges(thread: String, changed: @escaping @Sendable () async -> Void) async throws

@@ -22,22 +22,35 @@ public struct LiveCommunityThreadRepository: CommunityThreadRepository {
 
     public func thread(id: String) async throws -> CommunityThread {
         try ConversationIdentifier.validate(id)
+        let response: Response
         do {
-            let detail: ThreadResponse = try await request("/" + id)
-            return detail.model
-        } catch RepositoryError.serverError(let code, _) where code == "COMMUNITY-0037" {
-            throw ThreadDetailError.deleted
-        } catch RepositoryError.serverError(let code, _) where code == "COMMUNITY-0034" {
-            throw ThreadDetailError.accessDenied
+            response = try await adapter.request(ThreadTarget(environment: environment,
+                path: "/api/v1/community/threads/" + id, method: .get, task: .requestPlain))
         } catch NetworkError.requestFailed(let status, let data) {
-            if status == 410, let data,
-               let error = try? JSONDecoder().decode(APIResponse<EmptyResult>.self, from: data),
-               error.code == "COMMUNITY-0037" {
-                throw ThreadDetailError.deleted
-            }
-            if status == 403 || status == 404 { throw ThreadDetailError.accessDenied }
-            throw NetworkError.requestFailed(statusCode: status, data: data)
+            throw Self.detailError(status: status, data: data)
         }
+        guard (200..<300).contains(response.statusCode) else {
+            throw Self.detailError(status: response.statusCode, data: response.data)
+        }
+        let envelope = try JSONDecoder().decode(APIResponse<ThreadResponse>.self, from: response.data)
+        if !envelope.isSuccess {
+            switch envelope.code {
+            case "COMMUNITY-0037": throw ThreadDetailError.deleted
+            case "COMMUNITY-0034", "COMMUNITY-0033": throw ThreadDetailError.accessDenied
+            default: break
+            }
+        }
+        return try envelope.unwrap().model
+    }
+
+    static func detailError(status: Int, data: Data?) -> any Error {
+        if status == 410, let data,
+           let error = try? JSONDecoder().decode(APIResponse<EmptyResult>.self, from: data),
+           !error.isSuccess, error.code == "COMMUNITY-0037" {
+            return ThreadDetailError.deleted
+        }
+        if status == 403 || status == 404 { return ThreadDetailError.accessDenied }
+        return NetworkError.requestFailed(statusCode: status, data: data)
     }
 
     public func threads(query: String, filter: String, offset: String?) async throws -> ThreadPage<CommunityThread> {
