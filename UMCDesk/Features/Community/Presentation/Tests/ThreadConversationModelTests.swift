@@ -73,6 +73,107 @@ struct ThreadConversationModelTests {
         #expect(open(first).text == "첫 번째 합성 초안")
     }
 
+    @Test func windowsShareAttachmentsAndAnOlderSendPreservesNewerDraft() async throws {
+        let repository = ConversationTestRepository()
+        await repository.pauseNextSend()
+        let suite = UUID().uuidString
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        func open(_ storage: UserDefaults) -> ThreadConversationModel {
+            ThreadConversationModel(threadID: "71", accountID: "101",
+                                    repository: repository, defaults: storage)
+        }
+        let main = open(defaults)
+        let separate = open(try #require(UserDefaults(suiteName: suite)))
+        let image = FileManager.default.temporaryDirectory
+            .appending(path: UUID().uuidString + ".png")
+        try Data([1]).write(to: image)
+        defer { try? FileManager.default.removeItem(at: image) }
+        main.attach([image])
+        let file = try #require(separate.attachments.first)
+        separate.removeFile(file.id)
+        #expect(main.attachments.isEmpty)
+        #expect(!FileManager.default.fileExists(atPath: file.localURL.path))
+
+        main.text = "전송 중인 초안"
+        await main.refresh()
+        main.send()
+        await repository.waitForSend()
+        separate.text = "새 초안"
+        separate.attach([image])
+        let newFile = try #require(main.attachments.first)
+        defer { separate.removeFile(newFile.id) }
+        await repository.resumeSend()
+        try await settle(main)
+        #expect(main.text == "새 초안")
+        #expect(main.attachments.first?.id == newFile.id)
+        #expect(FileManager.default.fileExists(atPath: newFile.localURL.path))
+        let saved = try #require(defaults.data(forKey: "community.conversation.101.71"))
+        let json = try #require(JSONSerialization.jsonObject(with: saved) as? [String: Any])
+        #expect(json["text"] as? String == "새 초안")
+    }
+
+    @Test(arguments: [true, false])
+    func deniedHistoryDiscardsFailedWriteBeforeAnotherUpload(refreshFirst: Bool) async throws {
+        let repository = ConversationTestRepository()
+        await repository.failUploads()
+        let suite = UUID().uuidString
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let model = ThreadConversationModel(threadID: "71", accountID: "101",
+                                            repository: repository, defaults: defaults)
+        let url = FileManager.default.temporaryDirectory.appending(path: suite + ".png")
+        try Data([1]).write(to: url)
+        defer { try? FileManager.default.removeItem(at: url) }
+        model.attach([url])
+        let file = try #require(model.attachments.first)
+        defer { model.removeFile(file.id) }
+        await model.refresh()
+        model.send()
+        try await settle(model)
+        #expect(await repository.uploadCount == 1)
+        await repository.revoke()
+        if refreshFirst { await model.refresh() }
+        model.retry()
+        try await settle(model)
+        #expect(!model.loaded && !model.canRetry && !model.canSend)
+        #expect(await repository.uploadCount == 1)
+        #expect(await repository.keys.isEmpty)
+    }
+
+    @Test func membershipDenialInSeparateWindowCancelsMainWindowUpload() async throws {
+        let repository = ConversationTestRepository()
+        await repository.pauseUploads()
+        let suite = UUID().uuidString
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        func open() -> ThreadConversationModel {
+            ThreadConversationModel(threadID: "71", accountID: "101",
+                                    repository: repository, defaults: defaults)
+        }
+        let main = open()
+        let separate = open()
+        let url = FileManager.default.temporaryDirectory.appending(path: suite + ".png")
+        try Data([1]).write(to: url)
+        defer { try? FileManager.default.removeItem(at: url) }
+        main.attach([url])
+        let file = try #require(main.attachments.first)
+        defer { main.removeFile(file.id) }
+        await main.refresh()
+        main.send()
+        let deadline = ContinuousClock.now + .seconds(2)
+        while await repository.uploadCount == 0 && ContinuousClock.now < deadline {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        #expect(await repository.uploadCount == 1)
+        await repository.revoke()
+        await separate.refresh()
+        try await settle(main)
+        #expect(!main.loaded && !main.canRetry)
+        #expect(await repository.uploadCancelled)
+        #expect(await repository.keys.isEmpty)
+    }
+
     private func settle(_ model: ThreadConversationModel) async throws {
         let deadline = ContinuousClock.now + .seconds(2)
         while model.busy && ContinuousClock.now < deadline {
@@ -84,21 +185,65 @@ struct ThreadConversationModelTests {
 
 private actor ConversationTestRepository: ThreadConversationRepository {
     var keys: [String] = []
+    var uploadCount = 0
+    var uploadCancelled = false
+    private var pauseUpload = false
+    private var uploadFails = false
+    private var denied = false
+    private var pause = false
+    private var sendStart: CheckedContinuation<Void, Never>?
+    private var sendFinish: CheckedContinuation<Void, Never>?
+
+    func pauseUploads() { pauseUpload = true }
+    func failUploads() { uploadFails = true }
+    func revoke() { denied = true }
+    func pauseNextSend() { pause = true }
+
+    func waitForSend() async {
+        if sendFinish == nil { await withCheckedContinuation { sendStart = $0 } }
+    }
+
+    func resumeSend() {
+        sendFinish?.resume()
+        sendFinish = nil
+    }
 
     func history(
         thread: String, before: String?
-    ) async throws -> ThreadPage<ThreadConversationMessage> { .init(values: [], cursor: nil) }
+    ) async throws -> ThreadPage<ThreadConversationMessage> {
+        if denied { throw ThreadConversationRejection.denied("참여 권한이 없어요.") }
+        return .init(values: [], cursor: nil)
+    }
 
     func members(thread: String, query: String) async throws -> [ThreadManagementPerson] { [] }
 
     func perform(_ command: ThreadConversationCommand, thread: String) async throws {
         guard case .create(let key, _, _, _, _) = command else { return }
         keys.append(key)
+        if pause {
+            pause = false
+            await withCheckedContinuation {
+                sendFinish = $0
+                sendStart?.resume()
+                sendStart = nil
+            }
+            return
+        }
         if keys.count == 1 { throw URLError(.timedOut) }
     }
 
     func observeChanges(thread: String, changed: @escaping @Sendable () async -> Void) async throws
     {}
 
-    func upload(name: String, contentType: String, data: Data) async throws -> String { "photo" }
+    func upload(name: String, contentType: String, data: Data) async throws -> String {
+        uploadCount += 1
+        if pauseUpload {
+            do { try await Task.sleep(for: .seconds(10)) } catch {
+                uploadCancelled = true
+                throw error
+            }
+        }
+        if uploadFails { throw URLError(.timedOut) }
+        return "photo"
+    }
 }
