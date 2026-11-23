@@ -263,7 +263,9 @@ def handle_thread_management(handler, identifier, body=None):
         else:
             name, part = _PEOPLE[i]
             handler.send_result(200, {"id": i, "name": name, "nickname": name,
-                "schoolName": "테스트 대학교", "challengerRecords": [{"gisu": "10", "part": part}],
+                "schoolName": "테스트 대학교", "challengerRecords": [
+                    {"challengerId": i, "gisuId": "10", "gisu": "10", "part": part}
+                ],
                 "profile": {"github": "https://example.test/test-profile"}})
         return True
     match = re.fullmatch(r"/api/v1/community/threads/(\d+)(?:/(members(?:/\d+(?:/role)?)?"
