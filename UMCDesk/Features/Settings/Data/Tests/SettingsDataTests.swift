@@ -29,7 +29,7 @@ struct SettingsDataTests {
         #expect(profile.profileImageURL == nil)
         #expect(profile.links.github.isEmpty)
         #expect(profile.activities == [
-            .init(id: "7", generation: "10", part: "NEW_FUTURE_PART", roles: ["FUTURE_ROLE"])
+            .init(id: "7", generation: "10", part: "NEW_FUTURE_PART", roles: ["FUTURE_ROLE"], gisuId: "3")
         ])
         #expect(try JSONDecoder().decode(
             SettingsMemberResponse.self, from: JSONEncoder().encode(response)

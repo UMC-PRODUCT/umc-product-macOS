@@ -12,6 +12,7 @@ import SwiftUI
 struct MatchingStatisticsView: View {
     let service: any MatchingUseCase
     let chapterId: String?
+    let canReadAdjustment: Bool
     @State private var rosterType = MatchingRosterType.all
     @State private var adjustment = false
     @State private var revision = 0
@@ -66,12 +67,15 @@ struct MatchingStatisticsView: View {
                     Text("기획–디자인").tag(MatchingRosterType.design)
                     Text("기획–개발자").tag(MatchingRosterType.developer)
                 }.frame(maxWidth: 300)
-                Picker("명단", selection: $adjustment) {
-                    Text("공개 명단").tag(false)
-                    Text("조정 명단").tag(true)
-                }.pickerStyle(.segmented).frame(maxWidth: 260)
-                OperationsLoad(key: [chapterId, String(adjustment), String(revision)], load: {
-                    try await service.overview(chapterId: chapterId, adjustment: adjustment)
+                if canReadAdjustment {
+                    Picker("명단", selection: $adjustment) {
+                        Text("공개 명단").tag(false)
+                        Text("조정 명단").tag(true)
+                    }.pickerStyle(.segmented).frame(maxWidth: 260)
+                }
+                let showsAdjustment = canReadAdjustment && adjustment
+                OperationsLoad(key: [chapterId, String(showsAdjustment), String(revision)], load: {
+                    try await service.overview(chapterId: chapterId, adjustment: showsAdjustment)
                 }) { projects in
                     if projects.isEmpty {
                         ContentUnavailableView("표시할 프로젝트가 없어요", systemImage: "person.3")
@@ -95,10 +99,12 @@ struct MatchingStatisticsView: View {
                                             return member.display + " · " + OperationsPart.phase(phase)
                                         }.joined(separator: ", "))
                                     }
-                                    Button(selectedId == project.projectId ? "닫기" : "배정 관리") {
+                                    if canReadAdjustment {
+                                        Button(selectedId == project.projectId ? "닫기" : "배정 관리") {
                                         selectedId = selectedId == project.projectId ? nil : project.projectId
                                     }
-                                    if selectedId == project.projectId {
+                                    }
+                                    if canReadAdjustment, selectedId == project.projectId {
                                         OperationsLoad(key: project.projectId, load: {
                                             try await service.permissions(projectId: project.projectId)
                                         }) { flags in

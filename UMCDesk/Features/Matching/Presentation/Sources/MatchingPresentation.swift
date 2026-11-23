@@ -77,6 +77,10 @@ public struct MatchingView: View {
     private let gisuId: String
     private let applicantParts: [String]
     private let memberId: String?
+    @State private var explorer = MatchingExplorerState()
+    @State private var position = ScrollPosition()
+    @State private var visibleY: CGFloat = 0
+    @State private var explorerY: CGFloat = 0
     @State private var destination: MatchingDestination
     @State private var organization = MatchingRequest<MatchingOrganization>()
     @State private var rounds = MatchingRequest<[MatchingRound]>()
@@ -89,6 +93,9 @@ public struct MatchingView: View {
     @State private var selectedProject: MatchingProject?
     @State private var draftId: String?
     @State private var creating = false
+    @State private var canChooseOtherPM = false
+
+    private var canCreateOwnDraft: Bool { applicantParts.contains("PLAN") }
     @State private var previous: [Location] = []
     @State private var following: [Location] = []
 
@@ -141,6 +148,10 @@ public struct MatchingView: View {
                 .padding(.horizontal, UMCSpacing.value40)
                 .padding(.vertical, UMCSpacing.value24)
             }
+            .scrollPosition($position)
+            .onScrollGeometryChange(for: CGFloat.self) { $0.visibleRect.minY } action: { _, y in
+                visibleY = y
+            }
         }
         .toolbar {
             if selectedProject != nil {
@@ -162,7 +173,8 @@ public struct MatchingView: View {
             }
         }
         .sheet(isPresented: $creating) {
-            MatchingDraftComposer(service: repository, gisuId: gisuId) { id in
+            MatchingDraftComposer(service: repository, gisuId: gisuId,
+                                  canCreateOwn: canCreateOwnDraft, canChooseOther: canChooseOtherPM) { id in
                 creating = false
                 go(.init(destination: .management, draftId: id))
             }
@@ -171,6 +183,10 @@ public struct MatchingView: View {
         .foregroundStyle(UMCColor.Semantic.textNeutralDefault)
         .tint(UMCColor.Semantic.textBrandDefault)
         .background(UMCColor.Custom.backgroundDefault)
+        .task(id: gisuId) {
+            let candidates = try? await repository.pmCandidates(gisuId: gisuId, keyword: nil, page: 0)
+            if !Task.isCancelled { canChooseOtherPM = candidates != nil }
+        }
         .task(id: organizationAttempt) {
             await organization.load { try await repository.organization(gisuId: gisuId) }
             guard case .loaded(let value) = organization.phase, chapterId == nil,
@@ -200,7 +216,7 @@ public struct MatchingView: View {
             tab(.status)
             tab(.management)
             Spacer()
-            if selectedProject == nil, destination == .explore {
+            if selectedProject == nil, destination == .explore, canCreateOwnDraft || canChooseOtherPM {
                 Button("프로젝트 만들기") { creating = true }
                     .buttonStyle(MatchingActionStyle(appearance: .primary))
             } else if destination == .applications {
@@ -233,7 +249,10 @@ public struct MatchingView: View {
             case .explore:
                 scheduleSummary
                 MatchingExplorer(repository: repository, gisuId: gisuId, chapterId: chapterId,
-                                 schools: schools, select: { go(.init(destination: .explore, project: $0)) })
+                                 schools: schools, select: {
+                                     explorerY = visibleY
+                                     go(.init(destination: .explore, project: $0))
+                                 }, state: explorer, restoreScroll: { position.scrollTo(y: explorerY) })
             case .applications:
                 MatchingApplications(repository: repository, gisuId: gisuId, memberId: memberId, rounds: loadedRounds,
                                      explore: { navigate(.explore) })
@@ -241,14 +260,16 @@ public struct MatchingView: View {
                 scheduleList
             case .management where draftId != nil:
                 if let draftId {
-                    ProjectOperationsView(service: repository, projectId: draftId) {
+                    ProjectOperationsView(service: repository, projectId: draftId, status: "DRAFT") {
                         navigate(.management)
                     }.id(draftId)
                 }
             case .status, .management:
                 chapterPicker
                 MatchingOperationsView(section: destination == .status ? .statistics : .projects,
-                                       service: repository, gisuId: gisuId, chapterId: chapterId)
+                                       service: repository, gisuId: gisuId, chapterId: chapterId,
+                                       canCreateOwn: canCreateOwnDraft, canChooseOther: canChooseOtherPM,
+                                       canReadAdjustment: chapterId != nil && authorizedChapter == chapterId)
             }
         }
     }
@@ -352,6 +373,10 @@ public struct MatchingView: View {
     }
 
     private func restore(_ target: Location) {
+        if target.project != nil { position.scrollTo(edge: .top) }
+        if selectedProject != nil, target.project == nil, target.destination == .explore {
+            position.scrollTo(y: explorerY)
+        }
         selectedProject = target.project
         draftId = target.draftId
         destination = target.destination

@@ -22,6 +22,7 @@ private enum ProjectPage: String, CaseIterable {
 struct ProjectOperationsView: View {
     let service: any MatchingUseCase
     let projectId: String
+    var status: String?
     let close: () -> Void
     @State private var page = ProjectPage.posting
     @State private var revision = 0
@@ -38,7 +39,7 @@ struct ProjectOperationsView: View {
                 async let capabilities = service.permissions(projectId: projectId)
                 return try await (project, capabilities)
             }) { project, permissions in
-                let context = ProjectContext(project: project, permissions: permissions,
+                let context = ProjectContext(project: project, status: status, permissions: permissions,
                                              service: service, confirm: { pending = $0 })
                 Text(project.name).umcTypography(.title1Bold)
                 Picker("관리 도구", selection: $page) {
@@ -140,6 +141,7 @@ struct ProjectConfirmation: Identifiable {
 
 struct ProjectContext {
     let project: MatchingProject
+    let status: String?
     let permissions: [ProjectPermission: MatchingCapability]
     let service: any MatchingUseCase
     let confirm: (ProjectConfirmation) -> Void

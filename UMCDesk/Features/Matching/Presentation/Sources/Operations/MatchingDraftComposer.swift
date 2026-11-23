@@ -12,6 +12,8 @@ import SwiftUI
 struct MatchingDraftComposer: View {
     let service: any MatchingUseCase
     let gisuId: String
+    let canCreateOwn: Bool
+    let canChooseOther: Bool
     let open: (String) -> Void
     @Environment(\.dismiss) private var dismiss
     @State private var chooseOwner = false
@@ -21,6 +23,8 @@ struct MatchingDraftComposer: View {
     @State private var page = 0
     @State private var creating = false
     @State private var failure: String?
+
+    private var needsOwner: Bool { canChooseOther && (!canCreateOwn || chooseOwner) }
 
     var body: some View {
         VStack(alignment: .leading, spacing: UMCSpacing.value16) {
@@ -34,11 +38,13 @@ struct MatchingDraftComposer: View {
                     }.matchingPanel()
                 }
             }
-            Picker("새 초안 담당 PM", selection: $chooseOwner) {
-                Text("본인").tag(false)
-                Text("다른 PM 선택").tag(true)
-            }.pickerStyle(.segmented)
-            if chooseOwner {
+            if canCreateOwn && canChooseOther {
+                Picker("새 초안 담당 PM", selection: $chooseOwner) {
+                    Text("본인").tag(false)
+                    Text("다른 PM 선택").tag(true)
+                }.pickerStyle(.segmented)
+            }
+            if needsOwner {
                 HStack {
                     TextField("PM 이름 또는 닉네임", text: $keyword)
                         .onSubmit { search() }
@@ -74,7 +80,7 @@ struct MatchingDraftComposer: View {
                 Button("취소") { dismiss() }
                 Button("새 초안 만들기") { create() }
                     .buttonStyle(.borderedProminent)
-                    .disabled(chooseOwner && owner == nil)
+                    .disabled(needsOwner ? owner == nil : !canCreateOwn)
             }
         }
         .disabled(creating)
@@ -91,14 +97,14 @@ struct MatchingDraftComposer: View {
     }
 
     private func create() {
-        guard !creating, !chooseOwner || owner != nil else { return }
+        guard !creating, (needsOwner ? owner != nil : canCreateOwn) else { return }
         creating = true
         failure = nil
         Task {
             defer { creating = false }
             do {
                 let id = try await service.createProjectDraft(
-                    gisuId: gisuId, productOwnerMemberId: chooseOwner ? owner?.memberId : nil
+                    gisuId: gisuId, productOwnerMemberId: needsOwner ? owner?.memberId : nil
                 )
                 open(id)
             } catch { failure = error.localizedDescription }
