@@ -18,6 +18,7 @@ from urllib.parse import parse_qs, urlsplit
 
 MEMBERS = {
     "first@example.test": ("101", "첫 챌린저"),
+    "design@example.test": ("103", "디자인 챌린저"),
     "second@example.test": ("102", "둘째 챌린저"),
 }
 PASSWORD = "fixture-only"
@@ -57,21 +58,15 @@ class SessionFixture(BaseHTTPRequestHandler):
         if self.path == "/api/v1/auth/login/email":
             email = body.get("email")
             if isinstance(email, str) and email in MEMBERS and body.get("password") == PASSWORD:
-                control = self.server.control
-                if (control / "hold-login").exists():
-                    marker = control / "waiting-login"
-                    marker.touch()
-                    try:
-                        while (control / "hold-login").exists():
-                            time.sleep(0.05)
-                    finally:
-                        marker.unlink(missing_ok=True)
+                self.wait_if_held("login")
                 with self.server.session_lock:
                     result = self.issue(email)
                 return self.send_result(200, result)
             return self.send_result(401)
 
         if self.path in ("/api/v1/auth/logout", "/api/v1/auth/token/renew"):
+            if self.path.endswith("/logout"):
+                self.wait_if_held("revoke")
             refresh = body.get("refreshToken")
             with self.server.session_lock:
                 prior = self.server.sessions.pop(refresh, None) if isinstance(refresh, str) else None
@@ -80,6 +75,17 @@ class SessionFixture(BaseHTTPRequestHandler):
                 result = self.issue(prior[1]) if self.path.endswith("/renew") else None
             return self.send_result(200, result)
         self.send_result(404)
+
+    def wait_if_held(self, name):
+        hold = self.server.control / ("hold-" + name)
+        if hold.exists():
+            marker = self.server.control / ("waiting-" + name)
+            marker.touch()
+            try:
+                while hold.exists():
+                    time.sleep(0.05)
+            finally:
+                marker.unlink(missing_ok=True)
 
     def current_email(self):
         with self.server.session_lock:
@@ -96,11 +102,12 @@ class SessionFixture(BaseHTTPRequestHandler):
         query = parse_qs(url.query)
         identifier, name = MEMBERS[email]
         if url.path == "/api/v1/member/me":
-            part = "WEB" if identifier == "101" else "PLAN"
+            part = {"101": "WEB", "102": "PLAN", "103": "DESIGN"}[identifier]
             return self.send_result(200, {
                 "id": identifier, "name": name, "nickname": name, "email": email,
                 "schoolName": "테스트 대학교", "roles": [], "challengerRecords": [
-                    {"challengerId": identifier, "gisuId": "10", "gisu": "10", "part": part, "roles": []}],
+                    {"challengerId": identifier, "gisuId": "10", "gisu": "10", "part": part, "roles": []},
+                    {"challengerId": "999", "gisuId": "9", "gisu": "9", "part": "DESIGN", "roles": []}],
             })
         if url.path == "/api/v2/member/me":
             return self.send_result(200, {"isSuperAdmin": False})
@@ -112,7 +119,22 @@ class SessionFixture(BaseHTTPRequestHandler):
         if url.path == "/api/v1/projects/matching-affiliation/me":
             return self.send_result(200, {"gisuId": "10", "matchingChapter": {"id": "1"}})
         if url.path == "/api/v1/project/matching-rounds":
-            return self.send_result(200, [])
+            rounds = []
+            for round_id, chapter, kind in [
+                ("501", "1", "PLAN_DEVELOPER"), ("502", "1", "PLAN_DESIGN"),
+                ("503", "2", "PLAN_DEVELOPER"), ("504", "2", "PLAN_DESIGN")
+            ]:
+                rounds.append({"id": round_id, "name": "검증 차수 " + round_id,
+                               "type": kind, "phase": "FIRST", "chapterId": chapter,
+                               "startsAt": "2025-01-01T00:00:00Z", "endsAt": "2030-01-01T00:00:00Z"})
+            return self.send_result(200, rounds)
+        if url.path == "/api/v1/projects/permissions":
+            return self.send_result(200, {"projects": [{"projectId": "1", "exists": True,
+                "member": {"canRead": {"allowed": True}},
+                "application": {"canCreate": {"allowed": identifier != "102"}}}]})
+        if url.path == "/api/v1/projects/1":
+            return self.send_result(200, {"id": "1", "name": "모아", "description": "로컬 검증 공고",
+                                          "partQuotas": [], "partQuotaStatus": "RECRUITING"})
         if url.path == "/api/v1/projects/me/applications":
             return self.send_result(200, [])
         if url.path == "/api/v1/projects/admin/pm-candidates":
