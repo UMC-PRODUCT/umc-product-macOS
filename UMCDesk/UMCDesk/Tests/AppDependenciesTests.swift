@@ -68,7 +68,7 @@ struct AppDependenciesTests {
     @Test("두 설정 창의 로그아웃은 갱신 대기 중 이전 계정을 숨기고 늦은 철회 응답에서 새 계정을 보호한다")
     func settingsLogoutHidesBothWindowsBeforeCredentialCleanup() async throws {
         for separateWindow in [false, true] {
-            let requests = AsyncStream<LogoutLifecycleProtocol>.makeStream()
+            let requests = AsyncStream<PendingLogoutResponse>.makeStream()
             LogoutLifecycleProtocol.pending.withLock { $0 = requests.continuation }
             let config = URLSessionConfiguration.ephemeral
             config.protocolClasses = [LogoutLifecycleProtocol.self]
@@ -90,7 +90,7 @@ struct AppDependenciesTests {
             let refresh = Task { try await client.forceRefreshToken() }
             var arrivals = requests.stream.makeAsyncIterator()
             let renewal = try #require(await arrivals.next())
-            try #require(renewal.request.url?.lastPathComponent == "renew")
+            try #require(renewal.path == "renew")
             let settings = separateWindow
                 ? dependencies.windowSettingsViewModel : dependencies.settingsViewModel
             let logout = Task {
@@ -113,14 +113,14 @@ struct AppDependenciesTests {
                 try await client.signIn { TokenPair(accessToken: "second", refreshToken: "second-r") }
             }
 
-            renewal.respond(result: #"{"accessToken":"rotated","refreshToken":"rotated-r"}"#)
+            renewal.respond(#"{"accessToken":"rotated","refreshToken":"rotated-r"}"#)
             _ = await refresh.result
             let revoke = try #require(await arrivals.next())
-            try #require(revoke.request.url?.lastPathComponent == "logout")
+            try #require(revoke.path == "logout")
             try await client.signIn { TokenPair(accessToken: "second", refreshToken: "second-r") }
             try await dependencies.refreshAccount()
             dependencies.selectSection(.projects)
-            revoke.respond(result: "{}")
+            revoke.respond("{}")
             await logout.value
             #expect(dependencies.navigation.account?.memberID == "202")
             #expect(dependencies.navigation.section == .projects)
@@ -275,20 +275,30 @@ struct AppDependenciesTests {
 }
 
 #if DEBUG
+private struct PendingLogoutResponse: Sendable {
+    let path: String
+    let respond: @Sendable (String) -> Void
+}
+
 private final class LogoutLifecycleProtocol: URLProtocol, @unchecked Sendable {
-    static let pending = Mutex<AsyncStream<LogoutLifecycleProtocol>.Continuation?>(nil)
+    static let pending = Mutex<AsyncStream<PendingLogoutResponse>.Continuation?>(nil)
 
     override class func canInit(with request: URLRequest) -> Bool { true }
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
 
     override func startLoading() {
-        switch request.url?.lastPathComponent {
+        let path = request.url?.lastPathComponent ?? ""
+        switch path {
         case "me":
             let token = request.value(forHTTPHeaderField: "Authorization")
             let id = token == "Bearer first" ? "101" : "202"
             respond(result: #"{"id":"\#(id)","name":"테스트","nickname":"회원"}"#)
         case "renew", "logout":
-            _ = Self.pending.withLock { $0?.yield(self) }
+            let request = PendingLogoutResponse(path: path) { result in
+                self.respond(result: result)
+            }
+            let continuation = Self.pending.withLock { $0 }
+            continuation?.yield(request)
         default:
             client?.urlProtocol(self, didFailWithError: URLError(.unsupportedURL))
         }
