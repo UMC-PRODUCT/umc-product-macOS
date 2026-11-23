@@ -16,14 +16,17 @@ final class ThreadConversationModel {
     let accountID: String
     let threadID: String
     private let repository: any ThreadConversationRepository
-    private let defaults: UserDefaults
-    private let draftKey: String
+    private let store: DraftStore
+    private var accessRevoked = false
     private var revision = 0
     private var pages = 1
     private var readID: String?
     private var retryOperation: (@MainActor () async throws -> Void)?
     private var operation: Task<Void, Never>?
-    private var draft: Draft { didSet { persist() } }
+    private var draft: Draft {
+        get { store.draft }
+        set { store.draft = newValue }
+    }
     var messages: [ThreadConversationMessage] = []
     var cursor: String?
     var loaded = false
@@ -46,7 +49,7 @@ final class ThreadConversationModel {
     var reply: String? { draft.reply }
     var attachments: [Attachment] { draft.files }
     var canSend: Bool {
-        !busy && !cooldown && text.unicodeScalars.count <= 2_000
+        loaded && !busy && !cooldown && !store.sending && text.unicodeScalars.count <= 2_000
             && (!text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                 || !attachments.isEmpty)
     }
@@ -56,18 +59,15 @@ final class ThreadConversationModel {
         self.threadID = threadID
         self.accountID = accountID
         self.repository = repository
-        self.defaults = defaults
-        draftKey = "community.conversation.\(accountID).\(threadID)"
-        draft =
-            defaults.data(forKey: draftKey).flatMap {
-                try? JSONDecoder().decode(Draft.self, from: $0)
-            } ?? Draft()
+        store = DraftStore.shared(
+            defaults: defaults, key: "community.conversation.\(accountID).\(threadID)")
+        store.windows.add(self)
     }
 
     func observe(active: Bool) async {
         let listener = Task { [self] in
             guard active else { return }
-            while !Task.isCancelled {
+            while !Task.isCancelled && !accessRevoked {
                 do {
                     try await repository.observeChanges(thread: threadID) { [weak self] in
                         await self?.refresh()
@@ -77,19 +77,23 @@ final class ThreadConversationModel {
             }
         }
         defer { listener.cancel() }
-        while !Task.isCancelled {
+        while !Task.isCancelled && !accessRevoked {
             await refresh()
             if active, !Task.isCancelled, loaded, let last = messages.last?.id, last != readID {
                 do {
                     try await repository.perform(.read(message: last), thread: threadID)
-                    readID = last
-                } catch { /* Retry the watermark after the next successful history read. */  }
+                    if !accessRevoked { readID = last }
+                } catch {
+                    if !Task.isCancelled { _ = revokeAccessIfNeeded(error) }
+                }
             }
             do { try await Task.sleep(for: .seconds(6)) } catch { return }
         }
     }
 
     func refresh(older: Bool = false) async {
+        // LEFT members may still read history. Only a newly opened membership can restore writes.
+        guard !accessRevoked else { return }
         revision += 1
         let current = revision
         let count = older ? pages + 1 : pages
@@ -111,6 +115,10 @@ final class ThreadConversationModel {
             messages = timeline
             cursor = before
             pages = count
+            if !loaded {
+                canRetry = true
+                failure = nil
+            }
             loaded = true
             if let reply = draft.reply, messages.contains(where: { $0.id == reply && $0.isHidden })
             {
@@ -118,7 +126,7 @@ final class ThreadConversationModel {
             }
         } catch {
             guard !Task.isCancelled, current == revision else { return }
-            // A denied history request can indicate removal or a changed account.
+            if revokeAccessIfNeeded(error) { return }
             messages = []
             summary = nil
             cursor = nil
@@ -186,12 +194,20 @@ final class ThreadConversationModel {
     }
 
     func send() {
-        guard canSend, loaded else { return }
+        guard canSend else { return }
         let snapshot = draft
-        run {
+        run { [weak self] in
+            guard let self else { return }
+            guard self.draft.key == snapshot.key, !self.store.sending else { return }
+            self.store.sending = true
+            defer { self.store.sending = false }
             var ids: [String] = []
             for file in snapshot.files {
-                if let remoteID = self.draft.files.first(where: { $0.id == file.id })?.remoteID {
+                try Task.checkCancellation()
+                guard let current = self.draft.files.first(where: { $0.id == file.id }) else {
+                    return
+                }
+                if let remoteID = current.remoteID {
                     ids.append(remoteID)
                     continue
                 }
@@ -201,11 +217,14 @@ final class ThreadConversationModel {
                     contentType: file.mime, data: bytes)
                 try Task.checkCancellation()
                 guard let index = self.draft.files.firstIndex(where: { $0.id == file.id }) else {
-                    throw CancellationError()
+                    return
                 }
                 self.draft.files[index].remoteID = remoteID
                 ids.append(remoteID)
             }
+            let retainedFiles = Set(self.draft.files.map(\.id))
+            guard snapshot.files.allSatisfy({ retainedFiles.contains($0.id) }) else { return }
+            try Task.checkCancellation()
             try await self.repository.perform(
                 .create(
                     key: snapshot.key, content: snapshot.text,
@@ -224,7 +243,8 @@ final class ThreadConversationModel {
 
     func perform(_ command: ThreadConversationCommand) {
         guard loaded else { return }
-        run {
+        run { [weak self] in
+            guard let self else { return }
             try await self.repository.perform(command, thread: self.threadID)
             await self.refresh()
         }
@@ -251,13 +271,39 @@ final class ThreadConversationModel {
     }
 
     func retry() {
-        if let retryOperation { run(retryOperation) } else { Task { await refresh() } }
+        guard canRetry else { return }
+        if loaded, let retryOperation { run(retryOperation) } else { Task { await refresh() } }
     }
 
     func stop() {
         retryOperation = nil
         revision += 1
         operation?.cancel()
+    }
+
+    private func revokeAccessIfNeeded(_ error: Error) -> Bool {
+        if case ThreadConversationRejection.denied = error {
+            for window in store.windows.allObjects { window.revokeAccess(error) }
+            return true
+        }
+        if error is CancellationError {
+            revokeAccess(error)
+            return true
+        }
+        return false
+    }
+
+    private func revokeAccess(_ error: Error) {
+        stop()
+        accessRevoked = true
+        messages = []
+        summary = nil
+        cursor = nil
+        readID = nil
+        pages = 1
+        loaded = false
+        canRetry = false
+        failure = error.localizedDescription
     }
 
     private func run(_ work: @escaping @MainActor () async throws -> Void) {
@@ -271,7 +317,18 @@ final class ThreadConversationModel {
                 busy = false
                 operation = nil
             }
-            do { try await work() } catch {
+            do {
+                // Fresh membership is required before preparing any attachment or command.
+                do {
+                    _ = try await repository.history(thread: threadID, before: nil)
+                } catch {
+                    guard !Task.isCancelled, !revokeAccessIfNeeded(error) else { return }
+                    throw error
+                }
+                try Task.checkCancellation()
+                guard loaded else { return }
+                try await work()
+            } catch {
                 if !Task.isCancelled {
                     failure = error.localizedDescription
                     switch error {
@@ -281,7 +338,11 @@ final class ThreadConversationModel {
                         try? await Task.sleep(for: .seconds(3))
                         cooldown = false
                     case ThreadConversationRejection.denied:
+                        _ = revokeAccessIfNeeded(error)
+                    case ThreadConversationRejection.commandDenied:
                         canRetry = false
+                    case is CancellationError:
+                        revokeAccess(error)
                     default:
                         retryOperation = work
                     }
@@ -290,11 +351,46 @@ final class ThreadConversationModel {
         }
     }
 
-    private func persist() {
-        if draft.text.isEmpty, draft.reply == nil, draft.files.isEmpty {
-            defaults.removeObject(forKey: draftKey)
-        } else if let data = try? JSONEncoder().encode(draft) {
-            defaults.set(data, forKey: draftKey)
+    @MainActor @Observable
+    fileprivate final class DraftStore {
+        // Separate UserDefaults instances can refer to the same persistent suite.
+        private static let stores = NSMapTable<NSString, DraftStore>.strongToWeakObjects()
+        private let defaults: UserDefaults
+        private let key: String
+        let windows = NSHashTable<ThreadConversationModel>.weakObjects()
+        var sending = false
+        var draft: Draft {
+            didSet {
+                if draft.text.isEmpty, draft.reply == nil, draft.files.isEmpty {
+                    defaults.removeObject(forKey: key)
+                } else if let data = try? JSONEncoder().encode(draft) {
+                    defaults.set(data, forKey: key)
+                }
+            }
+        }
+
+        static func shared(defaults: UserDefaults, key: String) -> DraftStore {
+            let suiteKey = "community.conversation.storageID"
+            let suite: String
+            if let stored = defaults.string(forKey: suiteKey) {
+                suite = stored
+            } else {
+                suite = UUID().uuidString
+                defaults.set(suite, forKey: suiteKey)
+            }
+            let identity = (suite + "." + key) as NSString
+            if let existing = stores.object(forKey: identity) { return existing }
+            let store = DraftStore(defaults: defaults, key: key)
+            stores.setObject(store, forKey: identity)
+            return store
+        }
+
+        private init(defaults: UserDefaults, key: String) {
+            self.defaults = defaults
+            self.key = key
+            draft = defaults.data(forKey: key).flatMap {
+                try? JSONDecoder().decode(Draft.self, from: $0)
+            } ?? Draft()
         }
     }
 
@@ -313,7 +409,7 @@ final class ThreadConversationModel {
         }
     }
 
-    private struct Draft: Codable {
+    fileprivate struct Draft: Codable {
         var key = UUID().uuidString.lowercased()
         var text = ""
         var reply: String?

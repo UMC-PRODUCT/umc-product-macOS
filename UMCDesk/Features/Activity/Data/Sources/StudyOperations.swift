@@ -90,11 +90,23 @@ extension LiveActivityRepository {
         try await permission("CHALLENGER_POINT", "WRITE", id: challengerID)
     }
 
-    public func grantPoints(challengerID: String, value: Int, reason: String) async throws {
-        let body = PointBody(pointType: "CUSTOM", pointValue: value, description: reason)
-        let _: PointReceiptDTO = try await request(
-            "api/v1/challenger/\(challengerID)/points",
-            body: JSONEncoder().encode(body))
+    public func grantPoints(operationID: UUID, challengerID: String, value: Int, reason: String)
+        async throws -> PointGrantResult
+    {
+        let grant = PointGrant(challengerID: challengerID, value: value, reason: reason)
+        let path = "api/v1/challenger/\(challengerID)"
+        return try await pointGrants.submit(id: operationID, grant: grant) {
+            let ledger: PointLedgerDTO = try await request(path)
+            guard ledger.challengerId == challengerID else { throw URLError(.cannotParseResponse) }
+            return ledger
+        } write: {
+            let body = PointBody(pointType: "CUSTOM", pointValue: value, description: reason)
+            let receipt: PointReceiptDTO = try await request(
+                path + "/points", body: JSONEncoder().encode(body))
+            guard receipt.challengerId == challengerID else {
+                throw URLError(.cannotParseResponse)
+            }
+        }
     }
 
     private func permission(_ resource: String, _ type: String, id: String?) async throws -> Bool {

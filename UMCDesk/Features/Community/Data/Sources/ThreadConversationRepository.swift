@@ -9,6 +9,7 @@ import CommunityDomain
 import CoreNetwork
 import Foundation
 import Moya
+import UMCFoundation
 
 public struct LiveThreadConversationRepository: ThreadConversationRepository {
     private let adapter: MoyaNetworkAdapter
@@ -31,11 +32,17 @@ public struct LiveThreadConversationRepository: ThreadConversationRepository {
         try ConversationIdentifier.validate(thread)
         if let before { try ConversationIdentifier.validate(before) }
         let query = ConversationHistoryQuery(before: before)
-        let page: ConversationHistoryDTO = try await request(
-            "/api/v1/community/threads/\(thread)/messages", method: .get,
-            task: .requestParameters(
-                parameters: query.parameters, encoding: URLEncoding.queryString)
-        )
+        let page: ConversationHistoryDTO
+        do {
+            page = try await request(
+                "/api/v1/community/threads/\(thread)/messages", method: .get,
+                task: .requestParameters(
+                    parameters: query.parameters, encoding: URLEncoding.queryString))
+        } catch NetworkError.requestFailed(let status, _) where [401, 403, 404].contains(status) {
+            throw ThreadConversationRejection.denied("대화에 접근할 수 없어요.")
+        } catch NetworkError.unauthorized {
+            throw ThreadConversationRejection.denied("로그인이 필요해요.")
+        }
         return ThreadPage(
             values: page.messages.map { $0.model(localBase: environment.baseURL) },
             cursor: page.hasMore ? page.nextBefore : nil)
@@ -86,11 +93,13 @@ public struct LiveThreadConversationRepository: ThreadConversationRepository {
         var upload = URLRequest(url: signed.uploadUrl)
         upload.httpMethod = "PUT"
         upload.allHTTPHeaderFields = signed.headers
-        let session = URLSession(configuration: .ephemeral)
+        let session = URLSession(configuration: .ephemeral, delegate: ConversationUploadDelegate(),
+                                 delegateQueue: nil)
         defer { session.invalidateAndCancel() }
-        let (_, response) = try await session.upload(for: upload, from: data)
-        guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
-            throw ConversationFailure("사진을 업로드하지 못했어요.")
+        try await ConversationUploadTransfer.perform(validate: { _ = try await accessToken() }) { [upload] in
+            let (_, response) = try await session.upload(for: upload, from: data)
+            guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode)
+            else { throw ConversationFailure("사진을 업로드하지 못했어요.") }
         }
         let _: EmptyResult = try await request(
             "/api/v1/storage/\(signed.fileId)/confirm",
@@ -122,7 +131,48 @@ public struct LiveThreadConversationRepository: ThreadConversationRepository {
         let response = try await adapter.request(target)
         _ = try await accessToken()
         try _Concurrency.Task.checkCancellation()
+        guard (200..<300).contains(response.statusCode) else {
+            throw NetworkError.requestFailed(statusCode: response.statusCode, data: response.data)
+        }
         return try JSONDecoder().decode(APIResponse<T>.self, from: response.data).unwrap()
+    }
+}
+
+enum ConversationUploadTransfer {
+    static func perform(
+        validate: @escaping @Sendable () async throws -> Void,
+        transfer: @escaping @Sendable () async throws -> Void
+    ) async throws {
+        try await withThrowingTaskGroup(of: Void.self) { group in
+            defer { group.cancelAll() }
+            group.addTask {
+                try _Concurrency.Task.checkCancellation()
+                try await validate()
+                try _Concurrency.Task.checkCancellation()
+                try await transfer()
+                try await validate()
+            }
+            // Signed storage requests bypass the account-bound REST client.
+            group.addTask {
+                while true {
+                    try await _Concurrency.Task.sleep(for: .milliseconds(250))
+                    try await validate()
+                }
+            }
+            try await group.next()
+            try _Concurrency.Task.checkCancellation()
+        }
+    }
+}
+
+final class ConversationUploadDelegate: NSObject, URLSessionTaskDelegate {
+    func urlSession(
+        _ session: URLSession, task: URLSessionTask,
+        willPerformHTTPRedirection response: HTTPURLResponse, newRequest request: URLRequest,
+        completionHandler: @escaping @Sendable (URLRequest?) -> Void
+    ) {
+        // The ticket authorizes only the original URL.
+        completionHandler(nil)
     }
 }
 

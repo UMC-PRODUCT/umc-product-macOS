@@ -8,4 +8,6 @@
 import ProjectDescription
 import ProjectDescriptionHelpers
 
-let project = featureProject(name: "Notice", includesDomainTests: true, includesDataTests: true)
+let project = featureProject(
+    name: "Notice", includesDomainTests: true, includesDataTests: true,
+    includesPresentationTests: true)

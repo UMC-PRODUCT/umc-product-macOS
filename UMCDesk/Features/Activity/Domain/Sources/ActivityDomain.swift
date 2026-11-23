@@ -228,6 +228,12 @@ public struct ActivityMemberPage: Sendable {
     }
 }
 
+public enum PointGrantResult: Equatable, Sendable {
+    case recorded
+    case ledgerMatch
+    case awaitingLedger
+}
+
 public protocol ActivityRepository: Sendable {
     func capabilities() async throws -> ScheduleCapabilities
     func directory(keyword: String, part: String?, page: Int) async throws -> ActivityMemberPage
@@ -246,7 +252,8 @@ public protocol ActivityRepository: Sendable {
     func link(groupID: String, scheduleID: String, weekID: String) async throws
     func memberProfile(id: String) async throws -> ActivityMemberProfile
     func canGrantPoints(challengerID: String) async throws -> Bool
-    func grantPoints(challengerID: String, value: Int, reason: String) async throws
+    func grantPoints(operationID: UUID, challengerID: String, value: Int, reason: String)
+        async throws -> PointGrantResult
     func groups() async throws -> [ActivityRow]
     func members(groupID: String) async throws -> [ActivityRow]
 }

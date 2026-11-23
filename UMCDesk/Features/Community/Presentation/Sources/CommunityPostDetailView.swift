@@ -19,6 +19,7 @@ struct CommunityPostDetailView: View {
     @State private var input = ""
     @State private var reply: CommunityPostComment?
     @State private var failure: String?
+    @State private var awaitingConfirmation = false
     @State private var feedback: String?
     @State private var editing = false
     @State private var removal: Removal?
@@ -29,89 +30,13 @@ struct CommunityPostDetailView: View {
     @FocusState private var commenting: Bool
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: UMCSpacing.value16) {
-                if let failure {
-                    Text(failure)
-                    Button("상세 다시 불러오기") { reload += 1 }
-                }
-                if let post {
-                    HStack {
-                        Text(
-                            CommunityPostCategory(rawValue: post.category)?.label ?? post.category
-                        )
-                        .foregroundStyle(UMCColor.Semantic.textBrandDefault)
-                        Spacer()
-                        if post.authorMemberID == accountID {
-                            Menu("게시글 관리", systemImage: "ellipsis.circle") {
-                                Button("수정") { editing = true }
-                                Button("삭제", role: .destructive) { removal = .post }
-                            }.fixedSize()
-                        }
-                    }
-                    Text(post.title).umcTypography(.title1Bold).textSelection(.enabled)
-                    HStack {
-                        if let author = post.author { Text(author) }
-                        if let date = post.date { Text(CommunityPostDate.display(date)) }
-                    }.foregroundStyle(.secondary)
-                    Text(post.content).textSelection(.enabled)
-                    if let meeting = post.meeting { meetingInfo(meeting) }
-                    HStack {
-                        Button(
-                            "좋아요 \(post.likeCount)",
-                            systemImage: post.liked ? "heart.fill" : "heart"
-                        ) { act(.like) }
-                        Button(
-                            "스크랩 \(post.scrapCount ?? "0")",
-                            systemImage: post.scrapped ? "bookmark.fill" : "bookmark"
-                        ) { act(.scrap) }
-                    }
-                    Divider()
-                    Text("댓글 \(post.commentCount)").font(.headline)
-                    ForEach(comments) { comment in
-                        VStack(alignment: .leading, spacing: 6) {
-                            HStack {
-                                Text(comment.author ?? "댓글 작성자").fontWeight(.medium)
-                                Spacer()
-                                Menu("댓글 동작", systemImage: "ellipsis") {
-                                    Button("답글") {
-                                        reply = comment
-                                        commenting = true
-                                    }
-                                    Button("좋아요 전환") { act(.likeComment(comment.id)) }
-                                    if comment.isAuthor {
-                                        Button("댓글 삭제", role: .destructive) {
-                                            removal = .comment(comment.id)
-                                        }
-                                    }
-                                }.labelStyle(.iconOnly).fixedSize()
-                            }
-                            Text(comment.content).textSelection(.enabled)
-                        }.padding(12).background(
-                            UMCColor.Custom.backgroundSurfaceGreyWeaker,
-                            in: .rect(cornerRadius: 10))
-                    }
-                    if let reply {
-                        HStack {
-                            Text("\(reply.author ?? "댓글")에 답글").font(.caption)
-                            Button("답글 취소") { self.reply = nil }
-                        }
-                    }
-                    HStack {
-                        TextField("댓글을 입력하세요", text: $input, axis: .vertical)
-                            .lineLimit(1...5).focused($commenting)
-                        Button("등록") { act(.comment(input, parentID: reply?.id)) }
-                            .disabled(
-                                input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                    }
-                    if let feedback { Text(feedback).font(.callout) }
-                } else if failure == nil {
-                    ProgressView("게시글 불러오는 중")
-                }
+        VStack(alignment: .leading, spacing: 0) {
+            if let post {
+                header(post).padding([.horizontal, .top], UMCSpacing.value24)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(UMCSpacing.value24)
+            detailScroll
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .disabled(busy)
         .overlay { if busy { ProgressView("처리 중") } }
         .task(id: reload) { await fetch() }
@@ -143,6 +68,105 @@ struct CommunityPostDetailView: View {
         }
     }
 
+    private var detailScroll: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: UMCSpacing.value16) {
+                if let failure {
+                    Text(failure)
+                    Button("상세 다시 불러오기") { reload += 1 }
+                }
+                if let post {
+                    Text(post.title).umcTypography(.title1Bold).textSelection(.enabled)
+                    HStack {
+                        if let author = post.author { Text(author) }
+                        if let date = post.date { Text(CommunityPostDate.display(date)) }
+                    }.foregroundStyle(.secondary)
+                    Text(post.content).textSelection(.enabled)
+                    if let meeting = post.meeting { meetingInfo(meeting) }
+                    HStack {
+                        Button(
+                            "좋아요 \(post.likeCount)",
+                            systemImage: post.liked ? "heart.fill" : "heart"
+                        ) { act(.like) }
+                        Button(
+                            "스크랩 \(post.scrapCount ?? "0")",
+                            systemImage: post.scrapped ? "bookmark.fill" : "bookmark"
+                        ) { act(.scrap) }
+                    }
+                    Divider()
+                    Text("댓글 \(post.commentCount)").font(.headline)
+                    ForEach(comments) { comment in
+                        VStack(alignment: .leading, spacing: 6) {
+                            HStack {
+                                Text(comment.author ?? "댓글 작성자").fontWeight(.medium)
+                                Spacer()
+                                Menu("댓글 동작", systemImage: "ellipsis") {
+                                    Button("답글") {
+                                        reply = comment
+                                        commenting = true
+                                    }.disabled(awaitingConfirmation)
+                                    Button("좋아요 전환") { act(.likeComment(comment.id)) }
+                                    if comment.isAuthor {
+                                        Button("댓글 삭제", role: .destructive) {
+                                            removal = .comment(comment.id)
+                                        }
+                                    }
+                                }.labelStyle(.iconOnly).fixedSize()
+                            }
+                            Text(comment.content).textSelection(.enabled)
+                        }.padding(12).background(
+                            UMCColor.Custom.backgroundSurfaceGreyWeaker,
+                            in: .rect(cornerRadius: 10))
+                    }
+                    if let reply {
+                        HStack {
+                            Text("\(reply.author ?? "댓글")에 답글").font(.caption)
+                            Button("답글 취소") { self.reply = nil }.disabled(awaitingConfirmation)
+                        }
+                    }
+                    HStack {
+                        TextField("댓글을 입력하세요", text: $input, axis: .vertical)
+                            .lineLimit(1...5).focused($commenting).disabled(awaitingConfirmation)
+                        Button(awaitingConfirmation ? "등록 결과 확인" : "등록") {
+                            act(.comment(input, parentID: reply?.id))
+                        }
+                            .disabled(
+                                input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    }
+                    if awaitingConfirmation {
+                        Button("댓글 작성 취소") {
+                            awaitingConfirmation = false
+                            input = ""
+                            reply = nil
+                            feedback = nil
+                        }
+                    }
+                    if let feedback { Text(feedback).font(.callout) }
+                } else if failure == nil {
+                    ProgressView("게시글 불러오는 중")
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(UMCSpacing.value24)
+        }
+    }
+
+    private func header(_ post: CommunityPost) -> some View {
+        HStack {
+            Text(
+                CommunityPostCategory(rawValue: post.category)?.label ?? post.category
+            )
+            .foregroundStyle(UMCColor.Semantic.textBrandDefault)
+            Spacer()
+            if post.authorMemberID == accountID {
+                Menu("게시글 관리", systemImage: "ellipsis.circle") {
+                    Button("수정") { editing = true }
+                    Button("삭제", role: .destructive) { removal = .post }
+                }.fixedSize()
+            }
+        }
+    }
+
     private func meetingInfo(_ meeting: CommunityPostMeeting) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             Label(CommunityPostDate.display(meeting.meetAt), systemImage: "calendar")
@@ -165,7 +189,7 @@ struct CommunityPostDetailView: View {
             guard revision == expected else { return }
             post = current
             comments = values
-            if let reply, !values.contains(where: { $0.id == reply.id }) { self.reply = nil }
+            if !awaitingConfirmation, let reply, !values.contains(where: { $0.id == reply.id }) { self.reply = nil }
             failure = nil
         } catch {
             if !Task.isCancelled && revision == expected {
@@ -191,6 +215,7 @@ struct CommunityPostDetailView: View {
                     changed(true)
                     return
                 case .comment:
+                    awaitingConfirmation = false
                     input = ""
                     reply = nil
                 case .likeComment: feedback = result == true ? "댓글에 좋아요를 눌렀어요." : "댓글 좋아요를 취소했어요."
@@ -200,6 +225,11 @@ struct CommunityPostDetailView: View {
                 await fetch()
             } catch {
                 if !Task.isCancelled {
+                    if error as? CommunityPostWriteFailure == .unconfirmed {
+                        awaitingConfirmation = true
+                        feedback = error.localizedDescription
+                        return
+                    }
                     // An interrupted toggle may already have committed. Recover by reading.
                     post = nil
                     comments = []

@@ -75,15 +75,24 @@ def _study_route(method, path, query, body, member):
         key = profile.group(1)
         return 200, {"id": key, "name": _names[key], "schoolName": "테스트 대학교",
                      "challengerRecords": [{"challengerId": key, "gisu": "10", "part": "WEB"}]}
-    point = re.fullmatch(r"/api/v1/challenger/(101|102)/points", path)
-    if point and method == "POST":
-        if member != "102":
-            return 403, None
-        if body.get("pointType") != "CUSTOM" or not body.get("description"):
-            return 400, None
-        key = point.group(1)
-        _points[key] = _points.get(key, 0) + body["pointValue"]
-        return 200, {"challengerId": key}
+    point = re.fullmatch(r"/api/v1/challenger/(101|102)(/points)?", path)
+    if point:
+        key, suffix = point.groups()
+        rows = _points.setdefault(key, [])
+        if method == "POST" and suffix:
+            if member != "102":
+                return 403, None
+            reason = body.get("description")
+            if (body.get("pointType") != "CUSTOM" or type(body.get("pointValue")) is not int
+                    or not isinstance(reason, str) or not reason.strip() or len(reason) > 200):
+                return 400, None
+            rows.insert(0, {"id": str(1 + sum(map(len, _points.values()))), "challengerId": key,
+                            "pointType": "CUSTOM", "point": body["pointValue"], "description": reason,
+                            "createdAt": _iso(datetime.now(timezone.utc))})
+        elif method != "GET" or suffix:
+            return None
+        return 200, {"challengerId": key, "points": list(rows),
+                     "totalPoints": sum(row["point"] for row in rows)}
     prefix = "/api/v1/study-groups"
     if not path.startswith(prefix):
         return None
@@ -220,3 +229,54 @@ def _handle(method, path, query, body, member):
             _status[member, identifier] = result
             return 200, {"status": result}
     return None
+
+
+def _serve_points_contract():
+    """Run a disposable ledger and simulate loss after a committed POST."""
+    import json
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+    from pathlib import Path
+    import sys
+
+    controls = Path(sys.argv[1])
+
+    class PointsHandler(BaseHTTPRequestHandler):
+        def log_message(self, *args):
+            pass
+
+        def dispatch(self):
+            if self.headers.get("Authorization") != "Bearer synthetic-access":
+                self.send_error(401)
+                return
+            size = int(self.headers.get("Content-Length", "0"))
+            body = json.loads(self.rfile.read(size)) if size else {}
+            if self.command == "GET" and (controls / "ledger-unavailable").exists():
+                self.send_error(503)
+                return
+            status, result = handle(self.command, self.path, {}, body, "102") or (404, None)
+            if self.command == "GET" and status == 200 and (controls / "stale-ledger").exists():
+                rows = result["points"][1:]
+                result = dict(result, points=rows, totalPoints=sum(row["point"] for row in rows))
+            if self.command == "POST" and (controls / "drop-response").exists():
+                (controls / "ledger-unavailable").touch()
+                self.send_response(200)
+                self.send_header("Content-Length", "1000")
+                self.end_headers()
+                self.close_connection = True
+                return
+            payload = json.dumps({"success": status == 200, "result": result}).encode()
+            self.send_response(status)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(payload)))
+            self.end_headers()
+            self.wfile.write(payload)
+
+        do_GET = do_POST = dispatch
+
+    with ThreadingHTTPServer(("127.0.0.1", 0), PointsHandler) as server:
+        print(server.server_port, flush=True)
+        server.serve_forever()
+
+
+if __name__ == "__main__":
+    _serve_points_contract()

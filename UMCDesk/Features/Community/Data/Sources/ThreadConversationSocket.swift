@@ -43,16 +43,28 @@ struct ConversationSocket {
                 {
                     return
                 }
-                if payload["status"] as? Int == 429 {
-                    throw ThreadConversationRejection.rateLimited
-                }
-                let reason = payload["message"] as? String ?? "요청을 처리하지 못했어요."
-                if payload["retryable"] as? Bool == false {
-                    throw ThreadConversationRejection.denied(reason)
-                }
-                throw ConversationFailure(reason)
+                throw Self.commandError(payload)
             }
         }
+    }
+
+    static func commandError(_ payload: [String: Any]) -> any Error {
+        let reason = payload["message"] as? String ?? "요청을 처리하지 못했어요."
+        // These thread/message command codes refer to the thread or the calling member.
+        switch payload["code"] as? String {
+        case "COMMUNITY-0033", "COMMUNITY-0034", "COMMUNITY-0035", "COMMUNITY-0037":
+            return ThreadConversationRejection.denied(reason)
+        case nil where reason == "THREAD_ACCESS_DENIED":
+            // The local fixture emits the symbolic code in the message field.
+            return ThreadConversationRejection.denied(reason)
+        default:
+            break
+        }
+        if payload["status"] as? Int == 429 { return ThreadConversationRejection.rateLimited }
+        if payload["retryable"] as? Bool == false {
+            return ThreadConversationRejection.commandDenied(reason)
+        }
+        return ConversationFailure(reason)
     }
 
     func observe(

@@ -9,10 +9,14 @@ import CommunityDomain
 import CoreNetwork
 import Foundation
 import Moya
+import UMCFoundation
 
 public struct LiveCommunityPostRepository: CommunityPostRepository {
     private let adapter: MoyaNetworkAdapter
     private let environment: NetworkEnvironment
+
+    private let postWrites = CommunityPostWrites<CommunityPost>()
+    private let commentWrites = CommunityPostWrites<CommunityPostComment>()
 
     public init(adapter: MoyaNetworkAdapter, environment: NetworkEnvironment) {
         self.adapter = adapter
@@ -71,10 +75,33 @@ public struct LiveCommunityPostRepository: CommunityPostRepository {
                     title: title, content: content,
                     category: category.rawValue))
         }
-        let row: CommunityPostDTO = try await request(
-            path, method: id == nil ? .post : .patch,
-            task: task)
-        return row.model
+        if id != nil {
+            let row: CommunityPostDTO = try await request(path, method: .patch, task: task)
+            return row.model
+        }
+        let key = [category.rawValue, title, content] + (meeting.map {
+            [$0.meetAt, $0.location, $0.maxParticipants, $0.openChatUrl]
+        } ?? [])
+        return try await postWrites.submit(key: key) {
+            try await posts(scope: .my, category: nil, keyword: "", page: "0").values
+        } matches: { row in
+            row.title == title && row.content == content && row.category == category.rawValue
+                && Self.sameMeeting(row.meeting, meeting)
+        } create: {
+            let row: CommunityPostDTO = try await request(path, method: .post, task: task)
+            return row.model
+        }
+    }
+
+    private static func sameMeeting(_ lhs: CommunityPostMeeting?, _ rhs: CommunityPostMeeting?) -> Bool {
+        guard let lhs, let rhs else { return lhs == nil && rhs == nil }
+        func instant(_ raw: String) -> Date? {
+            (try? Date(raw, strategy: .iso8601))
+                ?? (try? Date(raw, strategy: Date.ISO8601FormatStyle(includingFractionalSeconds: true)))
+        }
+        return lhs.location == rhs.location && lhs.openChatUrl == rhs.openChatUrl
+            && Int32(lhs.maxParticipants) == Int32(rhs.maxParticipants)
+            && (lhs.meetAt == rhs.meetAt || instant(lhs.meetAt).map { $0 == instant(rhs.meetAt) } == true)
     }
 
     public func perform(_ action: CommunityPostAction, id: String) async throws -> Bool? {
@@ -92,9 +119,15 @@ public struct LiveCommunityPostRepository: CommunityPostRepository {
         case .comment(let content, let parentID):
             if let parentID { try ConversationIdentifier.validate(parentID) }
             let body = CommentBody(content: content, parentId: parentID.flatMap(Int64.init))
-            let _: CommunityPostCommentDTO = try await request(
-                root + "/comments", method: .post,
-                task: .requestJSONEncodable(body))
+            _ = try await commentWrites.submit(key: [id, parentID ?? "", content]) {
+                try await comments(id: id)
+            } matches: { row in
+                row.isAuthor && row.content == content
+            } create: {
+                let row: CommunityPostCommentDTO = try await request(
+                    root + "/comments", method: .post, task: .requestJSONEncodable(body))
+                return row.model
+            }
         case .deleteComment(let comment):
             try ConversationIdentifier.validate(comment)
             let _: EmptyResult = try await request(root + "/comments/" + comment, method: .delete)
@@ -178,5 +211,56 @@ private struct CommunityPostToggleDTO: Codable {
         var values = encoder.container(keyedBy: CodingKeys.self)
         try values.encodeIfPresent(liked, forKey: .liked)
         try values.encodeIfPresent(scrapped, forKey: .scrapped)
+    }
+}
+
+// The server allocates numeric IDs and lists the account's newest posts first.
+// Keep an uncertain submission with its account-bound repository across view recreation.
+private actor CommunityPostWrites<Row: Identifiable & Sendable> where Row.ID == String {
+    private var pending: [[String]: Int64] = [:]
+    private var running: Set<[String]> = []
+
+    func submit(
+        key: [String], read: () async throws -> [Row], matches: (Row) -> Bool,
+        create: () async throws -> Row
+    ) async throws -> Row {
+        guard running.insert(key).inserted else { throw CommunityPostWriteFailure.inProgress }
+        defer { running.remove(key) }
+        if pending[key] == nil {
+            let rows = try await read()
+            let ids = rows.compactMap { Int64($0.id) }
+            guard ids.count == rows.count else { throw NetworkError.invalidResponse }
+            try _Concurrency.Task.checkCancellation()
+            pending[key] = ids.max() ?? 0
+            do {
+                let result = try await create()
+                pending.removeValue(forKey: key)
+                return result
+            } catch {
+                if Self.wasRejected(error) {
+                    pending.removeValue(forKey: key)
+                    throw error
+                }
+            }
+        }
+        try _Concurrency.Task.checkCancellation()
+        guard let baseline = pending[key], let rows = try? await read() else {
+            throw CommunityPostWriteFailure.unconfirmed
+        }
+        let candidates = rows.filter { (Int64($0.id) ?? 0) > baseline && matches($0) }
+        guard candidates.count == 1, let result = candidates.first else {
+            throw CommunityPostWriteFailure.unconfirmed
+        }
+        pending.removeValue(forKey: key)
+        return result
+    }
+
+    private static func wasRejected(_ error: Error) -> Bool {
+        switch error {
+        case NetworkError.requestFailed(let status, _): return (400..<500).contains(status)
+        case NetworkError.unauthorized, NetworkError.noRefreshToken,
+             NetworkError.maxRetryExceeded, NetworkError.tokenRefreshFailed: return true
+        default: return false
+        }
     }
 }

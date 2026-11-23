@@ -45,10 +45,16 @@ let workspace = Workspace(
                     path: "Features/Activity", target: "ActivityDataTests"
                 )),
                 .testableTarget(target: .project(
+                    path: "Features/Activity", target: "ActivityPresentationTests"
+                )),
+                .testableTarget(target: .project(
                     path: "Features/Notice", target: "NoticeDomainTests"
                 )),
                 .testableTarget(target: .project(
                     path: "Features/Notice", target: "NoticeDataTests"
+                )),
+                .testableTarget(target: .project(
+                    path: "Features/Notice", target: "NoticePresentationTests"
                 )),
                 .testableTarget(target: .project(
                     path: "Features/Community", target: "CommunityDataTests"
@@ -58,6 +64,9 @@ let workspace = Workspace(
                 )),
                 .testableTarget(target: .project(
                     path: "Features/ProjectWorkspace", target: "ProjectWorkspaceDataTests"
+                )),
+                .testableTarget(target: .project(
+                    path: "Features/ProjectWorkspace", target: "ProjectWorkspacePresentationTests"
                 )),
                 .testableTarget(target: .project(path: "Core/DI", target: "CoreDITests")),
                 .testableTarget(target: .project(

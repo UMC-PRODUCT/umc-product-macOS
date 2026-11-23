@@ -22,6 +22,7 @@ struct CommunityPostEditor: View {
     @State private var capacity: String
     @State private var link: String
     @State private var busy = false
+    @State private var awaitingConfirmation = false
     @State private var failure: String?
     @State private var operation: Task<Void, Never>?
 
@@ -64,11 +65,12 @@ struct CommunityPostEditor: View {
                     TextField("오픈 채팅 주소", text: $link)
                 }
             }
+            .disabled(awaitingConfirmation)
             if let failure { Text(failure).foregroundStyle(.secondary) }
             HStack {
                 Spacer()
                 Button("취소") { dismiss() }.keyboardShortcut(.cancelAction)
-                Button("저장") { save() }.keyboardShortcut(.defaultAction)
+                Button(awaitingConfirmation ? "등록 결과 확인" : "저장") { save() }.keyboardShortcut(.defaultAction)
                     .disabled(!valid)
             }
         }
@@ -105,7 +107,10 @@ struct CommunityPostEditor: View {
                 try Task.checkCancellation()
                 saved(result)
             } catch {
-                if !Task.isCancelled { failure = error.localizedDescription }
+                if !Task.isCancelled {
+                    awaitingConfirmation = error as? CommunityPostWriteFailure == .unconfirmed
+                    failure = error.localizedDescription
+                }
             }
         }
     }

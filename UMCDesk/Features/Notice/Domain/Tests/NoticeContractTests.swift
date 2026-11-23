@@ -48,4 +48,26 @@ struct NoticeContractTests {
         let page = try JSONDecoder().decode(NoticeReaders.self, from: Data(json.utf8))
         #expect(page.hasNext && page.nextCursor == "42")
     }
+
+    @MainActor
+    @Test("투표 상세에서 미등록을 확인한 뒤 재등록한다")
+    func recoverMissingPoll() async throws {
+        let attempt = NoticePublication()
+        do {
+            try await attempt.publishPoll {
+                throw URLError(.notConnectedToInternet)
+            } check: {
+                .absent
+            }
+            Issue.record("미등록 상태를 알려야 합니다.")
+        } catch { #expect(error as? NoticeRequestFailure == .pollMissing) }
+        #expect(!attempt.needsPollCheck)
+        var submissions = 0
+        try await attempt.publishPoll {
+            submissions += 1
+        } check: {
+            .absent
+        }
+        #expect(submissions == 1)
+    }
 }

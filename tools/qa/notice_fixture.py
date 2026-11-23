@@ -11,7 +11,10 @@ from uuid import uuid4
 
 _LOCK = RLock()
 _MEMBERS = {"first@example.test": ("101", "첫 챌린저"),
-            "second@example.test": ("102", "둘째 챌린저")}
+            "second@example.test": ("102", "둘째 챌린저"),
+            "design@example.test": ("103", "디자인 챌린저"),
+            "ops@example.test": ("104", "운영 검증 회원")}
+_WRITERS = {"first@example.test", "ops@example.test"}
 
 
 def _now():
@@ -88,7 +91,7 @@ def handle(handler, method, path, query, body, email):
             if key not in state["entries"]:
                 return send(404)
             return send(200, {"resourceType": "NOTICE", "resourceId": key, "permissions": [
-                {"permissionType": kind, "hasPermission": kind == "READ" or email == "first@example.test"}
+                {"permissionType": kind, "hasPermission": kind == "READ" or email in _WRITERS}
                 for kind in ("READ", "CHECK", "EDIT", "DELETE")]})
         body = body or {}
         base = f"http://127.0.0.1:{server.server_port}/qa/notice-upload/"
@@ -137,7 +140,7 @@ def handle(handler, method, path, query, body, email):
                     del row[key]
             return send(200, {"content": rows, "hasNext": (page+1)*size < len(visible)})
         if not suffix and method == "POST":
-            if email != "first@example.test":
+            if email not in _WRITERS:
                 return send(403)
             if not all(body.get(k) for k in ("title", "content", "targetInfo")):
                 return send(400)
@@ -179,7 +182,7 @@ def handle(handler, method, path, query, body, email):
             else:
                 ballots.pop(email, None)
             return send(200)
-        if email != "first@example.test":
+        if email not in _WRITERS:
             return send(403)
         if not action and method == "PATCH":
             for field in ("title", "content", "mustRead"):
@@ -228,12 +231,28 @@ def handle(handler, method, path, query, body, email):
 def _serve_contract_test():
     """Serve one disposable NoticeData contract test on an OS-selected loopback port."""
     import json
+    import os
+    import time
+    from pathlib import Path
     from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
     from urllib.parse import parse_qs, urlsplit
+
+    directory = os.environ.get("NOTICE_CONTRACT_CONTROL")
+    controls = Path(directory) if directory else None
 
     class ContractHandler(BaseHTTPRequestHandler):
         def send_result(self, status, result=None):
             payload = json.dumps({"success": status == 200, "result": result}).encode()
+            if controls and status == 200 and self.command == "POST":
+                kind = ("notice" if self.path == "/api/v1/notices" else
+                        "poll" if self.path.endswith("/votes") else "")
+                if kind:
+                    with (controls / ("posts-" + kind)).open("a") as log:
+                        log.write("1\n")
+                    drop = controls / ("lose-" + kind)
+                    if drop.exists():
+                        drop.unlink()
+                        payload = b"{"
             self.send_response(status)
             self.send_header("Content-Type", "application/json")
             self.send_header("Content-Length", str(len(payload)))
@@ -249,11 +268,34 @@ def _serve_contract_test():
             identities = {"Bearer notice-contract-fixture": "first@example.test",
                           "Bearer notice-reader-fixture": "second@example.test"}
             email = identities.get(self.headers.get("Authorization"))
+            if url.path == "/api/v2/member/me" and email:
+                return self.send_result(200, {"isSuperAdmin": email == "ops@example.test",
+                    "currentGisuMemberInfo": {"gisuId": "10", "isAdmin": email in _WRITERS}})
             if url.path == "/api/v1/gisu/active" and email:
                 return self.send_result(200, {"gisuId": "10"})
             if url.path == "/api/v2/gisu" and email:
                 return self.send_result(200, {"gisus": [{"gisuId": 10, "generation": 10,
                     "schools": [], "chapters": [{"chapterId": 1, "chapterName": "합성 지부"}]}]})
+            if controls:
+                if (controls / "deny").exists() and (url.path.startswith("/api/v1/notices/")
+                                                      or url.path.endswith("/resource-permission")):
+                    return self.send_result(403)
+                if self.command == "PUT":
+                    (controls / "put-started").touch()
+                    if url.path == "/qa/redirect-target":
+                        (controls / "redirect-followed").touch()
+                        return self.send_result(200)
+                    if (controls / "redirect").exists():
+                        self.send_response(307)
+                        self.send_header("Location", "/qa/redirect-target")
+                        self.end_headers()
+                        return
+                    if (controls / "hold-put").exists():
+                        deadline = time.monotonic() + 5
+                        while (controls / "hold-put").exists() and time.monotonic() < deadline:
+                            time.sleep(0.02)
+                if url.path.endswith("/confirm"):
+                    (controls / "confirmed").touch()
             size = int(self.headers.get("Content-Length", "0"))
             if not 0 <= size <= 10 * 1024 * 1024:
                 return self.send_result(400)

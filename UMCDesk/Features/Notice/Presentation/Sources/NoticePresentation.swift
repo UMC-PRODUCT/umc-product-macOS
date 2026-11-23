@@ -15,6 +15,7 @@ final class NoticeBoardModel {
     var tab = "CHALLENGER"
     var keyword = ""
     var gisu = ""
+    var canCompose = false
     var part: String?
     var nextPage: Int?
     var isLoading = false
@@ -25,6 +26,15 @@ final class NoticeBoardModel {
 
     init(repository: any NoticeRepository) {
         self.repository = repository
+    }
+
+    func revokeArticle(_ id: String) {
+        requestID = UUID()
+        isLoading = false
+        entries.removeAll { $0.id == id }
+        readIDs.remove(id)
+        if selection == id { selection = nil }
+        error = NoticeRequestFailure.accessDenied.localizedDescription
     }
 
     func load(page: Int = 0) async {
@@ -41,6 +51,9 @@ final class NoticeBoardModel {
             let generation = gisu.isEmpty ? try await repository.activeGisu() : gisu
             guard requestID == token, !Task.isCancelled else { return }
             gisu = generation
+            let allowed = (try? await repository.canCompose(gisu: generation)) == true
+            guard requestID == token, !Task.isCancelled else { return }
+            canCompose = allowed
             let response = try await repository.notices(
                 gisu: generation, tab: tab,
                 keyword: keyword, part: tab == "CHALLENGER" ? part : nil, page: page)
@@ -49,7 +62,15 @@ final class NoticeBoardModel {
             entries += response.content.filter { known.insert($0.id).inserted }
             nextPage = response.hasNext ? page + 1 : nil
         } catch {
-            if requestID == token, !Task.isCancelled { self.error = error.localizedDescription }
+            guard requestID == token, !Task.isCancelled else { return }
+            if case NoticeRequestFailure.accessDenied = error {
+                entries = []
+                canCompose = false
+                selection = nil
+                readIDs = []
+                nextPage = nil
+            }
+            self.error = error.localizedDescription
         }
     }
 }
@@ -58,6 +79,7 @@ public struct NoticeBoardView: View {
     @State private var model: NoticeBoardModel
     @State private var search = ""
     @State private var composing = false
+    @State private var checkingWriter = false
     @State private var pinnedExpanded = true
     @State private var showTools = false
     @State private var fullReader = false
@@ -82,6 +104,7 @@ public struct NoticeBoardView: View {
                         repository: model.repository, id: id,
                         confirmed: model.readIDs.contains(id),
                         onBack: { model.selection = nil },
+                        onAccessLost: { model.revokeArticle(id) },
                         onChanged: { Task { await model.load() } },
                         onRead: { model.readIDs.insert(id) }
                     )
@@ -94,8 +117,27 @@ public struct NoticeBoardView: View {
         .background(UMCColor.Custom.backgroundDefault)
         .task(id: model.tab) { await model.load() }
         .onChange(of: model.part) { _, _ in Task { await model.load() } }
+        .onChange(of: model.canCompose) { _, allowed in
+            if !allowed { composing = false }
+        }
         .sheet(isPresented: $composing) {
-            NoticeComposer(repository: model.repository, gisu: model.gisu, tab: model.tab) { id in
+            NoticeComposer(
+                repository: model.repository, gisu: model.gisu, tab: model.tab,
+                onAccessDenied: {
+                    composing = false
+                    model.canCompose = false
+                    model.error = NoticeRequestFailure.accessDenied.localizedDescription
+                },
+                onCheckList: { title, tab in
+                    composing = false
+                    model.selection = nil
+                    model.tab = tab
+                    model.part = nil
+                    pinnedOnly = false
+                    search = title
+                    searchNotices()
+                }
+            ) { id in
                 composing = false
                 model.selection = id
                 Task { await model.load() }
@@ -117,8 +159,23 @@ public struct NoticeBoardView: View {
                 }
             }
             Spacer()
-            Button("공지 작성", systemImage: "square.and.pencil") { composing = true }
-                .disabled(model.gisu.isEmpty)
+            if model.canCompose {
+                Button("공지 작성", systemImage: "square.and.pencil") {
+                    Task {
+                        guard !checkingWriter else { return }
+                        checkingWriter = true
+                        defer { checkingWriter = false }
+                        do {
+                            model.canCompose = try await model.repository.canCompose(
+                                gisu: model.gisu)
+                            composing = model.canCompose
+                        } catch {
+                            model.canCompose = false
+                            model.error = error.localizedDescription
+                        }
+                    }
+                }.disabled(checkingWriter)
+            }
             Button("공지 도구", systemImage: "slider.horizontal.3") { showTools.toggle() }
                 .keyboardShortcut("f")
                 .popover(isPresented: $showTools) { tools }

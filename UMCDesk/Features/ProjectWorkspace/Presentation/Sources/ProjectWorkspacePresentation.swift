@@ -37,22 +37,23 @@ public struct ProjectWorkspaceView: View {
     }
 }
 
-private struct WorkspaceDirectory: View {
+struct WorkspaceDirectory: View {
     let accountID: String
     let loadProjects: @Sendable () async throws -> [WorkspaceProject]
     let loadGitHub: WorkspaceGitHubLoader?
     let openMatching: (() -> Void)?
 
     @AppStorage private var recentProjectID: String
-    @State private var projects: [WorkspaceProject]?
-    @State private var selected: WorkspaceProject?
-    @State private var failure = false
-    @State private var revision = 0
+    @State private var directory: WorkspaceDirectoryModel
+    @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.appearsActive) private var appearsActive
 
     init(
         accountID: String, loadProjects: @escaping @Sendable () async throws -> [WorkspaceProject],
-        loadGitHub: WorkspaceGitHubLoader?, openMatching: (() -> Void)?
+        loadGitHub: WorkspaceGitHubLoader?, openMatching: (() -> Void)?,
+        directory: WorkspaceDirectoryModel = WorkspaceDirectoryModel()
     ) {
+        _directory = State(initialValue: directory)
         self.accountID = accountID
         self.loadProjects = loadProjects
         self.loadGitHub = loadGitHub
@@ -64,12 +65,24 @@ private struct WorkspaceDirectory: View {
     // MARK: - Body
 
     var body: some View {
-        Group {
-            if let selected {
-                ProjectWorkspaceDetail(project: selected, accountID: accountID,
-                                       loadGitHub: loadGitHub, openMatching: openMatching,
-                                       close: { self.selected = nil })
+        @Bindable var directory = directory
+        let revision = directory.revision
+        return Group {
+            if let selected = directory.selected {
+                VStack(spacing: 0) {
+                    if directory.failed {
+                        HStack {
+                            Text("참여 상태를 다시 확인하지 못했어요.")
+                            Button("다시 시도", action: directory.requestRefresh)
+                        }
+                    }
+                    ProjectWorkspaceDetail(
+                        project: selected, accountID: accountID, sheet: $directory.sheet,
+                        loadGitHub: loadGitHub, openMatching: openMatching,
+                        refreshMembership: directory.requestRefresh, close: directory.close
+                    )
                     .id(selected.id)
+                }
             } else {
                 ScrollView {
                     VStack(alignment: .leading, spacing: UMCSpacing.value24) {
@@ -83,12 +96,12 @@ private struct WorkspaceDirectory: View {
                                         openMatching()
                                     }
                                 }
-                                if let recent = projects?.first(where: {
+                                if let recent = directory.projects?.first(where: {
                                     $0.id == recentProjectID
                                 }) {
                                     Button("이어서 작업 · \(recent.name)") {
                                         dismiss()
-                                        selected = recent
+                                        directory.open(recent)
                                     }
                                 }
                             }
@@ -101,13 +114,15 @@ private struct WorkspaceDirectory: View {
                             }
                             VStack(alignment: .leading) { heading; matchingButton }
                         }
-                        if failure {
+                        if directory.failed {
                             ContentUnavailableView {
                                 Label("참여 프로젝트를 확인하지 못했어요", systemImage: "wifi.exclamationmark")
                             } actions: {
-                                Button("다시 시도") { revision += 1 }
+                                Button("다시 시도", action: directory.requestRefresh)
                             }
-                        } else if let projects {
+                        } else if directory.isOpening {
+                            ProgressView("프로젝트 참여 상태 확인 중")
+                        } else if let projects = directory.projects {
                             if projects.isEmpty {
                                 ContentUnavailableView {
                                     Label("매칭에서 만난 팀과 바로 시작하세요", systemImage: "person.2")
@@ -124,8 +139,7 @@ private struct WorkspaceDirectory: View {
                                         WorkspaceDirectoryRow(
                                             project: project, accountID: accountID
                                         ) {
-                                            recentProjectID = project.id
-                                            selected = project
+                                            directory.open(project)
                                         }
                                         if project.id != projects.last?.id { Divider() }
                                     }
@@ -145,15 +159,16 @@ private struct WorkspaceDirectory: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(UMCColor.Custom.backgroundDefault)
         .task(id: revision) {
-            failure = false
-            do {
-                let fetched = try await loadProjects()
-                try Task.checkCancellation()
-                var seen = Set<String>()
-                projects = fetched.filter { seen.insert($0.id).inserted }
-            } catch {
-                if !Task.isCancelled { failure = true }
-            }
+            await directory.refresh(revision: revision, load: loadProjects)
+        }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active { directory.requestRefresh() }
+        }
+        .onChange(of: appearsActive) { _, active in
+            if active { directory.requestRefresh() }
+        }
+        .onChange(of: directory.selected?.id) { _, id in
+            if let id { recentProjectID = id }
         }
     }
 

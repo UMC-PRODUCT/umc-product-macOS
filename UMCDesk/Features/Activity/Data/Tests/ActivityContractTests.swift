@@ -4,6 +4,7 @@
 //  Created by euijjang97 on 11/23/26.
 //
 
+import ActivityDomain
 import CoreNetwork
 import Foundation
 import Testing
@@ -109,4 +110,73 @@ private final class ActivityContractTransport: URLProtocol, @unchecked Sendable 
     let excuse = try await repository.attend(scheduleID: "701", reason: "합성 사유", coordinate: nil)
     #expect(excuse == "EXCUSED_PENDING")
     try await repository.decide(scheduleID: "701", memberID: "101", approve: true)
+}
+
+@Test("동시 지급과 응답 유실 후 재시도는 각 원장에 한 건만 남긴다")
+func pointGrantReconciliation() async throws {
+    let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    var root = URL(fileURLWithPath: #filePath)
+    for _ in 0..<6 { root.deleteLastPathComponent() }
+    let process = Process()
+    process.executableURL = URL(fileURLWithPath: "/usr/bin/python3")
+    process.arguments = [
+        root.appending(path: "tools/qa/home_activity_fixture.py").path, directory.path,
+    ]
+    let output = Pipe()
+    process.standardOutput = output
+    try process.run()
+    defer {
+        if process.isRunning {
+            process.terminate()
+            process.waitUntilExit()
+        }
+    }
+    let text = String(decoding: output.fileHandleForReading.availableData, as: UTF8.self)
+    let port = try #require(UInt16(text.trimmingCharacters(in: .whitespacesAndNewlines)))
+    let url = try #require(URL(string: "http://127.0.0.1:\(port)"))
+    let client = AuthSystemFactory.makeNetworkClient(
+        environment: NetworkEnvironment(baseURL: url), tokenStore: FixtureTokenStore())
+    let repository = LiveActivityRepository(client: client, baseURL: url)
+
+    func checkLedger(_ challenger: String, expected: Double) async throws {
+        let request = URLRequest(url: url.appending(path: "api/v1/challenger/" + challenger))
+        let (data, _) = try await client.request(request)
+        let ledger = try JSONDecoder().decode(APIResponse<PointLedgerDTO>.self, from: data)
+            .unwrap()
+        #expect(ledger.totalPoints == expected)
+        #expect(ledger.points.count == 1)
+        #expect(ledger.points[0].point == expected)
+        #expect(ledger.points[0].challengerId == challenger)
+    }
+
+    let concurrentID = UUID()
+    try await withThrowingTaskGroup(of: Void.self) { group in
+        for _ in 0..<8 {
+            group.addTask {
+                let result = try await repository.grantPoints(
+                    operationID: concurrentID, challengerID: "101", value: 3, reason: "합성 동시 지급")
+                #expect(result == .recorded)
+            }
+        }
+        try await group.waitForAll()
+    }
+    try await checkLedger("101", expected: 3)
+
+    try Data().write(to: directory.appending(path: "drop-response"))
+    let lostID = UUID()
+    func retry() async throws -> PointGrantResult {
+        try await repository.grantPoints(
+            operationID: lostID, challengerID: "102", value: 7, reason: "합성 응답 유실")
+    }
+    #expect(try await retry() == .awaitingLedger)
+    #expect(try await retry() == .awaitingLedger)
+    try FileManager.default.removeItem(at: directory.appending(path: "ledger-unavailable"))
+    try Data().write(to: directory.appending(path: "stale-ledger"))
+    #expect(try await retry() == .awaitingLedger)
+    try FileManager.default.removeItem(at: directory.appending(path: "stale-ledger"))
+    #expect(try await retry() == .ledgerMatch)
+    #expect(try await retry() == .ledgerMatch)
+    try await checkLedger("102", expected: 7)
 }

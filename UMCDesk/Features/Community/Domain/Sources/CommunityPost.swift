@@ -136,3 +136,14 @@ public protocol CommunityPostRepository: Sendable {
     ) async throws -> CommunityPost
     func perform(_ action: CommunityPostAction, id: String) async throws -> Bool?
 }
+
+public enum CommunityPostWriteFailure: LocalizedError, Sendable {
+    case inProgress, unconfirmed
+
+    public var errorDescription: String? {
+        switch self {
+        case .inProgress: "같은 내용을 등록하고 있어요."
+        case .unconfirmed: "등록 결과를 확인하지 못했어요. 같은 내용으로 다시 누르면 결과를 조회해요."
+        }
+    }
+}

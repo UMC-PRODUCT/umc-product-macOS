@@ -112,8 +112,7 @@ private struct ThreadBrowser: View {
                     .frame(minWidth: 0, maxWidth: .infinity, minHeight: 0, maxHeight: .infinity)
             }
         }
-        .frame(minWidth: 0, maxWidth: .infinity, minHeight: 0, maxHeight: .infinity,
-               alignment: .topLeading)
+        .communitySplitContent()
         .task(id: search + [String(reload)]) {
             if loadedSearch != search {
                 threads = []
@@ -249,5 +248,14 @@ private struct ThreadComposer: View {
                 created(value)
             } catch { failure = error.localizedDescription }
         }
+    }
+}
+
+extension View {
+    /// A native split pane next to the app rail can extend beneath the unified window toolbar.
+    func communitySplitContent() -> some View {
+        frame(minWidth: 0, maxWidth: .infinity, minHeight: 0, maxHeight: .infinity,
+              alignment: .topLeading)
+            .padding(.top, UMCSpacing.value16)
     }
 }
