@@ -24,23 +24,21 @@ public struct LiveSettingsRepository: SettingsRepository {
     }
 
     public func fetchProfile() async throws -> SettingsProfile {
-        try await requireAuthentication()
         return try await profile(for: .profile)
     }
 
     public func updateProfileLinks(_ links: SettingsProfileLinks) async throws -> SettingsProfile {
-        try await requireAuthentication()
         return try await profile(for: .updateLinks(.init(links: links)))
     }
 
     public func registerChallenger(code: String) async throws {
-        try await requireAuthentication()
+        let bound = try await accountClient()
         do {
-            let response = try await adapter.request(target(.register(.init(code: code))))
+            let response = try await MoyaNetworkAdapter(networkClient: bound).request(target(.register(.init(code: code))))
             try JSONDecoder().decode(APIResponse<EmptyResult>.self, from: response.data)
                 .validateSuccess()
         } catch {
-            throw try await accountError(error)
+            throw try await accountError(error, account: bound)
         }
     }
 
@@ -60,27 +58,29 @@ public struct LiveSettingsRepository: SettingsRepository {
     }
 
     private func profile(for endpoint: SettingsTarget.Endpoint) async throws -> SettingsProfile {
+        let bound = try await accountClient()
         do {
-            let response = try await adapter.request(target(endpoint))
+            let response = try await MoyaNetworkAdapter(networkClient: bound).request(target(endpoint))
             return try JSONDecoder().decode(
                 APIResponse<SettingsMemberResponse>.self, from: response.data
             ).unwrap().toDomain()
         } catch {
-            throw try await accountError(error)
+            throw try await accountError(error, account: bound)
         }
     }
 
-    private func requireAuthentication() async throws {
-        guard await client.isLoggedIn() else {
+    private func accountClient() async throws -> NetworkClient {
+        guard let bound = try? await client.boundToCurrentAccount() else {
             throw SettingsError.authenticationRequired
         }
+        return bound
     }
 
-    private func accountError(_ error: Error) async throws -> Error {
+    private func accountError(_ error: Error, account: NetworkClient) async throws -> Error {
         if let networkError = error as? NetworkError {
             switch networkError {
             case .unauthorized, .noRefreshToken, .tokenRefreshFailed, .maxRetryExceeded:
-                try await client.logout()
+                try await client.invalidateAccount(account)
                 return SettingsError.authenticationRequired
             case .requestFailed(_, let data):
                 if let data, let response = try? JSONDecoder().decode(

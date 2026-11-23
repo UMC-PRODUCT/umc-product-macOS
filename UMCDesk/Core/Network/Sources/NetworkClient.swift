@@ -15,6 +15,7 @@ public actor NetworkClient {
     nonisolated let aquilaClient: Aquila.NetworkClient
     private let logoutTokens: LogoutTokenStore
     nonisolated let accountScope: UUID?
+    private var signOutCount: UInt64 = 0
     private var loginTask: Task<Void, Error>?
     private var logoutTask: Task<String?, Error>?
     nonisolated static let logger = Aquila.VerboseLogger(redactedKeys: [
@@ -138,6 +139,15 @@ public actor NetworkClient {
         }
     }
 
+    public func invalidateAccount(_ boundClient: NetworkClient) async throws {
+        let expectedSignOutCount = signOutCount
+        guard accountScope == nil, let scope = boundClient.accountScope,
+              logoutTokens === boundClient.logoutTokens,
+              await logoutTokens.authenticatedScope() == scope, expectedSignOutCount == signOutCount
+        else { throw CancellationError() }
+        _ = try await logoutReturningRefreshToken()
+    }
+
     public func logout() async throws {
         _ = try await logoutReturningRefreshToken()
     }
@@ -145,6 +155,7 @@ public actor NetworkClient {
     public func logoutReturningRefreshToken() async throws -> String? {
         guard accountScope == nil else { throw CancellationError() }
         if let logoutTask { return try await logoutTask.value }
+        signOutCount &+= 1
         let pendingLogin = loginTask
         pendingLogin?.cancel()
         let task = Task<String?, Error> {
