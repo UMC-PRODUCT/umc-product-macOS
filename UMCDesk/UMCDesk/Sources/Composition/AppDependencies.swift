@@ -283,27 +283,24 @@ final class AppDependencies {
     }
 
     static func makeSettingsPreferences(arguments: [String]) -> SettingsPreferences {
+        let initialTheme = arguments.firstIndex(of: "--settings-theme").flatMap { index in
+            arguments.indices.contains(index + 1) ? SettingsTheme(rawValue: arguments[index + 1]) : nil
+        }
         if let port = fixturePort(arguments: arguments) {
             let name = "com.umc.product.macos.local-api.\(port)"
-            return SettingsPreferences(defaults: UserDefaults(suiteName: name)!)
+            return SettingsPreferences(defaults: UserDefaults(suiteName: name)!, initialTheme: initialTheme)
         }
+        let suite: String
         if arguments.contains("--auth-preview") || arguments.contains("--matching-preview") {
-            let suite = "com.umc.product.macos.isolated-design-preview"
-            let defaults = UserDefaults(suiteName: suite)!
-            defaults.removePersistentDomain(forName: suite)
-            return SettingsPreferences(defaults: defaults)
+            suite = "com.umc.product.macos.isolated-design-preview"
+        } else if arguments.contains("--settings-preview") {
+            suite = "com.umc.product.macos.settings-preview"
+        } else {
+            return SettingsPreferences()
         }
-        guard arguments.contains("--settings-preview") else { return SettingsPreferences() }
-        let suite = "com.umc.product.macos.settings-preview"
         let defaults = UserDefaults(suiteName: suite)!
         defaults.removePersistentDomain(forName: suite)
-        let preferences = SettingsPreferences(defaults: defaults)
-        if let index = arguments.firstIndex(of: "--settings-theme"),
-           arguments.indices.contains(index + 1),
-           let theme = SettingsTheme(rawValue: arguments[index + 1]) {
-            preferences.theme = theme
-        }
-        return preferences
+        return SettingsPreferences(defaults: defaults, initialTheme: initialTheme)
     }
     #endif
 }

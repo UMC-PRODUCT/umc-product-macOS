@@ -92,13 +92,14 @@ public final class SettingsPreferences {
 
     public init(
         defaults: UserDefaults = .standard,
-        languagePreferences: SettingsPreferences? = nil
+        languagePreferences: SettingsPreferences? = nil,
+        initialTheme: SettingsTheme? = nil
     ) {
         self.defaults = defaults
         self.languagePreferences = languagePreferences
         storedLanguage = defaults.string(forKey: "settings.language")
             .flatMap(AppLanguage.init) ?? .korean
-        theme = defaults.string(forKey: "settings.theme").flatMap(SettingsTheme.init) ?? .system
+        theme = initialTheme ?? defaults.string(forKey: "settings.theme").flatMap(SettingsTheme.init) ?? .system
         selectedColorThemeID = defaults.string(forKey: "settings.colorThemeID") ?? "umc"
         let storedThemes = defaults.data(forKey: "settings.colorThemes")
             .flatMap { try? JSONDecoder().decode([SettingsColorTheme].self, from: $0) }?
