@@ -213,7 +213,15 @@ class SessionFixture(BaseHTTPRequestHandler):
                 return self.send_result(401)
             return self.send_result(200, self.profile(email))
         if url.path == "/api/v2/member/me":
-            return self.send_result(200, {"isSuperAdmin": identifier == "104"})
+            notice_operator = identifier == "101"
+            return self.send_result(200, {
+                "isSuperAdmin": identifier == "104",
+                "currentGisuMemberInfo": {
+                    "gisuId": "10",
+                    "isAdmin": notice_operator,
+                    "roleTypes": ["CENTRAL_OPERATING_TEAM_MEMBER"] if notice_operator else [],
+                },
+            })
         if url.path == "/api/v1/gisu/active":
             return self.send_result(200, {"gisuId": "10"})
         if url.path == "/api/v2/gisu":
