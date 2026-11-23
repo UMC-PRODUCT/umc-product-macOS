@@ -12,6 +12,7 @@ import SwiftUI
 struct SupportInquiryPreview: View {
     @Bindable var fixture: SupportFixture
     var isOperator = false
+    let showAnswers: () -> Void
     @FocusState private var tableFocused: Bool
     @State private var highlightedID: UUID?
     @State private var selectedID: UUID?
@@ -45,23 +46,27 @@ struct SupportInquiryPreview: View {
                     Button("새 문의 작성") { composing = true }.buttonStyle(.borderedProminent)
                 }
             }
-            Table(isOperator ? fixture.tickets : fixture.myTickets, selection: $highlightedID) {
-                TableColumn("문의") { ticket in
-                    Button(ticket.subject) { selectedID = ticket.id }
-                        .buttonStyle(.link)
+            Group {
+                if !isOperator && fixture.myTickets.isEmpty {
+                    ContentUnavailableView {
+                        Text("아직 등록한 문의가 없어요").umcTypography(.title2Bold)
+                    } description: {
+                        Text("많이 묻는 질문에서 먼저 답을 찾거나 문의를 남겨주세요.")
+                    } actions: {
+                        HStack {
+                            Button("답변 찾아보기", action: showAnswers)
+                            Button("문의하기") { composing = true }.buttonStyle(.borderedProminent)
+                        }
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .overlay {
+                        RoundedRectangle(cornerRadius: UMCRadius.value12)
+                            .strokeBorder(UMCColor.Semantic.borderNeutralWeak200)
+                            .allowsHitTesting(false)
+                    }
+                } else {
+                    ticketTable
                 }
-                if isOperator { TableColumn("받는 팀") { Text($0.team.rawValue) } }
-                TableColumn("상태") { Text($0.status.rawValue) }
-            }
-            .focused($tableFocused)
-            .onAppear { tableFocused = true }
-            .contextMenu(forSelectionType: UUID.self) { _ in } primaryAction: { ids in
-                selectedID = ids.first
-            }
-            .onKeyPress(.return) {
-                guard let highlightedID else { return .ignored }
-                selectedID = highlightedID
-                return .handled
             }
             .sheet(isPresented: $composing) {
                 SupportComposePreview { subject, content in
@@ -69,6 +74,27 @@ struct SupportInquiryPreview: View {
                     composing = false
                 }
             }
+        }
+    }
+
+    private var ticketTable: some View {
+        Table(isOperator ? fixture.tickets : fixture.myTickets, selection: $highlightedID) {
+            TableColumn("문의") { ticket in
+                Button(ticket.subject) { selectedID = ticket.id }
+                    .buttonStyle(.link)
+            }
+            if isOperator { TableColumn("받는 팀") { Text($0.team.rawValue) } }
+            TableColumn("상태") { Text($0.status.rawValue) }
+        }
+        .focused($tableFocused)
+        .onAppear { tableFocused = true }
+        .contextMenu(forSelectionType: UUID.self) { _ in } primaryAction: { ids in
+            selectedID = ids.first
+        }
+        .onKeyPress(.return) {
+            guard let highlightedID else { return .ignored }
+            selectedID = highlightedID
+            return .handled
         }
     }
 }

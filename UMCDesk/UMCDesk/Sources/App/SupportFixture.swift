@@ -94,10 +94,11 @@ final class SupportFixture {
     ]
     var drafts: [SupportDraft]
 
-    init() {
+    init(emptyInquiries: Bool = false) {
         let example = SupportArticle(id: "fixture-attendance", question: "출석 기록이 실제와 다르게 보여요",
                                      answer: "활동 메뉴를 새로고침하고 해당 일정의 출석 상태를 확인해 주세요.")
         drafts = [SupportDraft(article: example, published: example)]
+        if emptyInquiries { tickets.removeAll() }
     }
 
     var myTickets: [SupportTicket] { tickets.filter(\.belongsToCurrentUser) }

@@ -21,8 +21,15 @@ struct SupportView: View {
     #if DEBUG
     @State private var fixture: SupportFixture?
 
-    init(designPreview: Bool = ProcessInfo.processInfo.arguments.contains("--support-preview")) {
-        _fixture = State(initialValue: designPreview ? SupportFixture() : nil)
+    init(
+        designPreview: Bool = ProcessInfo.processInfo.arguments.contains("--support-preview"),
+        emptyInquiries: Bool = ProcessInfo.processInfo.arguments
+            .contains("--support-preview-empty")
+    ) {
+        let preview = designPreview || emptyInquiries
+        let initialFixture = preview ? SupportFixture(emptyInquiries: emptyInquiries) : nil
+        _fixture = State(initialValue: initialFixture)
+        _page = State(initialValue: emptyInquiries ? .inquiries : .answers)
     }
     #else
     init() {}
@@ -57,7 +64,7 @@ struct SupportView: View {
             #if DEBUG
             case .operations:
                 if let fixture {
-                    SupportInquiryPreview(fixture: fixture, isOperator: true)
+                    SupportInquiryPreview(fixture: fixture, isOperator: true) { page = .answers }
                 }
             #endif
             }
@@ -78,7 +85,7 @@ struct SupportView: View {
     @ViewBuilder private var inquiries: some View {
         #if DEBUG
         if let fixture {
-            SupportInquiryPreview(fixture: fixture)
+            SupportInquiryPreview(fixture: fixture) { page = .answers }
         } else {
             serviceStatus
         }

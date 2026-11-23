@@ -38,6 +38,15 @@ struct SupportFlowTests {
         #expect(fixture.tickets[index].replies.map(\.text) == ["확인 중"])
     }
 
+    @Test func emptyPreviewAcceptsFirstInquiryWithoutOtherUsersData() throws {
+        let fixture = SupportFixture(emptyInquiries: true)
+        #expect(fixture.tickets.isEmpty)
+        #expect(!fixture.publishedArticles.isEmpty)
+        let id = try #require(fixture.create(subject: "첫 문의", content: "내용", team: .product))
+        #expect(fixture.myTickets.map(\.id) == [id])
+        #expect(fixture.myTickets[0].status == .received)
+    }
+
     @Test func requesterMessageReopensOriginalTicketOnlyAfterSending() throws {
         let fixture = SupportFixture()
         let closed = try #require(fixture.myTickets.first { $0.status == .closed })
