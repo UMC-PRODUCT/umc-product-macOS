@@ -61,7 +61,7 @@ final class ThreadConversationModel {
         self.repository = repository
         store = WindowStore.shared(defaults: defaults, accountID: accountID, threadID: threadID)
         store.windows.add(self)
-        if store.kickedDetail != nil { revokeAccess(WindowStore.kickError) }
+        if let end = store.accessEnd { revokeAccess(end) }
     }
 
     func observe(active: Bool) async {
@@ -358,10 +358,28 @@ final class ThreadConversationModel {
         }
     }
 
+    enum AccessEnd: LocalizedError, Equatable {
+        case membership(CommunityThread)
+        case denied
+        case deleted
+
+        var errorDescription: String? {
+            switch self {
+            case .membership(let detail) where detail.membershipState == "KICKED":
+                "이 스레드에서 내보내졌어요."
+            case .membership, .denied: "이 스레드에 참여할 권한이 없어요."
+            case .deleted: "삭제된 스레드예요."
+            }
+        }
+    }
+
     @MainActor @Observable
     final class WindowStore {
-        fileprivate static let kickError = ThreadConversationRejection.denied("이 스레드에서 내보내졌어요.")
-        private(set) var kickedDetail: CommunityThread?
+        private(set) var accessEnd: AccessEnd?
+        var endedDetail: CommunityThread? {
+            if case .membership(let detail) = accessEnd { return detail }
+            return nil
+        }
         private let threadID: String
         // Separate UserDefaults instances can refer to the same persistent suite.
         private static let stores = NSMapTable<NSString, WindowStore>.strongToWeakObjects()
@@ -382,17 +400,44 @@ final class ThreadConversationModel {
         func refreshDetail(
             using fetch: (String) async throws -> CommunityThread
         ) async throws -> CommunityThread {
-            let detail = try await fetch(threadID)
-            try Task.checkCancellation()
-            receive(detail)
-            return kickedDetail ?? detail
+            do {
+                let detail = try await fetch(threadID)
+                try Task.checkCancellation()
+                receive(detail)
+                switch accessEnd {
+                case .denied: throw ThreadDetailError.accessDenied
+                case .deleted: throw ThreadDetailError.deleted
+                case .membership(let ended): return ended
+                case nil: return detail
+                }
+            } catch let error as ThreadDetailError {
+                try Task.checkCancellation()
+                switch error {
+                case .accessDenied: endAccess(.denied)
+                case .deleted: endAccess(.deleted)
+                }
+                throw error
+            }
         }
 
         func receive(_ detail: CommunityThread) {
-            guard detail.id == threadID, detail.membershipState == "KICKED",
-                  kickedDetail == nil else { return }
-            kickedDetail = detail
-            for window in windows.allObjects { window.revokeAccess(Self.kickError) }
+            guard detail.id == threadID else { return }
+            switch detail.membershipState {
+            case "KICKED", "LEFT": endAccess(.membership(detail))
+            case "KICKED_ACKNOWLEDGED": endAccess(.denied)
+            default: break
+            }
+        }
+
+        private func endAccess(_ end: AccessEnd) {
+            guard accessEnd != end, accessEnd != .deleted else { return }
+            if case .membership(let newDetail) = end, let accessEnd {
+                guard case .membership(let previous) = accessEnd,
+                      previous.membershipState == "LEFT", newDetail.membershipState == "KICKED"
+                else { return }
+            }
+            accessEnd = end
+            for window in windows.allObjects { window.revokeAccess(end) }
             let files = draft.files
             draft = Draft()
             files.forEach { $0.discardLocalCopy() }

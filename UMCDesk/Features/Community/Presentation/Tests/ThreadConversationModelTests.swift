@@ -191,7 +191,14 @@ struct ThreadConversationModelTests {
         #expect(await repository.keys.isEmpty)
     }
 
-    @Test func kickedDetailClearsBothWindowsAndPreservesOtherRoomsAndAccounts() async throws {
+    enum DetailChange: CaseIterable {
+        case kicked, acknowledgedKick, left, denied, deleted
+    }
+
+    @Test(arguments: DetailChange.allCases)
+    func endedDetailClearsBothWindowsAndPreservesOtherRoomsAndAccounts(
+        change: DetailChange
+    ) async throws {
         let repository = ConversationTestRepository()
         let suite = UUID().uuidString
         let defaults = try #require(UserDefaults(suiteName: suite))
@@ -234,9 +241,31 @@ struct ThreadConversationModelTests {
                             isMuted: false, isJoined: state == "ACTIVE", membershipState: state,
                             unread: "0")
         }
-        _ = try await store.refreshDetail { detail($0, "KICKED") }
-        let late = try await store.refreshDetail { detail($0, "ACTIVE") }
-        #expect(late.membershipState == "KICKED")
+        // A transport failure neither cancels the upload nor changes membership.
+        await #expect(throws: URLError.self) {
+            _ = try await store.refreshDetail { _ in throw URLError(.timedOut) }
+        }
+        #expect(store.accessEnd == nil && main.loaded && separate.loaded && separate.canRetry)
+        #expect(!main.attachments.isEmpty)
+        switch change {
+        case .kicked, .left:
+            let state = change == .left ? "LEFT" : "KICKED"
+            _ = try await store.refreshDetail { detail($0, state) }
+            let late = try await store.refreshDetail { detail($0, "ACTIVE") }
+            #expect(late.membershipState == state)
+        case .denied, .deleted, .acknowledgedKick:
+            let failure: ThreadDetailError = change == .deleted ? .deleted : .accessDenied
+            await #expect(throws: ThreadDetailError.self) {
+                _ = try await store.refreshDetail { id in
+                    if change == .acknowledgedKick { return detail(id, "KICKED_ACKNOWLEDGED") }
+                    throw failure
+                }
+            }
+            await #expect(throws: ThreadDetailError.self) {
+                _ = try await store.refreshDetail { detail($0, "ACTIVE") }
+            }
+            #expect(store.accessEnd == (change == .deleted ? .deleted : .denied))
+        }
         try await settle(main)
         for model in [main, separate, open()] {
             model.retry()

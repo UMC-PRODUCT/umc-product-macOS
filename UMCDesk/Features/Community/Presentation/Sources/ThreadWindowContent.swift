@@ -148,7 +148,7 @@ struct ThreadDestination: View {
         windowStore = .shared(defaults: defaults, accountID: accountID, threadID: thread.id)
     }
 
-    private var item: CommunityThread { windowStore.kickedDetail ?? updated ?? thread }
+    private var item: CommunityThread { windowStore.endedDetail ?? updated ?? thread }
     private var active: Bool { item.isJoined && item.membershipState == "ACTIVE" }
     private var key: ThreadWindowKey { .init(accountID: accountID, threadID: thread.id) }
 
@@ -168,7 +168,7 @@ struct ThreadDestination: View {
                         openWindow(value: key)
                     }.labelStyle(.iconOnly)
                 }
-                if accessFailure == nil, item.membershipState != "KICKED",
+                if windowStore.accessEnd == nil, accessFailure == nil, item.membershipState != "KICKED",
                    item.membershipState != "KICKED_ACKNOWLEDGED", active || shareDetail != nil {
                     Menu("스레드 설정", systemImage: "ellipsis.circle") {
                         if let shareDetail {
@@ -203,16 +203,19 @@ struct ThreadDestination: View {
             if let failure {
                 Text(failure).font(.callout).padding(.horizontal, 16)
             }
-            if item.membershipState == "KICKED" {
+            if item.membershipState == "KICKED",
+               windowStore.accessEnd != .denied, windowStore.accessEnd != .deleted {
                 ContentUnavailableView {
                     Label("이 스레드에서 내보내졌어요", systemImage: "person.crop.circle.badge.minus")
                 } actions: {
                     Button("내보내짐 확인") { destination = .acknowledgeKick }
                 }
-            } else if deleted {
+            } else if deleted || windowStore.accessEnd == .deleted {
                 DeletedThreadView(actionTitle: detached ? "창 닫기" : "목록으로 돌아가기") {
                     broadcast(exit: true)
                 }
+            } else if let end = windowStore.accessEnd {
+                ContentUnavailableView(end.localizedDescription, systemImage: "lock")
             } else if let accessFailure {
                 ContentUnavailableView {
                     Label("대화를 불러올 수 없어요", systemImage: "bubble.left")
@@ -237,8 +240,12 @@ struct ThreadDestination: View {
             windowStore.receive(fresh)
             updated = fresh
         }
-        .onChange(of: windowStore.kickedDetail) { _, kicked in
-            if kicked != nil, destination != .acknowledgeKick { destination = nil }
+        .onChange(of: windowStore.accessEnd) { _, end in
+            guard end != nil else { return }
+            shareDetail = nil
+            if item.membershipState != "KICKED" || destination != .acknowledgeKick {
+                destination = nil
+            }
         }
         .task(id: refresh) {
             while !Task.isCancelled {
