@@ -48,9 +48,10 @@ class AuthFixture(SessionFixture):
             return self.send_result(200, {"schools": [{"schoolId": "1", "schoolName": "테스트대학교"}]})
         if self.path == "/api/v1/terms":
             return self.send_result(200, {"terms": [
-                {"id": str(index), "typeDescription": title, "isMandatory": True,
+                {"id": str(index), "type": kind, "typeDescription": title, "isMandatory": True,
                  "link": "https://example.test/terms/" + str(index)}
-                for index, title in enumerate(("서비스 이용약관", "개인정보 처리방침"), 1)
+                for index, (kind, title) in enumerate((("SERVICE", "서비스 이용약관"),
+                                                       ("PRIVACY", "개인정보 처리방침")), 1)
             ]})
         return super().do_GET()
 
