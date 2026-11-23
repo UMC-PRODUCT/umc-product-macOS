@@ -127,15 +127,6 @@ public struct NoticeBoardView: View {
                     composing = false
                     model.canCompose = false
                     model.error = NoticeRequestFailure.accessDenied.localizedDescription
-                },
-                onCheckList: { title, tab in
-                    composing = false
-                    model.selection = nil
-                    model.tab = tab
-                    model.part = nil
-                    pinnedOnly = false
-                    search = title
-                    searchNotices()
                 }
             ) { id in
                 composing = false

@@ -166,3 +166,20 @@ struct NoticeWriterProfile: Codable {
         try values.encodeIfPresent(currentGisuMemberInfo, forKey: .currentGisuMemberInfo)
     }
 }
+struct NoticeMemberIdentity: Codable, Sendable {
+    let id: String
+
+    private enum CodingKeys: CodingKey {
+        case id
+    }
+
+    init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        id = try values.decodeFlexibleString(forKey: .id)
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var values = encoder.container(keyedBy: CodingKeys.self)
+        try values.encode(id, forKey: .id)
+    }
+}

@@ -313,6 +313,8 @@ private struct NoticeReadersView: View {
     @State private var busy = false
     @State private var error: String?
 
+    @State private var reminderTask: Task<Void, Never>?
+
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             Text("읽음 현황").umcTypography(.title2Bold)
@@ -326,7 +328,7 @@ private struct NoticeReadersView: View {
             Picker("상태", selection: $status) {
                 Text("읽음").tag("READ")
                 Text("안 읽음").tag("UNREAD")
-            }.pickerStyle(.segmented)
+            }.pickerStyle(.segmented).disabled(busy)
             List(access.rows, id: \.challengerId) { row in
                 let name = [row.name, row.schoolName].compactMap { $0 }.joined(separator: " · ")
                 if status == "UNREAD" {
@@ -346,6 +348,7 @@ private struct NoticeReadersView: View {
                     Text(name)
                 }
             }
+            .disabled(busy)
             if busy { ProgressView() }
             if let error {
                 Text(error)
@@ -361,7 +364,10 @@ private struct NoticeReadersView: View {
             Button("닫기") { dismiss() }.keyboardShortcut(.cancelAction)
         }
         .padding(24).frame(minWidth: 360, minHeight: 340)
-        .onDisappear { access.clearReaders() }
+        .onDisappear {
+            reminderTask?.cancel()
+            access.clearReaders()
+        }
         .task(id: status) {
             access.targets = []
             access.reminderSent = false
@@ -369,14 +375,27 @@ private struct NoticeReadersView: View {
         }
         .confirmationDialog("선택한 대상에게 알림을 보낼까요?", isPresented: $access.confirmReminder) {
             Button("발송") {
-                Task {
-                    busy = true
-                    defer { busy = false }
+                guard reminderTask == nil, !busy else { return }
+                let selected = access.targets.sorted()
+                busy = true
+                reminderTask = Task {
+                    defer {
+                        busy = false
+                        reminderTask = nil
+                    }
                     do {
-                        try await repository.remind(id: id, challengers: access.targets.sorted())
+                        try await repository.remind(id: id, challengers: selected)
+                        try Task.checkCancellation()
                         access.targets.removeAll()
                         access.reminderSent = true
-                    } catch { handle(error) }
+                    } catch NoticeRequestFailure.recipientsChanged {
+                        guard !Task.isCancelled else { return }
+                        access.clearReaders()
+                        await load(after: nil)
+                        if error == nil {
+                            error = NoticeRequestFailure.recipientsChanged.localizedDescription
+                        }
+                    } catch { if !Task.isCancelled { handle(error) } }
                 }
             }
         }
@@ -406,8 +425,8 @@ private struct NoticeReadersView: View {
 
     private func handle(_ failure: Error) {
         if case NoticeRequestFailure.accessDenied = failure {
-            dismiss()
             onAccessDenied()
+            dismiss()
         } else {
             error = failure.localizedDescription
         }

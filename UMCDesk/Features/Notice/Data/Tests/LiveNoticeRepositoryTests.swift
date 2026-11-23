@@ -163,6 +163,122 @@ struct LiveNoticeRepositoryTests {
         } catch { #expect(error as? NoticeRequestFailure == .accessDenied) }
     }
 
+    @Test("대상 선택 후 CHECK 회수 또는 읽음 변경 시 발송하지 않는다")
+    func revalidateReminder() async throws {
+        let fixture = try NoticeFixture()
+        defer { fixture.stop() }
+        let repo = fixture.repository()
+        let readers = try await repo.readers(id: "21", status: "UNREAD", cursor: nil)
+        let selected = readers.content.map(\.challengerId)
+        #expect(selected.contains("101"))
+        try fixture.mark("lose-check")
+        await #expect(throws: NoticeRequestFailure.accessDenied) {
+            try await repo.remind(id: "21", challengers: selected)
+        }
+        #expect(!fixture.exists("reminder-posted"))
+        try fixture.remove("lose-check")
+        try fixture.mark("page-readers")
+        try fixture.mark("revoke-during-check")
+        await #expect(throws: NoticeRequestFailure.accessDenied) {
+            try await repo.remind(id: "21", challengers: ["104"])
+        }
+        #expect(!fixture.exists("reminder-posted"))
+        try fixture.remove("revoke-during-check")
+        try fixture.remove("lose-check")
+        try await repo.confirmRead(id: "21")
+        await #expect(throws: NoticeRequestFailure.recipientsChanged) {
+            try await repo.remind(id: "21", challengers: selected)
+        }
+        #expect(!fixture.exists("reminder-posted"))
+        try await repo.remind(id: "21", challengers: ["104"])
+        #expect(fixture.exists("reminder-posted"))
+    }
+
+    @MainActor
+    @Test("학교 운영진이 전체 대상 거절 후 같은 초안과 첨부를 학교 대상으로 게시한다")
+    func changeDeniedAudience() async throws {
+        let fixture = try NoticeFixture()
+        defer { fixture.stop() }
+        try fixture.mark("school-writer")
+        let repo = fixture.repository()
+        let attempt = NoticePublication()
+        var draft = NoticeDraft()
+        draft.title = "합성 학교 공지"
+        draft.content = "보존할 본문"
+        let links = ["https://example.test/school"]
+        #expect(try await repo.canCompose(gisu: "10"))
+        do {
+            _ = try await attempt.submit(draft, gisu: "10", repository: repo)
+            Issue.record("전체 대상이 거절되어야 합니다.")
+        } catch {
+            guard case .rejected = error as? NoticeRequestFailure else { throw error }
+        }
+        #expect(!attempt.needsListCheck && attempt.noticeID == nil)
+        draft.schoolId = "42"
+        let id = try await attempt.submit(draft, gisu: "10", repository: repo)
+        try await attempt.saveAttachments(files: [], links: links, poll: nil, repository: repo)
+        let entry = try await repo.detail(id: id)
+        #expect(entry.title == draft.title && entry.content == draft.content)
+        #expect(entry.targetInfo?.targetSchoolId == "42" && entry.links?.map(\.url) == links)
+    }
+
+    @MainActor
+    @Test("이전 동일 공지를 배제하고 사용자가 확인한 후보에만 사진·링크·투표를 이어서 저장한다")
+    func confirmLostPublication() async throws {
+        let fixture = try NoticeFixture()
+        defer { fixture.stop() }
+        let repo = fixture.repository()
+        var draft = NoticeDraft()
+        draft.title = "합성 동일 제목"
+        draft.content = "동일한 본문"
+        draft.shouldNotify = true
+        var poll = NoticePollDraft()
+        poll.title = "작성 중인 투표"
+        poll.options = ["가", "나"]
+        let links = ["https://example.test/retained"]
+        let old = try await repo.create(draft, gisu: "10")
+        let attempt = NoticePublication()
+        try fixture.mark("lose-notice")
+        do {
+            _ = try await attempt.submit(draft, gisu: "10", repository: repo)
+            Issue.record("응답 유실이 전달되어야 합니다.")
+        } catch { #expect(error as? NoticeRequestFailure == .publicationUnconfirmed) }
+        let foreign = try await fixture.repository(token: "notice-other-writer-fixture")
+            .create(draft, gisu: "10")
+        let other = try await repo.create(draft, gisu: "10")
+        try await attempt.findCandidates(draft, gisu: "10", repository: repo)
+        #expect(attempt.noticeID == nil && attempt.candidates.count == 2)
+        #expect(!attempt.candidates.contains { $0.id == old || $0.id == foreign })
+        let chosen = try #require(attempt.candidates.first { $0.id != other }?.id)
+        try await repo.replaceLinks(["https://example.test/independent"], id: other)
+        do {
+            try await attempt.confirmCandidate(other, draft: draft, gisu: "10", repository: repo)
+            Issue.record("새 첨부가 있는 다른 공지를 덮어써서는 안 됩니다.")
+        } catch {
+            guard case .rejected = error as? NoticeRequestFailure else { throw error }
+        }
+        #expect(attempt.needsListCheck && attempt.noticeID == nil)
+        try await attempt.confirmCandidate(chosen, draft: draft, gisu: "10", repository: repo)
+        let resumed = try await attempt.submit(draft, gisu: "10", repository: repo)
+        #expect(resumed == chosen && !attempt.needsListCheck)
+        var files: [URL] = []
+        #if DEBUG
+            let file = fixture.control.appending(path: "draft.png")
+            try Data([0, 1]).write(to: file)
+            files.append(file)
+        #endif
+        try await attempt.saveAttachments(files: files, links: links, poll: poll, repository: repo)
+        let entry = try await repo.detail(id: chosen)
+        #expect(entry.vote?.title == poll.title && entry.links?.map(\.url) == links)
+        #expect(entry.images?.count == files.count)
+        #expect(
+            try await repo.detail(id: other).links?.map(\.url) == [
+                "https://example.test/independent"
+            ])
+        #expect(try fixture.count("posts-notice") == 4)
+        #expect(try fixture.count("posts-poll") == 1)
+    }
+
     #if DEBUG
         @Test("PUT 직전 계정 검사와 리디렉션 및 진행 중 계정 만료·취소")
         func signedUploadBoundary() async throws {
@@ -247,10 +363,14 @@ private struct NoticeFixture: Sendable {
         url = try #require(URL(string: "http://127.0.0.1:\(port)"))
     }
 
-    func repository(validate: @escaping @Sendable () async throws -> Void = {})
+    func repository(
+        token: String = "notice-contract-fixture",
+        validate: @escaping @Sendable () async throws -> Void = {}
+    )
         -> LiveNoticeRepository
     {
-        let client = NetworkClient(tokenStore: FixtureTokens(), refreshService: FixtureRefresh())
+        let client = NetworkClient(
+            tokenStore: FixtureTokens(token), refreshService: FixtureRefresh())
         return LiveNoticeRepository(
             adapter: MoyaNetworkAdapter(networkClient: client),
             environment: NetworkEnvironment(baseURL: url), validateAccount: validate)

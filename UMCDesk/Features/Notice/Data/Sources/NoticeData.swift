@@ -26,6 +26,11 @@ public struct LiveNoticeRepository: NoticeRepository {
         self.environment = environment
     }
 
+    public func currentMemberID() async throws -> String {
+        let member: NoticeMemberIdentity = try await request("/api/v1/member/me")
+        return member.id
+    }
+
     public func activeGisu() async throws -> String {
         let value: ActiveGisu = try await request("/api/v1/gisu/active")
         return value.gisuId
@@ -202,10 +207,28 @@ public struct LiveNoticeRepository: NoticeRepository {
     }
 
     public func remind(id: String, challengers: [String]) async throws {
-        let ids = try challengers.map { id in
-            guard let value = Int64(id) else { throw URLError(.cannotParseResponse) }
-            return value
+        var remaining = Set(challengers)
+        guard !remaining.isEmpty else { throw NoticeRequestFailure.recipientsChanged }
+        let ids = try remaining.sorted().map(numericID)
+        guard try await permissions(id: id).contains("CHECK") else {
+            throw NoticeRequestFailure.accessDenied
         }
+        var cursor: String?
+        var seen = Set<String>()
+        while !remaining.isEmpty {
+            try _Concurrency.Task.checkCancellation()
+            let page = try await readers(id: id, status: "UNREAD", cursor: cursor)
+            remaining.subtract(page.content.map(\.challengerId))
+            if remaining.isEmpty { break }
+            guard page.hasNext, let next = page.nextCursor, seen.insert(next).inserted else {
+                throw NoticeRequestFailure.recipientsChanged
+            }
+            cursor = next
+        }
+        guard try await permissions(id: id).contains("CHECK") else {
+            throw NoticeRequestFailure.accessDenied
+        }
+        try _Concurrency.Task.checkCancellation()
         try await change(id + "/reminders", body: ReminderBody(targetIds: ids))
     }
 
@@ -280,6 +303,13 @@ public struct LiveNoticeRepository: NoticeRepository {
             case .unauthorized, .noRefreshToken, .maxRetryExceeded, .tokenRefreshFailed:
                 throw NoticeRequestFailure.accessDenied
             case .requestFailed(let status, let data):
+                if status == 403, method == .post, path == noticesPath, let data,
+                    let envelope = try? JSONDecoder().decode(
+                        APIResponse<EmptyResult>.self, from: data),
+                    envelope.code == "NOTICE-0009"
+                {
+                    throw NoticeRequestFailure.rejected("선택한 대상에 대한 작성 권한이 없습니다. 범위를 변경해 주세요.")
+                }
                 if [401, 403, 404, 410].contains(status) {
                     throw NoticeRequestFailure.accessDenied
                 }

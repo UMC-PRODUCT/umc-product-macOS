@@ -28,7 +28,7 @@ def _timestamp(moment):
 def _article(identifier, title, content, email, audience, pinned=False):
     return {"id": str(identifier), "title": title, "content": content,
             "createdAt": _timestamp(_now()), "mustRead": pinned, "viewCount": "0",
-            "targetInfo": audience, "author": {"nickname": _MEMBERS[email][1],
+            "targetInfo": audience, "authorMemberId": _MEMBERS[email][0], "author": {"nickname": _MEMBERS[email][1],
             "organizationName": "합성 운영팀"}, "images": [], "links": [], "vote": None}
 
 
@@ -147,6 +147,7 @@ def handle(handler, method, path, query, body, email):
             key = str(max(map(int, entries)) + 1)
             entries[key] = _article(key, body["title"], body["content"], email, body["targetInfo"],
                                     body.get("mustRead", False))
+            entries[key]["shouldSendNotification"] = body.get("shouldNotify", False)
             return send(200, {"noticeId": key})
         key, _, action = suffix.partition("/")
         entry = entries.get(key)
@@ -224,7 +225,13 @@ def handle(handler, method, path, query, body, email):
             read = query.get("status") == ["READ"]
             rows = [{"challengerId": member_id, "name": name, "schoolName": "합성 대학"}
                     for addr, (member_id, name) in _MEMBERS.items() if (addr in readers) == read]
-            return send(200, {"content": rows, "nextCursor": None, "hasNext": False})
+            cursor = query.get("cursorId", [""])[0]
+            rows = [row for row in rows if not cursor or int(row["challengerId"]) > int(cursor)]
+            limit = getattr(server, "notice_reader_page_size", len(rows))
+            page = rows[:limit]
+            has_next = len(page) < len(rows)
+            return send(200, {"content": page, "nextCursor": page[-1]["challengerId"]
+                              if has_next else None, "hasNext": has_next})
         return send(404)
 
 
@@ -241,8 +248,11 @@ def _serve_contract_test():
     controls = Path(directory) if directory else None
 
     class ContractHandler(BaseHTTPRequestHandler):
-        def send_result(self, status, result=None):
-            payload = json.dumps({"success": status == 200, "result": result}).encode()
+        def send_result(self, status, result=None, code=None):
+            payload = json.dumps({"success": status == 200, "result": result, "code": code}).encode()
+            if (controls and status == 200 and "/read-status?" in self.path
+                    and (controls / "revoke-during-check").exists()):
+                (controls / "lose-check").touch()
             if controls and status == 200 and self.command == "POST":
                 kind = ("notice" if self.path == "/api/v1/notices" else
                         "poll" if self.path.endswith("/votes") else "")
@@ -266,8 +276,11 @@ def _serve_contract_test():
             url = urlsplit(self.path)
             query = parse_qs(url.query)
             identities = {"Bearer notice-contract-fixture": "first@example.test",
-                          "Bearer notice-reader-fixture": "second@example.test"}
+                          "Bearer notice-reader-fixture": "second@example.test",
+                          "Bearer notice-other-writer-fixture": "ops@example.test"}
             email = identities.get(self.headers.get("Authorization"))
+            if url.path == "/api/v1/member/me" and email:
+                return self.send_result(200, {"id": _MEMBERS[email][0]})
             if url.path == "/api/v2/member/me" and email:
                 return self.send_result(200, {"isSuperAdmin": email == "ops@example.test",
                     "currentGisuMemberInfo": {"gisuId": "10", "isAdmin": email in _WRITERS}})
@@ -277,6 +290,15 @@ def _serve_contract_test():
                 return self.send_result(200, {"gisus": [{"gisuId": 10, "generation": 10,
                     "schools": [], "chapters": [{"chapterId": 1, "chapterName": "합성 지부"}]}]})
             if controls:
+                if (controls / "page-readers").exists():
+                    self.server.notice_reader_page_size = 1
+                if url.path.endswith("/reminders") and self.command == "POST":
+                    (controls / "reminder-posted").touch()
+                if url.path.endswith("/resource-permission") and (controls / "lose-check").exists():
+                    return self.send_result(200, {"resourceType": "NOTICE",
+                        "resourceId": query["resourceId"][0], "permissions": [
+                            {"permissionType": "READ", "hasPermission": True},
+                            {"permissionType": "CHECK", "hasPermission": False}]})
                 if (controls / "deny").exists() and (url.path.startswith("/api/v1/notices/")
                                                       or url.path.endswith("/resource-permission")):
                     return self.send_result(403)
@@ -307,6 +329,10 @@ def _serve_contract_test():
                     body = json.loads(data) if data else {}
                 except ValueError:
                     return self.send_result(400)
+            if (controls and (controls / "school-writer").exists()
+                    and self.command == "POST" and url.path == "/api/v1/notices"
+                    and body["targetInfo"].get("targetSchoolId") != 42):
+                return self.send_result(403, code="NOTICE-0009")
             if not handle(self, self.command, url.path, query, body, email):
                 self.send_result(404)
 
