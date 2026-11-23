@@ -37,10 +37,11 @@ struct MatchingApplications: View {
             } else {
                 let results = records.filter { $0.status == "APPROVED" || $0.status == "REJECTED" }
                 let visible = resultsOnly ? results : records
+                let singleApproved = visible.lazy.filter { $0.status == "APPROVED" }.prefix(2).count == 1
                 MatchingColumns {
                     VStack(alignment: .leading, spacing: UMCSpacing.value24) {
                         ForEach(visible.filter { $0.status != "DRAFT" }, id: \.cardId) { card in
-                            applicationCard(card)
+                            applicationCard(card, teamShortcut: singleApproved)
                         }
                         let drafts = visible.filter { $0.status == "DRAFT" }
                         if !drafts.isEmpty {
@@ -106,12 +107,14 @@ struct MatchingApplications: View {
         )) { Button("확인") { actionError = nil } } message: { Text(actionError ?? "") }
     }
 
-    private func applicationCard(_ card: MatchingApplication) -> some View {
+    private func applicationCard(
+        _ card: MatchingApplication, teamShortcut: Bool = false
+    ) -> some View {
         VStack(alignment: .leading, spacing: UMCSpacing.value16) {
             if card.status == "APPROVED", let memberId {
                 MatchingAssignmentResult(
                     repository: repository, card: card, memberId: memberId,
-                    onOpenProject: onOpenProject
+                    onOpenProject: onOpenProject, teamShortcut: teamShortcut
                 )
                 .id(card.projectId)
             }
@@ -220,6 +223,7 @@ private struct MatchingAssignmentResult: View {
     let card: MatchingApplication
     let memberId: String
     let onOpenProject: ((String) -> Void)?
+    let teamShortcut: Bool
     @State private var request = MatchingRequest<OperationsTeam?>()
     @State private var attempt = 0
     @State private var showingTeam = false
@@ -288,6 +292,8 @@ private struct MatchingAssignmentResult: View {
         }
         .buttonStyle(MatchingActionStyle(appearance: .text))
         .focused($teamButtonFocused)
+        .keyboardShortcut(teamShortcut ? KeyboardShortcut("t", modifiers: .option) : nil)
+        .help(teamShortcut ? "공개 팀 구성 보기 (⌥T)" : "공개 팀 구성 보기")
     }
 }
 
