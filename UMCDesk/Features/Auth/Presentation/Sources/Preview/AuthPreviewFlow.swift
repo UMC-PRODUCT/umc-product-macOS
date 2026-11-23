@@ -61,7 +61,7 @@ enum AuthPreviewScenario: String, CaseIterable, Identifiable {
 
 extension AuthViewModel {
     var hasPendingPreviewStep: Bool {
-        playsPreviewFlow && [.socialLogin, .sessionChecking, .memberChecking,
+        login == nil && playsPreviewFlow && [.socialLogin, .sessionChecking, .memberChecking,
             .challengerChecking, .updateDownloading, .updateVerifying,
             .updateInstalling].contains(screen)
     }

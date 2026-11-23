@@ -50,8 +50,13 @@ struct AuthLoginSelection: View {
                         viewModel.navigate(to: .socialLogin)
                     }
                 }
-                .disabled(screen == .socialLogin)
+                .disabled(screen == .socialLogin || viewModel.login != nil)
                 .opacity(screen == .socialLogin ? 0.4 : 1)
+                if viewModel.login != nil {
+                    Text("macOS에서는 소셜 로그인을 지원하지 않아요. UMC 계정으로 로그인해 주세요.")
+                        .umcTypography(.headlineRegular)
+                        .foregroundStyle(UMCColor.Semantic.textNeutralWeak500)
+                }
                 Rectangle()
                     .fill(UMCColor.Semantic.borderNeutralMedium300)
                     .frame(height: 1)
@@ -165,12 +170,14 @@ struct AuthEmailLogin: View {
                         text: $form.email, field: .email, focus: $focusedField,
                         showsClear: focusedField == .email
                     )
+                    .onSubmit { focusedField = .password }
                     AuthTextField(
                         AppLocalization.string("비밀번호"),
                         placeholder: AppLocalization.string("비밀번호를 입력해 주세요."),
                         text: $form.password, field: .password, focus: $focusedField,
                         isSecure: true, showsValue: $form.showsPassword
                     )
+                    .onSubmit { viewModel.submitLogin() }
                     if screen == .credentialsError {
                         AuthBanner(
                             title: AppLocalization.string("이메일 또는 비밀번호가 올바르지 않아요."),

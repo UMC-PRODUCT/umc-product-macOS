@@ -5,6 +5,7 @@
 
 """Run a loopback-only login fixture. SIGUSR1 expires current test sessions."""
 
+import matching_fixture
 import argparse
 import json
 import secrets
@@ -47,10 +48,10 @@ class SessionFixture(BaseHTTPRequestHandler):
     def do_POST(self):
         try:
             length = int(self.headers.get("Content-Length", "0"))
-            if not 0 < length <= 8192:
+            if not 0 <= length <= 1048576:
                 return self.send_result(400)
-            body = json.loads(self.rfile.read(length))
-            if not isinstance(body, dict):
+            body = json.loads(self.rfile.read(length)) if length else {}
+            if not isinstance(body, dict) and not (isinstance(body, list) and self.path.endswith("/attendances/decide")):
                 return self.send_result(400)
         except (ValueError, UnicodeDecodeError):
             return self.send_result(400)
@@ -74,7 +75,26 @@ class SessionFixture(BaseHTTPRequestHandler):
                     return self.send_result(401)
                 result = self.issue(prior[1]) if self.path.endswith("/renew") else None
             return self.send_result(200, result)
+        email = self.current_email()
+        if not email:
+            return self.send_result(401)
+        if self.feature_request(email, body):
+            return
         self.send_result(404)
+
+    def feature_request(self, email, body):
+        path = urlsplit(self.path)
+        return matching_fixture.handle(self, self.command, path.path, parse_qs(path.query),
+                                       body, MEMBERS[email][0])
+
+    def do_PATCH(self):
+        self.do_POST()
+
+    def do_DELETE(self):
+        self.do_POST()
+
+    def do_PUT(self):
+        self.do_POST()
 
     def wait_if_held(self, name):
         hold = self.server.control / ("hold-" + name)
@@ -95,12 +115,16 @@ class SessionFixture(BaseHTTPRequestHandler):
         return None
 
     def do_GET(self):
+        if self.path == "/api/v1/system/status":
+            return self.send_result(200, {"inMaintenance": False, "current": None, "upcoming": None})
         email = self.current_email()
         if not email:
             return self.send_result(401)
         url = urlsplit(self.path)
         query = parse_qs(url.query)
         identifier, name = MEMBERS[email]
+        if self.feature_request(email, {}):
+            return
         if url.path == "/api/v1/member/me":
             part = {"101": "WEB", "102": "PLAN", "103": "DESIGN"}[identifier]
             return self.send_result(200, {

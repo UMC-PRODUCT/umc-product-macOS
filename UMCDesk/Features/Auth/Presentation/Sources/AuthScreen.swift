@@ -8,7 +8,7 @@
 import UMCFoundation
 import Foundation
 
-/// Presentation-only destinations; no authentication or account mutations are performed.
+/// 인증 화면과 명시적 디자인 프리뷰에서 사용하는 화면 목록.
 enum AuthScreen: String, CaseIterable, Identifiable {
     case loginSelection
     case socialLogin

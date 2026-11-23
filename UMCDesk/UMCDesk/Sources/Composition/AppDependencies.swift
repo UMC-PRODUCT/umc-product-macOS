@@ -5,8 +5,7 @@
 //  Created by euijjang97 on 10/6/26.
 //
 
-import CommunityData
-import CommunityDomain
+import CoreRouting
 import AuthData
 import AuthDomain
 import Foundation
@@ -24,8 +23,7 @@ import SettingsPresentation
 /// One composition root for every window and app-level scene.
 @MainActor
 final class AppDependencies {
-    let communityRepository: any CommunityThreadRepository
-    let loginRepository: any EmailLoginRepository
+    let loginRepository: LiveEmailLoginRepository
     let container: DIContainer
     let userSession: UserSessionManager
     let settingsPreferences: SettingsPreferences
@@ -34,6 +32,7 @@ final class AppDependencies {
     let matchingProgress: MatchingProgressController
     let matchingUseCase: any MatchingUseCase
     let navigation: AppNavigation
+    let environment: NetworkEnvironment
     private let client: NetworkClient
     private var restoration: Task<Void, Never>?
     private var hasRestored = false
@@ -87,9 +86,9 @@ final class AppDependencies {
                 await resetRelay.reset()
             }
         )
+        self.environment = environment
         self.client = client
         let adapter = MoyaNetworkAdapter(networkClient: client)
-        communityRepository = LiveCommunityThreadRepository(adapter: adapter, environment: environment)
         self.loginRepository = LiveEmailLoginRepository(
             client: client, adapter: adapter, environment: environment
         )
@@ -178,9 +177,18 @@ final class AppDependencies {
 
     func login(email: String, password: String) async throws {
         try await loginRepository.login(email: email, password: password)
+        try await refreshAccount()
+    }
+
+    func refreshAccount() async throws {
         await settingsViewModel.refreshSignedInAccount()
         await windowSettingsViewModel.refreshSignedInAccount()
         guard await client.isLoggedIn() else { throw NetworkError.unauthorized }
+        if let id = settingsViewModel.profile?.id {
+            navigation.account = try await FeatureAccount(memberID: id, client: client, environment: environment)
+        }
+        navigation.section = navigation.pendingSection
+        navigation.pendingSection = nil
         settingsViewModel.showProfile()
         navigation.showsSettings = true
     }
@@ -210,6 +218,11 @@ final class AppDependencies {
                 await settingsViewModel.refreshProfile(showsToast: false)
             }
             guard settingsViewModel.profile != nil, await client.isLoggedIn() else { return }
+            if let id = settingsViewModel.profile?.id {
+                navigation.account = try? await FeatureAccount(memberID: id, client: client, environment: environment)
+            }
+            navigation.section = navigation.pendingSection
+            navigation.pendingSection = nil
             hasRestored = true
             if settingsPreferences.launchPage != .settings { settingsViewModel.showProfile() }
             navigation.showsSettings = true
@@ -224,6 +237,28 @@ final class AppDependencies {
 
     func openMatching(_ destination: MatchingDestination = .explore) {
         navigation.openMatching(destination, memberId: verifiedMatchingMemberId)
+    }
+
+    func selectSection(_ section: DeskSection?) {
+        guard section == nil || navigation.account != nil else {
+            navigation.pendingSection = section
+            navigation.showsSettings = false
+            return
+        }
+        navigation.matchingDestination = nil
+        navigation.section = section
+        navigation.showsSettings = true
+    }
+
+    func signOut() async throws { try await client.logout() }
+
+    var featureDefaults: UserDefaults {
+        #if DEBUG
+        if let port = Self.fixturePort(arguments: ProcessInfo.processInfo.arguments) {
+            return UserDefaults(suiteName: "com.umc.product.macos.local-api.\(port)")!
+        }
+        #endif
+        return .standard
     }
 
     func restoreSupportedFonts() {

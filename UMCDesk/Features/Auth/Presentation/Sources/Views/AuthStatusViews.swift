@@ -93,7 +93,8 @@ private struct AuthStatusActions: View {
             switch screen {
             case .offline:
                 AuthButton(title: AppLocalization.string("다시 확인")) {
-                    viewModel.navigate(to: .sessionChecking)
+                    if viewModel.repository != nil { viewModel.checkStatus() }
+                    else { viewModel.navigate(to: .sessionChecking) }
                 }
                 AuthButton(title: AppLocalization.string("고객센터 문의"), kind: .tertiary) {
                     openWindow(id: DeskWindow.support)
@@ -110,13 +111,24 @@ private struct AuthStatusActions: View {
                 }
             case .memberFailure:
                 AuthButton(title: AppLocalization.string("회원 정보 다시 확인")) {
-                    viewModel.navigate(to: .memberChecking)
+                    if let refresh = viewModel.onMemberRefresh {
+                        viewModel.perform {
+                            try await refresh()
+                            if viewModel.linkedCode { viewModel.navigate(to: .challengerComplete) }
+                        }
+                    } else { viewModel.navigate(to: .memberChecking) }
                 }
-                AuthButton(title: AppLocalization.string("로그인으로 돌아가기"), kind: .secondary) {
-                    viewModel.navigate(to: .emailLogin)
-                }
-                AuthButton(title: AppLocalization.string("다른 로그인 방법"), kind: .tertiary) {
-                    viewModel.navigate(to: .loginSelection)
+                if viewModel.repository != nil {
+                    AuthButton(title: AppLocalization.string("로그아웃"), kind: .secondary) {
+                        viewModel.navigate(to: .logoutConfirmation)
+                    }
+                } else {
+                    AuthButton(title: AppLocalization.string("로그인으로 돌아가기"), kind: .secondary) {
+                        viewModel.navigate(to: .emailLogin)
+                    }
+                    AuthButton(title: AppLocalization.string("다른 로그인 방법"), kind: .tertiary) {
+                        viewModel.navigate(to: .loginSelection)
+                    }
                 }
             case .sessionExpired:
                 AuthButton(title: AppLocalization.string("다시 로그인")) {
@@ -124,7 +136,9 @@ private struct AuthStatusActions: View {
                 }
             case .signupComplete, .challengerPending:
                 AuthButton(title: AppLocalization.string("확인")) {
-                    viewModel.navigate(to: .loginSelection)
+                    if let refresh = viewModel.onMemberRefresh {
+                        viewModel.perform { try await refresh() }
+                    } else { viewModel.navigate(to: .loginSelection) }
                 }
             case .signupLoginFailure, .passwordResetComplete:
                 AuthButton(title: AppLocalization.string("로그인으로 이동")) {
@@ -132,7 +146,8 @@ private struct AuthStatusActions: View {
                 }
             case .maintenance:
                 AuthButton(title: AppLocalization.string("점검 상태 다시 확인")) {
-                    viewModel.navigate(to: .sessionChecking)
+                    if viewModel.repository != nil { viewModel.checkStatus() }
+                    else { viewModel.navigate(to: .sessionChecking) }
                 }
             case .updateAvailable:
                 AuthButton(title: AppLocalization.string("지금 업데이트")) {
@@ -157,15 +172,16 @@ private struct AuthStatusActions: View {
             case .logoutConfirmation, .withdrawalConfirmation:
                 HStack(spacing: UMCSpacing.value12) {
                     AuthButton(title: AppLocalization.string("취소"), kind: .secondary) {
-                        viewModel.cancelAccountAction()
+                        if viewModel.entry == .withdrawal {
+                            dismiss()
+                        } else { viewModel.cancelAccountAction() }
                     }
                     AuthButton(
                         title: screen == .logoutConfirmation
                             ? AppLocalization.string("로그아웃") : AppLocalization.string("회원 탈퇴"),
                         kind: screen == .logoutConfirmation ? .primary : .destructive
                     ) {
-                        // UI navigation only; no tokens or account data are changed.
-                        viewModel.navigate(to: .loginSelection, resetsForm: true)
+                        viewModel.confirmAccountAction()
                     }
                 }
             default:
@@ -175,6 +191,7 @@ private struct AuthStatusActions: View {
 
     }
 
+    @Environment(\.dismiss) private var dismiss
     @Environment(\.openWindow) private var openWindow
 }
 
@@ -265,7 +282,7 @@ struct AuthChallengerCode: View {
                             form.initialFocus = .challengerCode
                             viewModel.navigate(to: .challengerCode)
                         } else {
-                            viewModel.navigate(to: .challengerChecking)
+                            viewModel.submitChallenger()
                         }
                     }
                     .disabled(screen == .challengerCode && !isValidCode)
@@ -280,6 +297,7 @@ struct AuthChallengerCode: View {
                 }
             }
         }
+        .onSubmit { if isValidCode { viewModel.submitChallenger() } }
         .onAppear { focusedField = form.initialFocus }
     }
 
@@ -305,7 +323,9 @@ struct AuthVerificationStatus: View {
                 AuthSteps(titles: titles, completedCount: completedCount)
                 if screen == .challengerComplete {
                     AuthButton(title: AppLocalization.string("시작하기")) {
-                        viewModel.navigate(to: .loginSelection)
+                        if let refresh = viewModel.onMemberRefresh {
+                            viewModel.perform { try await refresh() }
+                        } else { viewModel.navigate(to: .loginSelection) }
                     }
                 } else {
                     AuthBanner(

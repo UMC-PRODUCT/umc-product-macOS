@@ -219,6 +219,37 @@ struct AuthAppearanceTests {
         }
     }
 
+    @Test("Korean marked text stays in the active signup field until committed")
+    func koreanCompositionPreservesFocus() throws {
+        let model = AuthViewModel()
+        model.navigate(to: .signup)
+        try withAuthWindow(size: CGSize(width: 1440, height: 960),
+                           scheme: .light, viewModel: model) { host in
+            let inputs: [NSTextField] = descendants(in: host).filter(\.isEditable)
+            let field = try #require(inputs.first)
+            let window = try #require(host.window)
+            #expect(window.makeFirstResponder(field))
+            let editor = try #require(field.currentEditor() as? NSTextView)
+            let insertion = NSRange(location: NSNotFound, length: 0)
+            editor.setMarkedText("ㅎ", selectedRange: NSRange(location: 1, length: 0),
+                                 replacementRange: insertion)
+            editor.setMarkedText("한", selectedRange: NSRange(location: 1, length: 0),
+                                 replacementRange: insertion)
+            #expect(editor.hasMarkedText())
+            #expect(window.firstResponder === editor)
+            editor.insertText("한", replacementRange: insertion)
+            #expect(!editor.hasMarkedText())
+            #expect(editor.string == "한")
+            #expect(model.form.name == "한")
+            #expect(model.form.nickname.isEmpty)
+            editor.doCommand(by: #selector(NSResponder.insertNewline(_:)))
+            RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.05))
+            let nickname = try #require(inputs.dropFirst().first)
+            #expect(nickname.currentEditor() != nil)
+            #expect(model.form.name == "한")
+        }
+    }
+
     private func withAuthWindow(
         size: CGSize, scheme: ColorScheme, viewModel: AuthViewModel,
         check: (NSView) throws -> Void

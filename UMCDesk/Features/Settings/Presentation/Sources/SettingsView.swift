@@ -16,12 +16,11 @@ public struct SettingsView: View {
     // MARK: - Property
 
     @Environment(\.openWindow) private var openWindow
-    private let onOpenMatching: (() -> Void)?
-    private let onOpenSettingsPage: (() -> Void)?
-    private let matchingContent: AnyView?
     @State private var viewModel: SettingsViewModel
-    private let threadContent: (() -> AnyView)?
-    @State private var showsThreads = false
+    private let onSelectSection: ((DeskSection?) -> Void)?
+    private let section: DeskSection?
+    private let onOpenMatching: (() -> Void)?
+    private let featureContent: AnyView?
     @State private var showsSearchSuggestions = false
     @FocusState private var searchFocus: SearchFocus?
 
@@ -70,15 +69,13 @@ public struct SettingsView: View {
         static let contentWidth: CGFloat = 760
     }
 
-    public init(
-        viewModel: SettingsViewModel, onOpenMatching: (() -> Void)? = nil,
-        onOpenSettingsPage: (() -> Void)? = nil, matchingContent: AnyView? = nil,
-        threadContent: (() -> AnyView)? = nil
-    ) {
+    public init(viewModel: SettingsViewModel, section: DeskSection? = nil,
+                featureContent: AnyView? = nil, onOpenMatching: (() -> Void)? = nil,
+                onSelectSection: ((DeskSection?) -> Void)? = nil) {
         self.onOpenMatching = onOpenMatching
-        self.onOpenSettingsPage = onOpenSettingsPage
-        self.matchingContent = matchingContent
-        self.threadContent = threadContent
+        self.section = section
+        self.featureContent = featureContent
+        self.onSelectSection = onSelectSection
         _viewModel = State(initialValue: viewModel)
     }
 
@@ -92,7 +89,7 @@ public struct SettingsView: View {
                 .zIndex(1)
                 .simultaneousGesture(TapGesture().onEnded { dismissSearchSuggestions() })
             HStack(spacing: 0) {
-                if matchingContent == nil, !showsThreads, viewModel.page != .myPage {
+                if featureContent == nil, viewModel.page != .myPage {
                     settingsSidebar
                         .foregroundStyle(sidebarPalette.textNeutralDefault)
                         .tint(sidebarPalette.textBrandDefault)
@@ -105,8 +102,7 @@ public struct SettingsView: View {
                         .accessibilityHidden(true)
                 }
                 Group {
-                    if let matchingContent { matchingContent }
-                    else if showsThreads, let threadContent { threadContent() }
+                    if let featureContent { featureContent }
                     else { pageContent }
                 }
                     .environment(\.settingsAppearancePalette, palette)
@@ -173,8 +169,7 @@ public struct SettingsView: View {
                 accessibleProfileMenuFocus = .trigger
             }
         }
-        .toolbar { if !showsThreads && matchingContent == nil { navigationToolbar } }
-        .onChange(of: viewModel.profile?.id) { showsThreads = false }
+        .toolbar { if featureContent == nil { navigationToolbar } }
         .toolbarBackground(UMCColor.Custom.backgroundAppShell, for: .windowToolbar)
         .toolbarBackgroundVisibility(.visible, for: .windowToolbar)
         .toolbarColorScheme(.dark, for: .windowToolbar)
@@ -207,43 +202,34 @@ public struct SettingsView: View {
     private var appRail: some View {
         VStack(spacing: 0) {
             VStack(spacing: 0) {
-                railItem(AppLocalization.string("홈"), symbol: "house")
-                railItem(AppLocalization.string("공지"), symbol: "megaphone")
-                railItem(AppLocalization.string("활동"), symbol: "calendar.badge.checkmark")
-                if threadContent != nil {
-                    Button {
-                        if viewModel.profile == nil { viewModel.onOpenLogin?() }
-                        else { onOpenSettingsPage?(); showsThreads = true }
-                    } label: {
-                        Image(systemName: "bubble.left")
+                ForEach(DeskSection.allCases, id: \.self) { item in
+                    if let onSelectSection {
+                        Button { onSelectSection(item) } label: {
+                            Image(systemName: item.symbol)
+                                .frame(width: 44, height: 44)
+                                .contentShape(.rect)
+                        }
+                        .buttonStyle(SettingsPlainButtonStyle())
+                        .foregroundStyle(sidebarChromeForeground)
+                        .background(section == item ? UMCColor.Primitives.teal800 : .clear,
+                                    in: .rect(cornerRadius: UMCRadius.value8))
+                        .accessibilityAddTraits(section == item ? .isSelected : [])
+                        .accessibilityLabel(item.title)
+                        .help(item.title)
+                    } else {
+                        railItem(item.title, symbol: item.symbol)
+                    }
+                }
+                if let onOpenMatching {
+                    Button(action: onOpenMatching) {
+                        Image(systemName: "person.2.badge.gearshape")
                             .frame(width: 44, height: 44)
-                            .contentShape(.rect)
                     }
                     .buttonStyle(SettingsPlainButtonStyle())
-                    .foregroundStyle(sidebarChromeForeground)
-                    .accessibilityLabel("스레드")
-                    .help("스레드")
-                } else {
-                    railItem(AppLocalization.string("스레드"), symbol: "bubble.left")
-                }
-                railItem(AppLocalization.string("프로젝트"), symbol: "square.grid.2x2")
-                if let onOpenMatching {
-                    Button(action: { showsThreads = false; onOpenMatching() }) {
-                        Image(systemName: "person.2")
-                            .frame(width: 44, height: 44)
-                            .contentShape(.rect)
-                    }
-                    .buttonStyle(.plain)
-                    .foregroundStyle(sidebarChromeForeground)
-                    .background(
-                        matchingContent == nil ? Color.clear : UMCColor.Primitives.teal800,
-                        in: .rect(cornerRadius: UMCRadius.value8)
-                    )
                     .accessibilityLabel("프로젝트 매칭")
                     .help("프로젝트 매칭")
-                } else {
-                    railItem(AppLocalization.string("커뮤니티"), symbol: "person.2")
                 }
+                railItem(AppLocalization.string("커뮤니티"), symbol: "person.2")
                 Button { openWindow(id: DeskWindow.support) } label: {
                     Image(systemName: "questionmark.circle")
                         .font(.system(size: 16, weight: .medium))
@@ -315,15 +301,13 @@ public struct SettingsView: View {
                 profileMenuButton(
                     AppLocalization.string("마이페이지"), symbol: "person.crop.circle", focus: .myPage
                 ) {
-                    onOpenSettingsPage?()
-                    showsThreads = false
+                    onSelectSection?(nil)
                     viewModel.showProfile()
                 }
                 profileMenuButton(
                     AppLocalization.string("설정"), symbol: "gearshape", focus: .settings
                 ) {
-                    onOpenSettingsPage?()
-                    showsThreads = false
+                    onSelectSection?(nil)
                     viewModel.showSettings()
                 }
             }
@@ -421,14 +405,13 @@ public struct SettingsView: View {
             SettingsToolbarHost(content: HStack(spacing: UMCSpacing.value4) {
                     navigationButton(
                         AppLocalization.string("뒤로"), symbol: "chevron.left",
-                        isEnabled: matchingContent != nil || viewModel.canGoBack
+                        isEnabled: viewModel.canGoBack
                     ) {
-                    if matchingContent != nil { onOpenSettingsPage?() }
-                    else { viewModel.goBack() }
+                    viewModel.goBack()
                 }
                     navigationButton(
                         AppLocalization.string("앞으로"), symbol: "chevron.right",
-                        isEnabled: matchingContent == nil && viewModel.canGoForward
+                        isEnabled: viewModel.canGoForward
                     ) {
                     viewModel.goForward()
                 }

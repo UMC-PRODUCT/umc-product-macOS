@@ -5,9 +5,22 @@
 //  Created by euijjang97 on 10/10/26.
 //
 
+import AuthDomain
 import CoreDesignSystem
 import SwiftUI
 import UMCFoundation
+
+public enum AuthEntry {
+    case login, challenger, withdrawal
+
+    var screen: AuthScreen {
+        switch self {
+        case .login: .loginSelection
+        case .challenger: .challengerIntro
+        case .withdrawal: .withdrawalConfirmation
+        }
+    }
+}
 
 public struct AuthView: View {
     // MARK: - Property
@@ -23,13 +36,33 @@ public struct AuthView: View {
 
     // MARK: - Init
 
+    #if DEBUG || UMC_PRERELEASE
     public init() {
         _viewModel = State(initialValue: AuthViewModel())
     }
 
+    #endif
+
     public init(login: @escaping @MainActor (String, String) async throws -> Void) {
         let model = AuthViewModel()
         model.login = login
+        _viewModel = State(initialValue: model)
+    }
+
+    public init(
+        login: @escaping @MainActor (String, String) async throws -> Void,
+        repository: any AuthFlowRepository, entry: AuthEntry = .login,
+        onSignOut: (@MainActor () async throws -> Void)? = nil,
+        onMemberRefresh: (@MainActor () async throws -> Void)? = nil
+    ) {
+        let model = AuthViewModel()
+        model.login = login
+        model.repository = repository
+        model.entry = entry
+        model.navigate(to: entry.screen)
+        model.onSignOut = onSignOut
+        model.onMemberRefresh = onMemberRefresh
+        model.form.usesServerTerms = true
         _viewModel = State(initialValue: model)
     }
 
@@ -80,11 +113,17 @@ public struct AuthView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
         .background(UMCColor.Custom.backgroundDefault)
         .tint(UMCColor.Semantic.textBrandDefault)
-        .disabled(viewModel.isSigningIn)
-        .overlay { if viewModel.isSigningIn { ProgressView() } }
+        .disabled(viewModel.isSigningIn || viewModel.isWorking)
+        .overlay { if viewModel.isSigningIn || viewModel.isWorking { ProgressView() } }
+        .task {
+            if viewModel.entry == .login && !viewModel.hasCheckedStatus { viewModel.checkStatus() }
+        }
+        .alert("안내", isPresented: Binding(
+            get: { viewModel.notice != nil }, set: { if !$0 { viewModel.notice = nil } }
+        )) { Button("확인", role: .cancel) {} } message: { Text(viewModel.notice ?? "") }
         .onDisappear { viewModel.cancelLogin() }
         #if DEBUG || UMC_PRERELEASE
-        .focusedSceneValue(\.authPreviewModel, $viewModel)
+        .focusedSceneValue(\.authPreviewModel, viewModel.login == nil ? $viewModel : nil)
         .task(id: viewModel.navigationID) { await viewModel.runPreviewFlow() }
         .onAppear {
             let arguments = ProcessInfo.processInfo.arguments

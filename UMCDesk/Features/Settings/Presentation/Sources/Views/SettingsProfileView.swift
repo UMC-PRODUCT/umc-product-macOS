@@ -14,12 +14,10 @@ import SwiftUI
 struct SettingsProfileView: View {
     @Environment(\.settingsAppearancePalette) private var palette
     @Environment(\.openWindow) private var openWindow
-    @FocusState private var focusesRegistration: Bool
-    @FocusState private var focus: ProfileFocus?
+    @FocusState private var focusesScroll: Bool
     @State private var position = ScrollPosition()
     @State private var visiblePage = CGRect.zero
 
-    private enum ProfileFocus { case scroll, support }
     @Bindable var viewModel: SettingsViewModel
     @Environment(\.openURL) private var openURL
 
@@ -48,16 +46,10 @@ struct SettingsProfileView: View {
                             message: AppLocalization.string("이름, 학교, 활동 정보가 다르면 운영진에게 문의해 주세요."),
                             typography: .bodyRegular)
                         Spacer(minLength: 0)
-                        SettingsActionButton(title: AppLocalization.string("문의하기")) {
-                            focus = .support
+                        SettingsProfileSupportButton {
                             openWindow(id: DeskWindow.support)
                         }
-                        .focusable(interactions: .edit)
-                        .focused($focus, equals: .support)
-                        .onKeyPress(.return) {
-                            openWindow(id: DeskWindow.support)
-                            return .handled
-                        }
+                        .fixedSize()
                     }
                     .padding(.horizontal, UMCSpacing.value16)
                 }
@@ -76,8 +68,8 @@ struct SettingsProfileView: View {
             visiblePage = rect
         }
         .focusable(interactions: .edit)
-        .focused($focus, equals: .scroll)
-        .defaultFocus($focus, .scroll)
+        .focused($focusesScroll)
+        .defaultFocus($focusesScroll, true)
         .onKeyPress(keys: [.pageDown, .pageUp, .home, .end]) { press in
             guard press.modifiers.subtracting(.numericPad).subtracting(.function).isEmpty
             else { return .ignored }
@@ -107,10 +99,10 @@ struct SettingsProfileView: View {
                     }
                     Text(profile.schoolName ?? AppLocalization.string("학교 정보 없음"))
                         .umcTypography(.headlineRegular)
-                        .foregroundStyle(palette.textNeutralMedium600)
+                        .modifier(SettingsProfileDetailColor())
                     Text(profile.email ?? AppLocalization.string("이메일 정보 없음"))
                         .umcTypography(.headlineRegular)
-                        .foregroundStyle(palette.textNeutralMedium600)
+                        .modifier(SettingsProfileDetailColor())
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 Button {
@@ -267,16 +259,10 @@ struct SettingsProfileView: View {
                     if profile.activities.isEmpty {
                         activitiesTitle
                     } else {
-                        ViewThatFits(in: .horizontal) {
-                            HStack {
-                                activitiesTitle
-                                Spacer(minLength: UMCSpacing.value12)
-                                registrationButton(primary: false)
-                            }
-                            VStack(alignment: .leading, spacing: UMCSpacing.value4) {
-                                activitiesTitle
-                                registrationButton(primary: false)
-                            }
+                        HStack {
+                            activitiesTitle
+                            Spacer(minLength: UMCSpacing.value12)
+                            registrationButton(primary: false)
                         }
                     }
                     Text(AppLocalization.string("참여한 기수와 파트, 맡은 역할을 확인하세요."))
@@ -299,9 +285,6 @@ struct SettingsProfileView: View {
                 if profile.activities.isEmpty { registrationButton(primary: true) }
             }
         }
-        .onChange(of: viewModel.dialog) { previous, current in
-            if previous == .addPermission, current == nil { focusesRegistration = true }
-        }
     }
 
     private var activitiesTitle: some View {
@@ -311,15 +294,10 @@ struct SettingsProfileView: View {
     }
 
     private func registrationButton(primary: Bool) -> some View {
-        SettingsActionButton(
-            title: AppLocalization.string("활동 코드 등록"), symbol: "plus",
-            kind: primary ? .primary : .quiet, fillsWidth: primary,
-            action: viewModel.addPermission
-        )
-        .fixedSize(horizontal: !primary, vertical: true)
-        .disabled(viewModel.isAccountBusy)
-        .focused($focusesRegistration)
-        .accessibilityLabel(AppLocalization.string("활동 코드 등록"))
+        SettingsProfileRegistrationButton(isPrimary: primary, action: viewModel.addPermission)
+            .frame(maxWidth: primary ? .infinity : nil, minHeight: 40)
+            .fixedSize(horizontal: !primary, vertical: true)
+            .disabled(viewModel.isAccountBusy)
     }
 
     private func profileCardHeading(_ title: String, description: String) -> some View {
@@ -718,14 +696,14 @@ private struct SettingsUsageHeatmap: View {
                     }
                 }
                 .umcTypography(.captionRegular)
-                .foregroundStyle(palette.textNeutralMedium600)
+                .modifier(SettingsProfileDetailColor())
                 .padding(.trailing, UMCSpacing.value4)
                 .accessibilityHidden(true)
                 ForEach(SettingsUsagePreview.weeks) { week in
                     VStack(spacing: UMCSpacing.value4) {
                         Text(week.month)
                             .umcTypography(.captionRegular)
-                            .foregroundStyle(palette.textNeutralMedium600)
+                            .modifier(SettingsProfileDetailColor())
                             .frame(height: 16)
                             .accessibilityHidden(true)
                         ForEach(week.days) { day in
@@ -759,3 +737,171 @@ private struct SettingsUsageHeatmap: View {
     }
 }
 #endif
+
+private struct SettingsProfileDetailColor: ViewModifier {
+    @Environment(\.settingsAppearancePalette) private var palette
+    @Environment(\.colorSchemeContrast) private var contrast
+
+    func body(content: Content) -> some View {
+        content.foregroundStyle(contrast == .increased ?
+            palette.textNeutralDefault : palette.textNeutralStrong800)
+    }
+}
+
+/// The same AppKit control owns the AX action, key-window first responder and focus ring.
+private struct SettingsProfileRegistrationButton: NSViewRepresentable {
+    @Environment(\.isEnabled) private var isEnabled
+    let isPrimary: Bool
+    let action: () -> Void
+
+    func makeNSView(context: Context) -> RegistrationButton {
+        let button = RegistrationButton()
+        button.bezelStyle = .rounded
+        button.controlSize = .large
+        button.image = NSImage(systemSymbolName: "plus", accessibilityDescription: nil)
+        button.imagePosition = .imageLeading
+        button.target = button
+        button.action = #selector(RegistrationButton.openRegistration)
+        return button
+    }
+
+    func updateNSView(_ button: RegistrationButton, context: Context) {
+        let title = AppLocalization.string("활동 코드 등록")
+        button.title = title
+        button.setAccessibilityLabel(title)
+        button.bezelColor = isPrimary ? NSColor(UMCColor.Semantic.fillPrimaryInverseStrong500) : nil
+        button.isEnabled = isEnabled
+        button.open = action
+    }
+
+    func sizeThatFits(_ proposal: ProposedViewSize, nsView: RegistrationButton,
+                      context: Context) -> CGSize? {
+        CGSize(width: isPrimary ? proposal.width ?? nsView.intrinsicContentSize.width :
+            nsView.intrinsicContentSize.width, height: 40)
+    }
+
+    final class RegistrationButton: SettingsProfileKeyButton {
+        var open: (() -> Void)?
+        private var isPresentingRegistration = false
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            NotificationCenter.default.removeObserver(self, name: NSWindow.didEndSheetNotification,
+                                                      object: nil)
+            if let window {
+                NotificationCenter.default.addObserver(self, selector: #selector(sheetDidEnd),
+                    name: NSWindow.didEndSheetNotification, object: window)
+            }
+        }
+
+        @objc private func sheetDidEnd() {
+            guard isPresentingRegistration else { return }
+            isPresentingRegistration = false
+            // Let the sheet finish handing the key window back before restoring its responder.
+            Task { @MainActor [weak self] in
+                guard let self, let window, window.attachedSheet == nil, canBecomeKeyView
+                else { return }
+                window.makeFirstResponder(self)
+            }
+        }
+
+        @objc func openRegistration() {
+            guard isEnabled, let window else { return }
+            window.makeFirstResponder(self)
+            isPresentingRegistration = true
+            open?()
+        }
+    }
+}
+
+/// AppKit resolves Tab before a SwiftUI key handler when a native control is in the key loop.
+private struct SettingsProfileSupportButton: NSViewRepresentable {
+    let action: () -> Void
+
+    func makeNSView(context: Context) -> SupportButton {
+        let button = SupportButton()
+        button.bezelStyle = .rounded
+        button.controlSize = .large
+        button.target = button
+        button.action = #selector(SupportButton.openSupport)
+        return button
+    }
+
+    func updateNSView(_ button: SupportButton, context: Context) {
+        button.title = AppLocalization.string("문의하기")
+        button.setAccessibilityLabel(button.title)
+        button.open = action
+    }
+
+    final class SupportButton: SettingsProfileKeyButton {
+        var open: (() -> Void)?
+        private var pageNavigationPending = false
+        private var returnsFromSupport = false
+        private var keyMonitor: Any?
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            if let keyMonitor { NSEvent.removeMonitor(keyMonitor) }
+            keyMonitor = nil
+            pageNavigationPending = false
+            returnsFromSupport = false
+            NotificationCenter.default.removeObserver(self, name: NSWindow.didBecomeKeyNotification,
+                                                      object: nil)
+            guard let window else { return }
+            NotificationCenter.default.addObserver(self, selector: #selector(restoreFocus),
+                name: NSWindow.didBecomeKeyNotification, object: window)
+            keyMonitor = NSEvent.addLocalMonitorForEvents(
+                matching: [.keyDown, .leftMouseDown, .rightMouseDown]
+            ) { [weak self] event in
+                self?.handlesNavigation(event) == true ? nil : event
+            }
+        }
+
+        private func handlesNavigation(_ event: NSEvent) -> Bool {
+            guard let window, event.window === window, window.attachedSheet == nil,
+                  event.type == .keyDown else {
+                pageNavigationPending = false
+                return false
+            }
+            let modifiers = event.modifierFlags.intersection([.command, .control, .shift, .option])
+            let key = event.specialKey
+            let followsPageNavigation = pageNavigationPending
+            pageNavigationPending = modifiers.isEmpty && (key == .pageDown || key == .end)
+            guard followsPageNavigation, modifiers.isEmpty, event.characters == "\t",
+                  let scroll = enclosingScrollView, let document = scroll.documentView
+            else { return false }
+            let viewport = scroll.documentVisibleRect
+            guard viewport.minY > document.bounds.minY,
+                  viewport.maxY >= document.bounds.maxY - 1,
+                  visibleRect.intersects(bounds) else { return false }
+            return window.makeFirstResponder(self)
+        }
+
+        @objc func openSupport() {
+            guard let window else { return }
+            window.makeFirstResponder(self)
+            returnsFromSupport = true
+            open?()
+        }
+
+        @objc private func restoreFocus() {
+            guard returnsFromSupport else { return }
+            returnsFromSupport = false
+            window?.makeFirstResponder(self)
+        }
+    }
+}
+
+private class SettingsProfileKeyButton: NSButton {
+    override var acceptsFirstResponder: Bool { isEnabled }
+    override var canBecomeKeyView: Bool { isEnabled && !isHiddenOrHasHiddenAncestor }
+
+    override func keyDown(with event: NSEvent) {
+        if event.charactersIgnoringModifiers == "\r",
+           event.modifierFlags.intersection([.command, .control, .option, .shift]).isEmpty {
+            performClick(nil)
+        } else {
+            super.keyDown(with: event)
+        }
+    }
+}

@@ -28,6 +28,8 @@ let project = Project(
                 "CFBundleShortVersionString": "$(MARKETING_VERSION)",
                 "CFBundleVersion": "$(CURRENT_PROJECT_VERSION)",
                 "LSApplicationCategoryType": "public.app-category.productivity",
+                "NSLocationUsageDescription": "대면 출석을 요청할 때 현재 위치와 일정 장소를 확인합니다.",
+                "NSLocationWhenInUseUsageDescription": "대면 출석을 요청할 때 현재 위치와 일정 장소를 확인합니다.",
                 "BASE_URL": "$(BASE_URL)",
             ]),
             sources: ["UMCDesk/Sources/**"],

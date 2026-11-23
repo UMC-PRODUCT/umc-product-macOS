@@ -9,7 +9,12 @@ import UMCFoundation
 import CoreRouting
 import SwiftUI
 import AppKit
+import ActivityPresentation
 import CommunityPresentation
+import HomePresentation
+import NoticePresentation
+import ProjectWorkspaceData
+import ProjectWorkspacePresentation
 import AuthPresentation
 import CoreDesignSystem
 import CoreUIComponents
@@ -69,6 +74,20 @@ struct UMCDeskApp: App {
         }
         .defaultSize(width: 980, height: 720)
         .windowToolbarStyle(.unifiedCompact)
+
+        WindowGroup("스레드", for: ThreadWindowKey.self) { $key in
+            if let key, let account = dependencies.navigation.account, key.accountID == account.memberID {
+                ThreadWindowContent(key: key, repository: account.threads,
+                                    conversations: account.conversations, management: account.members)
+                    .id(key)
+                    .preferredColorScheme(preferences.theme.colorScheme)
+                    .defaultAppStorage(dependencies.featureDefaults)
+            } else {
+                ContentUnavailableView("대화를 열 수 없습니다", systemImage: "bubble.left",
+                                       description: Text("이 대화에 참여한 계정으로 로그인해 주세요."))
+            }
+        }
+        .defaultSize(width: 760, height: 640)
 
         Settings {
             SettingsSceneView(dependencies: dependencies)
@@ -144,8 +163,7 @@ private struct AppRootView: View {
                 let page = pages.first { args.contains($0.0) }?.1 ?? .explore
                 SettingsView(
                     viewModel: dependencies.previewSettingsViewModel,
-                    onOpenMatching: {},
-                    matchingContent: AnyView(MatchingDesignPreview.view(
+                    featureContent: AnyView(MatchingDesignPreview.view(
                         destination: page, showsDetail: args.contains("--matching-detail")
                     ))
                 )
@@ -184,9 +202,8 @@ private struct AppRootView: View {
         if dependencies.navigation.showsSettings {
             SettingsView(
                 viewModel: dependencies.settingsViewModel,
-                onOpenMatching: { dependencies.openMatching() },
-                onOpenSettingsPage: { dependencies.navigation.matchingDestination = nil },
-                matchingContent: dependencies.navigation.matchingDestination.map { destination in
+                section: dependencies.navigation.section,
+                featureContent: dependencies.navigation.matchingDestination.map { destination in
                     AnyView(MatchingWorkspace(
                         repository: dependencies.matchingUseCase, destination: destination,
                         memberId: dependencies.settingsViewModel.profile?.id,
@@ -194,10 +211,14 @@ private struct AppRootView: View {
                     )
                     .id(dependencies.navigation.matchingNavigationID)
                     .id(dependencies.settingsViewModel.profile?.id))
-                }, threadContent: { AnyView(CommunityThreadsView(repository: dependencies.communityRepository)) }
+                } ?? featureContent, onOpenMatching: { dependencies.openMatching() },
+                onSelectSection: dependencies.selectSection
             )
         } else {
-            AuthView(login: dependencies.login)
+            AuthView(login: dependencies.login, repository: dependencies.loginRepository,
+                     entry: dependencies.navigation.authEntry, onSignOut: dependencies.signOut,
+                     onMemberRefresh: dependencies.refreshAccount)
+                .id(dependencies.navigation.authEntry)
         }
     }
 
@@ -207,8 +228,42 @@ private struct AppRootView: View {
         return dependencies.settingsViewModel.profile?.id
     }
 
+    private var featureContent: AnyView? {
+        guard let account = dependencies.navigation.account,
+              let section = dependencies.navigation.section else { return nil }
+        return AnyView(feature(section, account: account)
+            .defaultAppStorage(dependencies.featureDefaults)
+            .id(account.memberID))
+    }
+
+    @ViewBuilder
+    private func feature(_ section: DeskSection, account: FeatureAccount) -> some View {
+        switch section {
+        case .home:
+            HomeView(repository: account.home, memberID: account.memberID) { destination in
+                switch destination {
+                case .activity: dependencies.selectSection(.activity)
+                case .notice: dependencies.selectSection(.notice)
+                case .project: dependencies.selectSection(.projects)
+                }
+            }
+        case .notice:
+            NoticeBoardView(repository: account.notices)
+        case .activity:
+            ActivityView(repository: account.activity)
+        case .threads:
+            CommunityThreadsView(accountID: account.memberID, repository: account.threads,
+                                 conversations: account.conversations, management: account.members)
+        case .projects:
+            ProjectWorkspaceView(accountID: account.memberID, loadProjects: account.projects,
+                                 loadGitHub: WorkspaceGitHubClient.recentWork(repository:),
+                                 openMatching: { dependencies.openMatching() })
+        }
+    }
+
     private func configureLoginAction() {
         dependencies.settingsViewModel.onOpenLogin = {
+            dependencies.navigation.authEntry = .login
             dependencies.navigation.showsSettings = false
             openWindow(id: "main")
             NSApplication.shared.activate()
@@ -265,11 +320,17 @@ private struct SettingsSceneView: View {
             dependencies.openMatching()
             openWindow(id: "main")
             NSApplication.shared.activate()
+        }, onSelectSection: { section in
+            guard let section else { return }
+            dependencies.selectSection(section)
+            openWindow(id: "main")
+            NSApplication.shared.activate()
         })
             .background(SettingsWindowToolbar())
             .onAppear {
                 dependencies.windowSettingsViewModel.showSettings()
                 dependencies.windowSettingsViewModel.onOpenLogin = {
+                    dependencies.navigation.authEntry = .login
                     dependencies.navigation.showsSettings = false
                     openWindow(id: "main")
                     NSApplication.shared.activate()
@@ -315,7 +376,7 @@ private struct AppMenuBarContent: View {
             NSApplication.shared.activate()
         }
         Button(AppLocalization.string("마이페이지")) {
-            dependencies.navigation.matchingDestination = nil
+            dependencies.selectSection(nil)
             dependencies.settingsViewModel.showProfile()
             dependencies.navigation.showsSettings = true
             openWindow(id: "main")
@@ -324,6 +385,13 @@ private struct AppMenuBarContent: View {
         Button(AppLocalization.string("설정…")) {
             dependencies.windowSettingsViewModel.showSettings()
             openSettings()
+        }
+        if let account = dependencies.navigation.account {
+            ActivityMenuContent(repository: account.activity) {
+                dependencies.selectSection(.activity)
+                openWindow(id: "main")
+                NSApplication.shared.activate()
+            }
         }
         Divider()
         Button(AppLocalization.string("UMC Desk 종료"), role: .destructive) {
@@ -335,9 +403,7 @@ private struct AppMenuBarContent: View {
 private struct AppSettingsCommands: Commands {
     let dependencies: AppDependencies
     @Environment(\.openSettings) private var openSettings
-    #if DEBUG || UMC_PRERELEASE
     @Environment(\.openWindow) private var openWindow
-    #endif
 
     var body: some Commands {
         @Bindable var preferences = dependencies.settingsPreferences
@@ -348,6 +414,17 @@ private struct AppSettingsCommands: Commands {
                 openSettings()
             }
             .keyboardShortcut(",", modifiers: .command)
+        }
+        CommandMenu("계정") {
+            Button("마이페이지") {
+                dependencies.selectSection(nil)
+                dependencies.settingsViewModel.showProfile()
+                openWindow(id: "main")
+            }
+            Button("챌린저 연결…") { openAccount(.challenger) }
+                .disabled(dependencies.navigation.account == nil)
+            Button("회원 탈퇴…") { openAccount(.withdrawal) }
+                .disabled(dependencies.navigation.account == nil)
         }
         #if DEBUG || UMC_PRERELEASE
         CommandGroup(after: .sidebar) {
@@ -373,6 +450,14 @@ private struct AppSettingsCommands: Commands {
         }
         #endif
     }
+
+    private func openAccount(_ entry: AuthEntry) {
+        dependencies.navigation.authEntry = entry
+        dependencies.navigation.showsSettings = false
+        openWindow(id: "main")
+        NSApplication.shared.activate()
+    }
+
 }
 
 @MainActor

@@ -18,6 +18,10 @@ final class AppSessionResetRelay {
     func reset() async {
         navigation?.resetAccount()
         matchingProgress?.setAccount(nil)
+        navigation?.authEntry = .login
+        navigation?.account = nil
+        navigation?.section = nil
+        navigation?.pendingSection = nil
         await settingsViewModel?.invalidateAccount()
         await windowSettingsViewModel?.invalidateAccount()
     }

@@ -194,10 +194,10 @@ struct AuthFormTests {
         #expect(!form.canRegister)
     }
 
-    @Test("Password input needs eight characters including a number and special character")
+    @Test("Password input needs eight characters with two character classes")
     func passwordRequirements() {
         let form = AuthFormState()
-        for password in ["short1!", "password!", "password1", "password "] {
+        for password in ["short1!", "password", "12345678", "password "] {
             form.password = password
             form.passwordConfirmation = password
             #expect(!form.passwordsMatchRequirements)

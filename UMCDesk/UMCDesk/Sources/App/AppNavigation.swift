@@ -7,6 +7,8 @@
 
 import Foundation
 import MatchingPresentation
+import AuthPresentation
+import CoreRouting
 import Observation
 import SettingsDomain
 
@@ -38,6 +40,10 @@ final class AppNavigation {
         pendingMatching = nil
         showsSettings = false
     }
+    var authEntry = AuthEntry.login
+    var section: DeskSection?
+    var pendingSection: DeskSection?
+    var account: FeatureAccount?
 
     init(launchPage: SettingsLaunchPage) {
         showsSettings = launchPage != .login
