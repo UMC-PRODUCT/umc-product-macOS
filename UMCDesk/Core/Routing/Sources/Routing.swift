@@ -13,7 +13,7 @@ public enum DeskWindow {
 }
 
 public enum DeskSection: String, CaseIterable, Sendable {
-    case home, notice, activity, threads, projects
+    case home, notice, activity, threads, projects, community
 
     public var title: String {
         switch self {
@@ -21,6 +21,7 @@ public enum DeskSection: String, CaseIterable, Sendable {
         case .notice: "공지"
         case .activity: "활동"
         case .threads: "스레드"
+        case .community: "커뮤니티"
         case .projects: "프로젝트"
         }
     }
@@ -31,6 +32,7 @@ public enum DeskSection: String, CaseIterable, Sendable {
         case .notice: "megaphone"
         case .activity: "calendar.badge.checkmark"
         case .threads: "bubble.left"
+        case .community: "person.2"
         case .projects: "square.grid.2x2"
         }
     }

@@ -192,7 +192,8 @@ if __name__ == "__main__":
         server.verifications = {}
         server.proofs = {}
         server.unlinked = set()
-        server.next_member = max(int(identifier) for identifier, _ in MEMBERS.values()) + 1
+        # Seeded organization members include non-login accounts in the matching roster.
+        server.next_member = max(10000, max(int(identifier) for identifier, _ in MEMBERS.values()) + 1)
         server.next_verification = 1
         server.nicknames = {}
         server.passwords = dict.fromkeys(MEMBERS, PASSWORD)

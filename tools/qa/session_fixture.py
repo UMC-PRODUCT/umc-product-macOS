@@ -5,6 +5,7 @@
 
 """Run a loopback-only login fixture. SIGUSR1 expires current test sessions."""
 
+import community_post_fixture
 import home_activity_fixture
 import matching_fixture
 import notice_fixture
@@ -123,6 +124,8 @@ class SessionFixture(BaseHTTPRequestHandler):
                     self.server.profile_links = {}
                 self.server.profile_links[member] = links
             self.send_result(200, self.profile(email))
+            return True
+        if community_post_fixture.handle(self, self.command, path, query, body, member):
             return True
         if thread_feature_fixture.handle(self, self.command, path, query, body, member):
             return True

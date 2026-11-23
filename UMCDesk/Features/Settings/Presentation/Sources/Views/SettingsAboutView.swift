@@ -11,7 +11,19 @@ import CoreRouting
 import CoreUIComponents
 import SwiftUI
 
+public enum SettingsPublishedDocument: String, Identifiable {
+    case service, privacy
+    public var id: Self { self }
+}
+
+extension EnvironmentValues {
+    @Entry public var settingsPublishedDocument: (@MainActor (SettingsPublishedDocument, @escaping () -> Void) -> AnyView)?
+}
+
 struct SettingsAboutView: View {
+    @Environment(\.settingsPublishedDocument) private var publishedDocument
+    @State private var selectedDocument: SettingsPublishedDocument?
+
     @Environment(\.settingsAppearancePalette) private var palette
     @Environment(\.openWindow) private var openWindow
     @Bindable var viewModel: SettingsViewModel
@@ -59,11 +71,11 @@ struct SettingsAboutView: View {
             SettingsSection(title: AppLocalization.string("도움말 및 법적 정보")) {
                 SettingsCard {
                     VStack(spacing: UMCSpacing.value12) {
-                        unavailableLink(
+                        publishedLink(.service,
                             AppLocalization.string("이용약관"),
                             description: AppLocalization.string("서비스 이용에 필요한 약관을 확인해요."))
                         SettingsDivider()
-                        unavailableLink(
+                        publishedLink(.privacy,
                             AppLocalization.string("개인정보 처리방침"),
                             description: AppLocalization.string("개인정보 처리와 보관 기준을 확인해요."))
                         SettingsDivider()
@@ -103,11 +115,19 @@ struct SettingsAboutView: View {
                 }
             }
         }
+        .sheet(item: $selectedDocument) { document in
+            publishedDocument?(document) { selectedDocument = nil }
+        }
     }
 
-    private func unavailableLink(_ title: String, description: String) -> some View {
+    private func publishedLink(_ document: SettingsPublishedDocument, _ title: String,
+                               description: String) -> some View {
         SettingsRow(title: title, description: description) {
-            SettingsStatusText(text: AppLocalization.string("준비 중"))
+            SettingsActionButton(title: AppLocalization.string("열기")) {
+                selectedDocument = document
+            }
+            .disabled(publishedDocument == nil)
+            .accessibilityLabel(title)
         }
     }
 
