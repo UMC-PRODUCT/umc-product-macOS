@@ -82,7 +82,17 @@ private struct Board: View {
                         Text(CommunityPostCategory(rawValue: row.category)?.label ?? row.category)
                             .font(.caption).foregroundStyle(UMCColor.Semantic.textBrandDefault)
                         Text(row.title).font(.headline).lineLimit(2)
-                        Text(row.content).lineLimit(1).foregroundStyle(.secondary)
+                            .foregroundStyle(CommunitySelectionTextStyle(
+                                isSelected: selected == row.id,
+                                isListFocused: resultsFocused,
+                                unselected: .primary
+                            ))
+                        Text(row.content).lineLimit(1)
+                            .foregroundStyle(CommunitySelectionTextStyle(
+                                isSelected: selected == row.id,
+                                isListFocused: resultsFocused,
+                                unselected: .secondary
+                            ))
                         HStack {
                             Text(row.author ?? "게시글")
                             Spacer()

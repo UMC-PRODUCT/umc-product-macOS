@@ -152,6 +152,11 @@ private struct ThreadBrowser: View {
                 Text(item.icon).accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 4) {
                     Text(item.title).font(.headline).lineLimit(1)
+                        .foregroundStyle(CommunitySelectionTextStyle(
+                            isSelected: selection == item.id,
+                            isListFocused: resultsFocused,
+                            unselected: .primary
+                        ))
                     if let category = item.category {
                         Text(["PROJECT": "프로젝트", "STUDY": "스터디",
                               "FREE": "자유", "QNA": "질문"][category] ?? category)
@@ -160,7 +165,12 @@ private struct ThreadBrowser: View {
                     if item.membershipState == "KICKED" {
                         Text("내보내짐 · 확인 필요").font(.caption)
                     } else if let description = item.description, !description.isEmpty {
-                        Text(description).lineLimit(2).font(.caption).foregroundStyle(.secondary)
+                        Text(description).lineLimit(2).font(.caption)
+                            .foregroundStyle(CommunitySelectionTextStyle(
+                                isSelected: selection == item.id,
+                                isListFocused: resultsFocused,
+                                unselected: .secondary
+                            ))
                     }
                     if item.membershipState != "KICKED" {
                         Text(item.isMuted ? "알림 꺼짐" : (item.isJoined ? "참여 중" : "미참여"))
