@@ -318,7 +318,7 @@ struct LiveNoticeRepositoryTests {
                 }
                 guard fixture.exists("ready-" + phase) else {
                     let logText = try String(contentsOf: log, encoding: .utf8)
-                    Issue.record("자식 프로세스 단계 실패 " + phase + " " + String(logText.suffix(1800)))
+                    Issue.record("자식 프로세스 단계 실패 \(phase) \(logText.suffix(1800))")
                     return
                 }
                 if phase == "submit" {
