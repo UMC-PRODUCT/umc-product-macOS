@@ -238,6 +238,7 @@ private struct ConversationTimeline: View {
                     ViewThatFits(in: .horizontal) {
                         reactionStrip(message)
                         ScrollView(.horizontal) { reactionStrip(message) }
+                            .defaultScrollAnchor(own ? .trailing : .leading, for: .initialOffset)
                     }
                 }
             } actions: { dismiss in
@@ -279,19 +280,23 @@ private struct ConversationTimeline: View {
                 Button {
                     react(reaction.emoji, message: message)
                 } label: {
-                    HStack(spacing: 4) {
-                        Text(reaction.emoji)
-                        Text(reaction.count).font(.caption.weight(.semibold)).monospacedDigit()
-                        if reaction.reactedByMe {
-                            Image(systemName: "checkmark").font(.caption2.bold())
-                        }
+                    HStack(spacing: 3) {
+                        Text(reaction.emoji).font(.caption)
+                        Text(reaction.count).font(.caption2.weight(.medium)).monospacedDigit()
                     }
-                    .padding(.horizontal, 8)
-                    .frame(minHeight: 24)
+                    .padding(.horizontal, 7)
+                    .frame(minHeight: 21)
                     .foregroundStyle(reaction.reactedByMe
                         ? UMCColor.Semantic.textBrandStrong : UMCColor.Semantic.textNeutralDefault)
                     .modifier(ConversationGlass(shape: Capsule(), branded: reaction.reactedByMe,
                                                 interactive: true))
+                    .overlay {
+                        if reaction.reactedByMe {
+                            Capsule().strokeBorder(UMCColor.Semantic.borderPrimaryStrong500,
+                                                   lineWidth: 1)
+                                .allowsHitTesting(false)
+                        }
+                    }
                     .contentShape(Capsule())
                 }
                 .buttonStyle(.plain)
@@ -497,29 +502,15 @@ private struct MessageDetails<Bubble: View, Actions: View>: View {
         VStack(alignment: own ? .trailing : .leading, spacing: 4) {
             bubble()
             HStack(spacing: 5) {
+                if own && canAct { actionButton }
                 if let date {
-                    Text(date, format: .dateTime.hour().minute())
                     if sent {
                         Image(systemName: "checkmark").accessibilityLabel("전송 완료")
                             .help("전송 완료")
                     }
+                    Text(date, format: .dateTime.hour().minute())
                 }
-                if canAct {
-                    Button {
-                        showingActions.toggle()
-                    } label: {
-                        Image(systemName: "face.smiling")
-                            .foregroundStyle(hovering || menuFocused || voiceOver || showingActions
-                                ? Color.secondary : Color.clear)
-                            .frame(width: 24, height: 20)
-                            .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .focused($menuFocused)
-                    .accessibilityLabel("메시지 반응 및 동작")
-                    .help("반응 추가 및 메시지 동작")
-                    .popover(isPresented: $showingActions) { actionPopover }
-                }
+                if !own && canAct { actionButton }
             }
             .font(.caption2)
             .foregroundStyle(.secondary)
@@ -537,6 +528,23 @@ private struct MessageDetails<Bubble: View, Actions: View>: View {
                 actions({})
             }
         }
+    }
+
+    private var actionButton: some View {
+        Button {
+            showingActions.toggle()
+        } label: {
+            Image(systemName: "face.smiling")
+                .foregroundStyle(hovering || menuFocused || voiceOver || showingActions
+                    ? Color.secondary : Color.clear)
+                .frame(width: 24, height: 20)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .focused($menuFocused)
+        .accessibilityLabel("메시지 반응 및 동작")
+        .help("반응 추가 및 메시지 동작")
+        .popover(isPresented: $showingActions) { actionPopover }
     }
 
     private var actionPopover: some View {

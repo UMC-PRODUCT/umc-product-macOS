@@ -154,7 +154,7 @@ struct ThreadDestination: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            HStack {
+            HStack(spacing: 6) {
                 Text(item.icon).accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(item.title).umcTypography(.title3Bold).lineLimit(1)
@@ -164,17 +164,18 @@ struct ThreadDestination: View {
                 }
                 Spacer()
                 if !detached {
-                    Button("별도 창에서 열기", systemImage: "macwindow.badge.plus") {
+                    Button {
                         openWindow(value: key)
+                    } label: {
+                        ThreadToolbarLabel(title: "별도 창에서 열기", symbol: "macwindow.badge.plus")
                     }
-                    .labelStyle(.iconOnly)
-                    .buttonStyle(.glass)
-                    .buttonBorderShape(.circle)
+                    .buttonStyle(.plain)
+                    .modifier(ThreadToolbarControl())
                     .help("별도 창에서 열기")
                 }
                 if windowStore.accessEnd == nil, accessFailure == nil, item.membershipState != "KICKED",
                    item.membershipState != "KICKED_ACKNOWLEDGED", active || shareDetail != nil {
-                    Menu("스레드 설정", systemImage: "ellipsis") {
+                    Menu {
                         if let shareDetail {
                             ThreadShareMenu(thread: shareDetail)
                             if active { Divider() }
@@ -198,13 +199,13 @@ struct ThreadDestination: View {
                                 Button("스레드 삭제", role: .destructive) { destination = .delete }
                             }
                         }
+                    } label: {
+                        ThreadToolbarLabel(title: "스레드 설정", symbol: "ellipsis")
                     }
                     .menuStyle(.button)
+                    .buttonStyle(.plain)
                     .menuIndicator(.hidden)
-                    .labelStyle(.iconOnly)
-                    .buttonStyle(.glass)
-                    .buttonBorderShape(.circle)
-                    .fixedSize()
+                    .modifier(ThreadToolbarControl())
                     .disabled(mutating)
                     .help("스레드 설정")
                 }
@@ -318,5 +319,28 @@ private struct DeletedThreadView: View {
         } actions: {
             Button(actionTitle, action: action)
         }
+    }
+}
+
+struct ThreadToolbarLabel: View {
+    let title: LocalizedStringKey
+    let symbol: String
+
+    var body: some View {
+        Label(title, systemImage: symbol)
+            .labelStyle(.iconOnly)
+            .font(.system(size: 14, weight: .medium))
+            .frame(width: 28, height: 28)
+            .contentShape(Rectangle())
+    }
+}
+
+struct ThreadToolbarControl: ViewModifier {
+    func body(content: Content) -> some View {
+        content
+            .foregroundStyle(.primary)
+            .tint(.primary)
+            .frame(width: 28, height: 28)
+            .glassEffect(.regular.interactive(), in: .rect(cornerRadius: 9))
     }
 }
