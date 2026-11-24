@@ -166,11 +166,15 @@ struct ThreadDestination: View {
                 if !detached {
                     Button("별도 창에서 열기", systemImage: "macwindow.badge.plus") {
                         openWindow(value: key)
-                    }.labelStyle(.iconOnly)
+                    }
+                    .labelStyle(.iconOnly)
+                    .buttonStyle(.glass)
+                    .buttonBorderShape(.circle)
+                    .help("별도 창에서 열기")
                 }
                 if windowStore.accessEnd == nil, accessFailure == nil, item.membershipState != "KICKED",
                    item.membershipState != "KICKED_ACKNOWLEDGED", active || shareDetail != nil {
-                    Menu("스레드 설정", systemImage: "ellipsis.circle") {
+                    Menu("스레드 설정", systemImage: "ellipsis") {
                         if let shareDetail {
                             ThreadShareMenu(thread: shareDetail)
                             if active { Divider() }
@@ -194,7 +198,15 @@ struct ThreadDestination: View {
                                 Button("스레드 삭제", role: .destructive) { destination = .delete }
                             }
                         }
-                    }.labelStyle(.iconOnly).fixedSize().disabled(mutating)
+                    }
+                    .menuStyle(.button)
+                    .menuIndicator(.hidden)
+                    .labelStyle(.iconOnly)
+                    .buttonStyle(.glass)
+                    .buttonBorderShape(.circle)
+                    .fixedSize()
+                    .disabled(mutating)
+                    .help("스레드 설정")
                 }
             }
             .fixedSize(horizontal: false, vertical: true)
