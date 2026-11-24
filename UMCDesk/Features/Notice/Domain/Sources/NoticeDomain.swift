@@ -482,7 +482,7 @@ public struct NoticeReaders: Codable, Sendable {
     }
 }
 
-public struct NoticeDraft: Sendable {
+public struct NoticeDraft: Codable, Sendable {
     public var title = ""
     public var content = ""
     public var shouldNotify = false
@@ -495,7 +495,7 @@ public struct NoticeDraft: Sendable {
     public init() {}
 }
 
-public struct NoticePollDraft: Sendable {
+public struct NoticePollDraft: Codable, Sendable {
     public var title = ""
     public var options = ["", ""]
     public var isAnonymous = true
@@ -506,6 +506,7 @@ public struct NoticePollDraft: Sendable {
 }
 
 public protocol NoticeRepository: Sendable {
+    func openPublicationJournal() async throws -> NoticePublicationJournal
     func currentMemberID() async throws -> String
     func activeGisu() async throws -> String
     func canCompose(gisu: String) async throws -> Bool
@@ -663,6 +664,57 @@ public final class NoticePublication {
 
     public init() {}
 
+    private var journal: NoticePublicationJournal?
+    public private(set) var input: NoticePublicationInput?
+
+    public init(journal: NoticePublicationJournal) throws {
+        self.journal = journal
+        if let record = try journal.read() {
+            input = record.input
+            previousIDs = record.previousIDs
+            noticeID = record.noticeID
+            needsListCheck = record.needsListCheck
+            needsPollCheck = record.needsPollCheck
+            uploaded = record.uploaded
+            imagesAttached = record.imagesAttached
+            linksAttached = record.linksAttached
+        }
+    }
+
+    public func prepare(_ value: NoticePublicationInput) throws -> NoticePublicationInput {
+        guard let journal else { throw NoticeRequestFailure.publicationUnconfirmed }
+        let staged = try journal.stage(value, uploaded: uploaded)
+        input = staged
+        try checkpoint()
+        return staged
+    }
+
+    private func checkpoint() throws {
+        guard let journal else { return }
+        guard let input else { throw NoticeRequestFailure.publicationUnconfirmed }
+        try journal.write(
+            .init(
+                input: input, previousIDs: previousIDs, noticeID: noticeID,
+                needsListCheck: needsListCheck, needsPollCheck: needsPollCheck, uploaded: uploaded,
+                imagesAttached: imagesAttached, linksAttached: linksAttached))
+    }
+
+    public func startSeparateNotice() throws {
+        needsListCheck = false
+        needsPollCheck = false
+        noticeID = nil
+        previousIDs = []
+        candidates = []
+        uploaded = [:]
+        imagesAttached = false
+        linksAttached = false
+        try checkpoint()
+    }
+
+    public func finish() throws {
+        try journal?.clear()
+    }
+
     private var previousIDs = Set<String>()
     public private(set) var candidates: [NoticeEntry] = []
 
@@ -739,20 +791,24 @@ public final class NoticePublication {
         noticeID = id
         needsListCheck = false
         candidates = []
+        try checkpoint()
     }
 
     public func publish(_ create: () async throws -> String) async throws -> String {
         if let noticeID { return noticeID }
         guard !needsListCheck else { throw NoticeRequestFailure.publicationUnconfirmed }
         needsListCheck = true
+        try checkpoint()
         do {
             let result = try await create()
             noticeID = result
             needsListCheck = false
+            try checkpoint()
             return result
         } catch let error as NoticeRequestFailure {
             if case .rejected = error { needsListCheck = false }
             if case .accessDenied = error { needsListCheck = false }
+            try checkpoint()
             throw error
         } catch {
             throw NoticeRequestFailure.publicationUnconfirmed
@@ -770,14 +826,17 @@ public final class NoticePublication {
         guard let id = noticeID else { throw NoticeRequestFailure.publicationUnconfirmed }
         for file in files where uploaded[file] == nil {
             uploaded[file] = try await repository.uploadImage(file: file)
+            try checkpoint()
         }
         if !files.isEmpty && !imagesAttached {
             try await repository.replaceImages(files.compactMap { uploaded[$0] }, id: id)
             imagesAttached = true
+            try checkpoint()
         }
         if !links.isEmpty && !linksAttached {
             try await repository.replaceLinks(links, id: id)
             linksAttached = true
+            try checkpoint()
         }
         if let poll {
             try await publishPoll {
@@ -806,12 +865,14 @@ public final class NoticePublication {
     ) async throws {
         if !needsPollCheck {
             needsPollCheck = true
+            try checkpoint()
             do {
                 try await create()
                 return
             } catch let error as NoticeRequestFailure {
                 if case .rejected = error { needsPollCheck = false }
                 if case .accessDenied = error { needsPollCheck = false }
+                try checkpoint()
                 throw error
             } catch {
                 try Task.checkCancellation()
@@ -821,6 +882,7 @@ public final class NoticePublication {
         case .matching: return
         case .absent:
             needsPollCheck = false
+            try checkpoint()
             throw NoticeRequestFailure.pollMissing
         case .different: throw NoticeRequestFailure.pollUnconfirmed
         }

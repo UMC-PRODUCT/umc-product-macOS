@@ -7,6 +7,7 @@ import CoreNetwork
 import Foundation
 import NoticeDomain
 import Testing
+import XCTest
 
 @testable import NoticeData
 
@@ -280,6 +281,78 @@ struct LiveNoticeRepositoryTests {
     }
 
     #if DEBUG
+        @MainActor
+        @Test("프로세스 강제 종료 뒤 공지·첨부 복원, 계정·포트 격리와 프로세스 잠금")
+        func recoverBetweenProcesses() async throws {
+            let fixture = try NoticeFixture()
+            defer { fixture.stop() }
+            let otherPort = try NoticeFixture()
+            defer { otherPort.stop() }
+            try fixture.mark("lose-notice")
+            let root = fixture.control
+            let bundle = Bundle(for: NoticePublicationChild.self).bundleURL
+            for phase in ["submit", "attachments", "finish"] {
+                let process = Process()
+                process.executableURL = URL(fileURLWithPath: CommandLine.arguments[0])
+                process.arguments = [
+                    "-XCTest", "NoticeDataTests.NoticePublicationChild/testPhase", bundle.path,
+                ]
+                var env = ProcessInfo.processInfo.environment.filter {
+                    !$0.key.hasPrefix("XCTest") && $0.key != "DYLD_INSERT_LIBRARIES"
+                }
+                env["NOTICE_PROCESS_PHASE"] = phase
+                env["NOTICE_PROCESS_ROOT"] = root.path
+                env["NOTICE_PROCESS_URL"] = fixture.url.absoluteString
+                process.environment = env
+                let log = root.appending(path: phase + ".log")
+                try Data().write(to: log)
+                let output = try FileHandle(forWritingTo: log)
+                process.standardOutput = output
+                process.standardError = output
+                try process.run()
+                defer { if process.isRunning { kill(process.processIdentifier, SIGKILL) } }
+                let clock = ContinuousClock()
+                let deadline = clock.now + .seconds(25)
+                while !fixture.exists("ready-" + phase), process.isRunning, clock.now < deadline {
+                    try await Task.sleep(for: .milliseconds(50))
+                }
+                guard fixture.exists("ready-" + phase) else {
+                    let logText = try String(contentsOf: log, encoding: .utf8)
+                    Issue.record("자식 프로세스 단계 실패 " + phase + " " + String(logText.suffix(1800)))
+                    return
+                }
+                if phase == "submit" {
+                    let repo = fixture.repository()
+                    do {
+                        _ = try await repo.openPublicationJournal(root: root)
+                        Issue.record("다른 프로세스가 작성 중이면 열 수 없습니다.")
+                    } catch {
+                        guard case .rejected = error as? NoticeRequestFailure else { throw error }
+                    }
+                    for isolated in [
+                        fixture.repository(token: "notice-other-writer-fixture"),
+                        otherPort.repository(),
+                    ] {
+                        let fresh = try await NoticePublication(
+                            journal: isolated.openPublicationJournal(root: root))
+                        #expect(fresh.input == nil && fresh.noticeID == nil)
+                    }
+                }
+                if phase != "finish" { kill(process.processIdentifier, SIGKILL) }
+                let exitDeadline = clock.now + .seconds(5)
+                while process.isRunning, clock.now < exitDeadline {
+                    try await Task.sleep(for: .milliseconds(25))
+                }
+                try #require(!process.isRunning)
+                if phase == "finish" { #expect(process.terminationStatus == 0) }
+            }
+            #expect(try fixture.count("posts-notice") == 1)
+            #expect(try fixture.count("posts-poll") == 1)
+            let reopened = try await NoticePublication(
+                journal: fixture.repository().openPublicationJournal(root: root))
+            #expect(reopened.input == nil)
+        }
+
         @Test("PUT 직전 계정 검사와 리디렉션 및 진행 중 계정 만료·취소")
         func signedUploadBoundary() async throws {
             let fixture = try NoticeFixture()
@@ -392,8 +465,93 @@ private struct NoticeFixture: Sendable {
     func stop() {
         if process.isRunning {
             process.terminate()
-            process.waitUntilExit()
+            // Foundation can miss an exit notification when other test suites reap children.
+            // The child owns no credentials or external resources. Its directory can be unlinked now.
         }
         try? FileManager.default.removeItem(at: control)
     }
 }
+
+#if DEBUG
+    /// A separate XCTest process runs one phase against the parent's synthetic server.
+    final class NoticePublicationChild: XCTestCase {
+        @MainActor
+        func testPhase() async throws {
+            let env = ProcessInfo.processInfo.environment
+            guard let step = env["NOTICE_PROCESS_PHASE"] else { return }
+            let root = URL(fileURLWithPath: try XCTUnwrap(env["NOTICE_PROCESS_ROOT"]))
+            let base = try XCTUnwrap(URL(string: try XCTUnwrap(env["NOTICE_PROCESS_URL"])))
+            let client = NetworkClient(
+                tokenStore: FixtureTokens(), refreshService: FixtureRefresh())
+            let repo = LiveNoticeRepository(
+                adapter: MoyaNetworkAdapter(networkClient: client),
+                environment: NetworkEnvironment(baseURL: base)
+            ) {}
+            let attempt = try await NoticePublication(
+                journal: repo.openPublicationJournal(root: root))
+            let original = root.appending(path: "synthetic.png")
+            switch step {
+            case "submit":
+                var draft = NoticeDraft()
+                draft.title = "재실행 합성 공지"
+                draft.content = "강제 종료 전 본문"
+                draft.shouldNotify = true
+                var poll = NoticePollDraft()
+                poll.title = "유지된 투표"
+                poll.options = ["가", "나"]
+                try Data([0, 1, 2]).write(to: original)
+                let input = try attempt.prepare(
+                    .init(
+                        gisu: "10", draft: draft, files: [original],
+                        links: ["https://example.test/relaunch"], poll: poll))
+                try FileManager.default.removeItem(at: original)
+                XCTAssertTrue(FileManager.default.isReadableFile(atPath: input.files[0].path))
+                do {
+                    _ = try await attempt.submit(draft, gisu: "10", repository: repo)
+                    XCTFail("응답 유실이 전달되어야 합니다.")
+                    return
+                } catch NoticeRequestFailure.publicationUnconfirmed {}
+            case "attachments":
+                let input = try XCTUnwrap(attempt.input)
+                XCTAssertTrue(attempt.needsListCheck)
+                do {
+                    _ = try await attempt.submit(input.draft, gisu: input.gisu, repository: repo)
+                    XCTFail("확인 전 두 번째 POST를 허용했습니다.")
+                    return
+                } catch NoticeRequestFailure.publicationUnconfirmed {}
+                try await attempt.findCandidates(input.draft, gisu: input.gisu, repository: repo)
+                let id = try XCTUnwrap(attempt.candidates.first?.id)
+                try await attempt.confirmCandidate(
+                    id, draft: input.draft, gisu: input.gisu, repository: repo)
+                try await attempt.saveAttachments(
+                    files: input.files, links: input.links, poll: input.poll, repository: repo)
+                // Uploaded and attached. Later recovery can proceed even if the local copy was lost.
+                try FileManager.default.removeItem(at: input.files[0])
+            case "finish":
+                let input = try XCTUnwrap(attempt.input)
+                XCTAssertTrue(
+                    attempt.imagesAttached && attempt.linksAttached && attempt.needsPollCheck)
+                _ = try attempt.prepare(input)
+                try await attempt.saveAttachments(
+                    files: input.files, links: input.links, poll: input.poll, repository: repo)
+                let id = try XCTUnwrap(attempt.noticeID)
+                let detail = try await repo.detail(id: id)
+                XCTAssertEqual(detail.title, input.draft.title)
+                XCTAssertEqual(detail.images?.count, 1)
+                XCTAssertEqual(detail.links?.map(\.url), input.links)
+                XCTAssertEqual(detail.vote?.title, input.poll?.title)
+                try attempt.finish()
+            default:
+                XCTFail("알 수 없는 자식 프로세스 단계")
+                return
+            }
+            try Data().write(to: root.appending(path: "ready-" + step))
+            if step != "finish" {
+                // The parent terminates this process while the journal lock is held.
+                try await Task.sleep(for: .seconds(40))
+                XCTFail("부모 프로세스가 종료를 요청하지 않았습니다.")
+            }
+            withExtendedLifetime(attempt) {}
+        }
+    }
+#endif

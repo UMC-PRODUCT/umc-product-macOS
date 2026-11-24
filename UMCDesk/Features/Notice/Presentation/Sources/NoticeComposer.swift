@@ -26,6 +26,7 @@ struct NoticeComposer: View {
     @State private var error: String?
     @State private var publication = NoticePublication()
     @State private var publishingTask: Task<Void, Never>?
+    @State private var restored = false
     @State private var confirmingNew = false
     @State private var discarding = false
     private var publishedID: String? { publication.noticeID }
@@ -70,7 +71,16 @@ struct NoticeComposer: View {
                 Section("공지 내용") {
                     TextField("제목", text: $draft.title)
                     TextField("본문", text: $draft.content, axis: .vertical).lineLimit(4...12)
-                    Picker("수신 대상", selection: $draft.noticeTab) {
+                    Picker(
+                        "수신 대상",
+                        selection: Binding(
+                            get: { draft.noticeTab },
+                            set: { tab in
+                                draft.noticeTab = tab
+                                selectScope("all")
+                                if tab == "SCHOOL_CORE" { draft.parts.removeAll() }
+                            })
+                    ) {
                         ForEach(noticeTabs, id: \.value) { item in Text(item.label).tag(item.value)
                         }
                     }
@@ -117,7 +127,8 @@ struct NoticeComposer: View {
                 }
             }
             .formStyle(.grouped)
-            .disabled(busy || publication.needsListCheck || publication.needsPollCheck)
+            .disabled(
+                !restored || busy || publication.needsListCheck || publication.needsPollCheck)
             if let error { Text(error).foregroundStyle(.red).textSelection(.enabled) }
             if publication.needsListCheck && !publication.candidates.isEmpty {
                 Text("게시한 공지를 선택하면 준비한 첨부와 투표를 저장합니다.")
@@ -134,6 +145,11 @@ struct NoticeComposer: View {
                 }.frame(maxHeight: 100).disabled(busy)
             }
             HStack {
+                if !restored {
+                    Button("작성 상태 다시 열기") { Task { await openJournal() } }.disabled(busy)
+                } else if publication.input != nil {
+                    Button("이 작성 시도 버리기") { discarding = true }.disabled(busy)
+                }
                 Button(publishedID == nil ? "취소" : "게시된 공지 열기") {
                     if let publishedID {
                         onPublished(publishedID)
@@ -161,13 +177,16 @@ struct NoticeComposer: View {
                         }
                     }
                     .keyboardShortcut(.defaultAction)
-                    .disabled((!valid && !publication.needsPollCheck) || busy)
+                    .disabled(
+                        !restored || publication.input.map { $0.gisu != gisu } == true
+                            || (!valid && !publication.needsPollCheck) || busy)
                 }
             }
         }
         .padding(24)
         .frame(minWidth: 460, idealWidth: 560, minHeight: 400, idealHeight: 600)
         .task {
+            await openJournal()
             do { organization = try await repository.organization(gisu: gisu) } catch {
                 self.error = error.localizedDescription
             }
@@ -178,12 +197,19 @@ struct NoticeComposer: View {
             "별도 공지로 작성할까요? 이미 게시됐다면 같은 공지와 알림이 중복될 수 있습니다.", isPresented: $confirmingNew
         ) {
             Button("별도 공지 작성") {
-                publication = NoticePublication()
-                error = nil
+                do {
+                    try publication.startSeparateNotice()
+                    error = nil
+                } catch { self.error = error.localizedDescription }
             }
         }
         .confirmationDialog("게시 결과 확인을 중단하고 작성 중인 첨부와 투표를 버릴까요?", isPresented: $discarding) {
-            Button("초안 버리기", role: .destructive) { dismiss() }
+            Button("초안 버리기", role: .destructive) {
+                do {
+                    try publication.finish()
+                    dismiss()
+                } catch { self.error = error.localizedDescription }
+            }
         }
         .fileImporter(
             isPresented: $importing, allowedContentTypes: [.jpeg, .png, .webP, .gif, .heic],
@@ -202,7 +228,7 @@ struct NoticeComposer: View {
 
     @ViewBuilder
     private var audience: some View {
-        Picker("범위", selection: $scope) {
+        Picker("범위", selection: Binding(get: { scope }, set: selectScope)) {
             Text("전체").tag("all")
             if draft.noticeTab == "CHALLENGER", organization?.chapters.isEmpty == false {
                 Text("지부").tag("chapter")
@@ -210,14 +236,6 @@ struct NoticeComposer: View {
             if draft.noticeTab != "CENTRAL_MEMBER", organization?.schools.isEmpty == false {
                 Text("학교").tag("school")
             }
-        }
-        .onChange(of: draft.noticeTab) { _, tab in
-            scope = "all"
-            if tab == "SCHOOL_CORE" { draft.parts.removeAll() }
-        }
-        .onChange(of: scope) { _, value in
-            draft.chapterId = value == "chapter" ? organization?.chapters.first?.chapterId : nil
-            draft.schoolId = value == "school" ? organization?.schools.first?.schoolId : nil
         }
         if scope == "chapter", let organization {
             Picker("지부", selection: $draft.chapterId) {
@@ -250,8 +268,43 @@ struct NoticeComposer: View {
         }.disabled(draft.noticeTab == "SCHOOL_CORE")
     }
 
+    private func selectScope(_ value: String) {
+        scope = value
+        draft.chapterId = value == "chapter" ? organization?.chapters.first?.chapterId : nil
+        draft.schoolId = value == "school" ? organization?.schools.first?.schoolId : nil
+    }
+
+    private func openJournal() async {
+        guard !busy, !restored else { return }
+        busy = true
+        defer { busy = false }
+        do {
+            let journal = try await repository.openPublicationJournal()
+            try Task.checkCancellation()
+            publication = try NoticePublication(journal: journal)
+            if let saved = publication.input {
+                draft = saved.draft
+                scope =
+                    draft.chapterId != nil ? "chapter" : (draft.schoolId != nil ? "school" : "all")
+                files = saved.files
+                linksText = saved.links.joined(separator: "\n")
+                usingPoll = saved.poll != nil
+                poll = saved.poll ?? NoticePollDraft()
+                error =
+                    saved.gisu == gisu
+                    ? "이전 작성 시도를 복원했습니다. 게시 결과와 첨부를 확인해 주세요."
+                    : "이전 기수의 작성 시도가 남아 있습니다. 새로 작성하려면 이 시도를 버려 주세요."
+            } else {
+                error = nil
+            }
+            restored = true
+        } catch {
+            if !Task.isCancelled { self.error = error.localizedDescription }
+        }
+    }
+
     private func recover(_ id: String?) {
-        guard publishingTask == nil else { return }
+        guard restored, publication.input?.gisu == gisu, publishingTask == nil else { return }
         busy = true
         error = nil
         publishingTask = Task {
@@ -278,7 +331,9 @@ struct NoticeComposer: View {
     }
 
     private func publish() async {
-        guard valid || publication.needsPollCheck, !busy else { return }
+        guard restored, publication.input.map({ $0.gisu == gisu }) != false,
+            valid || publication.needsPollCheck, !busy
+        else { return }
         busy = true
         error = nil
         defer { busy = false }
@@ -286,11 +341,22 @@ struct NoticeComposer: View {
             guard try await repository.canCompose(gisu: gisu) else {
                 throw NoticeRequestFailure.accessDenied
             }
+            if let publishedID,
+                !(try await repository.permissions(id: publishedID)).contains("EDIT")
+            {
+                throw NoticeRequestFailure.accessDenied
+            }
+            let saved = try publication.prepare(
+                .init(
+                    gisu: gisu, draft: draft, files: files, links: links,
+                    poll: usingPoll ? poll : nil))
+            files = saved.files
             let id = try await publication.submit(draft, gisu: gisu, repository: repository)
             try await publication.saveAttachments(
                 files: files, links: links,
                 poll: usingPoll ? poll : nil, repository: repository)
             try Task.checkCancellation()
+            try publication.finish()
             onPublished(id)
         } catch NoticeRequestFailure.accessDenied {
             if !Task.isCancelled { onAccessDenied() }

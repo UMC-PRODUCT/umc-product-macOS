@@ -26,6 +26,17 @@ public struct LiveNoticeRepository: NoticeRepository {
         self.environment = environment
     }
 
+    public func openPublicationJournal() async throws -> NoticePublicationJournal {
+        try await openPublicationJournal(root: nil)
+    }
+
+    func openPublicationJournal(root: URL?) async throws -> NoticePublicationJournal {
+        let member = try await currentMemberID()
+        try await validateAccount()
+        return try NoticePublicationJournal(
+            accountID: member, environment: environment.baseURL, root: root)
+    }
+
     public func currentMemberID() async throws -> String {
         let member: NoticeMemberIdentity = try await request("/api/v1/member/me")
         return member.id

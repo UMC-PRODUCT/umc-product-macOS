@@ -7,7 +7,6 @@
 
 import CommunityDomain
 import CoreDesignSystem
-import FoundationModels
 import ImageIO
 import SwiftUI
 import UniformTypeIdentifiers
@@ -51,7 +50,6 @@ private struct ConversationTimeline: View {
     @State private var model: ThreadConversationModel
     @State private var picking = false
     @State private var mentioning = false
-    @State private var unavailableSummary = false
     @State private var confirmingPhotos = false
     let management: (any ThreadManagementRepository)?
     @State private var reporting: ThreadConversationMessage?
@@ -59,7 +57,6 @@ private struct ConversationTimeline: View {
     @State private var deleting: ThreadConversationMessage?
     @State private var preview: ThreadConversationFile?
     @State private var editText = ""
-    @State private var summaryRequested = false
 
     init(thread: CommunityThread, accountID: String, repository: any ThreadConversationRepository,
          management: (any ThreadManagementRepository)?, defaults: UserDefaults) {
@@ -130,12 +127,6 @@ private struct ConversationTimeline: View {
         .frame(minHeight: 0, maxHeight: .infinity, alignment: .top)
         .background(UMCColor.Custom.backgroundDefault)
         .task { await model.observe(active: active) }
-        .task(id: summaryRequested) {
-            if summaryRequested {
-                await model.summarize()
-                summaryRequested = false
-            }
-        }
         .onDisappear { model.stop() }
         .fileImporter(
             isPresented: $picking, allowedContentTypes: [.jpeg, .png, .gif, .webP],
@@ -203,35 +194,7 @@ private struct ConversationTimeline: View {
     }
 
     private var summaryPanel: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Image(systemName: "sparkles")
-                Text(thread.unread == "0" ? "최근 대화" : "읽지 않은 메시지 \(thread.unread)개")
-                Spacer()
-                if model.summarizing { ProgressView().controlSize(.small) }
-                Button("요약 보기") {
-                    if SystemLanguageModel.default.availability == .available {
-                        summaryRequested = true
-                    } else {
-                        unavailableSummary = true
-                    }
-                }
-                .popover(isPresented: $unavailableSummary) {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("AI 요약을 사용할 수 없어요").font(.headline)
-                        Text("Apple Intelligence를 지원하고 활성화한 기기에서 이용할 수 있어요.")
-                    }.padding(16).frame(width: 300)
-                }
-                .disabled(
-                    model.summarizing
-                        || !model.messages.contains {
-                            !$0.isHidden && !$0.text.isEmpty
-                        }
-                )
-                .help("Apple Intelligence를 사용할 수 있을 때 최근 대화를 기기에서 요약해요.")
-            }
-            if let summary = model.summary { Text(summary).textSelection(.enabled) }
-        }.padding(14).background(UMCColor.Semantic.surfaceBrandWeak, in: .rect(cornerRadius: 12))
+        ThreadSummaryPanel(model: model, unread: thread.unread)
     }
 
     private func row(_ message: ThreadConversationMessage) -> some View {
