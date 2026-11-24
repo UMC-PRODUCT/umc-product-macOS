@@ -11,7 +11,12 @@ import SettingsPresentation
 final class AppSessionResetRelay {
     weak var settingsViewModel: SettingsViewModel?
 
+    weak var navigation: AppNavigation?
+    weak var matchingProgress: MatchingProgressController?
+
     func reset() async {
+        navigation?.resetAccount()
+        matchingProgress?.setAccount(nil)
         await settingsViewModel?.invalidateAccount()
     }
 }

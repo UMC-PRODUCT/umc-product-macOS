@@ -14,6 +14,9 @@ public actor NetworkClient {
 
     nonisolated let aquilaClient: Aquila.NetworkClient
     private let logoutTokens: LogoutTokenStore
+    public private(set) var sessionGeneration = UUID()
+    private var activeRequests = 0
+    private var drained: CheckedContinuation<Void, Never>?
     private var logoutTask: Task<String?, Error>?
     nonisolated static let logger = Aquila.VerboseLogger(redactedKeys: [
         "authorizationCode", "oAuthVerificationToken", "emailVerificationToken",
@@ -70,15 +73,37 @@ public actor NetworkClient {
         }
     }
 
+    func beginRequest(in generation: UUID) throws {
+        guard logoutTask == nil, generation == sessionGeneration else { throw CancellationError() }
+        activeRequests += 1
+    }
+
+    func endRequest() {
+        activeRequests -= 1
+        if activeRequests == 0 {
+            drained?.resume()
+            drained = nil
+        }
+    }
+
+    private func waitForRequests() async {
+        if activeRequests > 0 {
+            await withCheckedContinuation { drained = $0 }
+        }
+    }
+
     public func logout() async throws {
         _ = try await logoutReturningRefreshToken()
     }
 
     public func logoutReturningRefreshToken() async throws -> String? {
         if let logoutTask { return try await logoutTask.value }
+        sessionGeneration = UUID()
         let task = Task<String?, Error> {
             defer { logoutTask = nil }
             do {
+                // A new sign-in must wait until all requests holding the old credentials finish.
+                await waitForRequests()
                 try await aquilaClient.logout()
                 return await logoutTokens.takeClearedRefreshToken()
             } catch {
@@ -87,6 +112,11 @@ public actor NetworkClient {
         }
         logoutTask = task
         return try await task.value
+    }
+
+    public func invalidateSession(generation: UUID) async throws {
+        guard generation == sessionGeneration else { throw CancellationError() }
+        try await logout()
     }
 
     public func isLoggedIn() async -> Bool {

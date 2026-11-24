@@ -177,7 +177,7 @@ extension SettingsMemberResponse {
             for role in roleNames where !uniqueRoles.contains(role) { uniqueRoles.append(role) }
             return SettingsActivity(
                 id: identity, generation: activity.gisu ?? "", part: activity.part ?? "",
-                roles: uniqueRoles
+                roles: uniqueRoles, gisuId: activity.gisuId
             )
         }
         return SettingsProfile(

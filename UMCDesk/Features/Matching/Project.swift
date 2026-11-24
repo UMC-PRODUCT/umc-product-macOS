@@ -8,4 +8,9 @@
 import ProjectDescription
 import ProjectDescriptionHelpers
 
-let project = featureProject(name: "Matching")
+let project = featureProject(
+    name: "Matching",
+    includesDataTests: true,
+    includesPresentationTests: true,
+    presentationTestDependencies: [.target(name: "MatchingDomain")]
+)

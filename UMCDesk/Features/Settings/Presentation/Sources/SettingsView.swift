@@ -14,6 +14,9 @@ import SwiftUI
 public struct SettingsView: View {
     // MARK: - Property
 
+    private let onOpenMatching: (() -> Void)?
+    private let onOpenSettingsPage: (() -> Void)?
+    private let matchingContent: AnyView?
     @State private var viewModel: SettingsViewModel
     @State private var showsSearchSuggestions = false
     @FocusState private var searchFocus: SearchFocus?
@@ -63,7 +66,13 @@ public struct SettingsView: View {
         static let contentWidth: CGFloat = 760
     }
 
-    public init(viewModel: SettingsViewModel) {
+    public init(
+        viewModel: SettingsViewModel, onOpenMatching: (() -> Void)? = nil,
+        onOpenSettingsPage: (() -> Void)? = nil, matchingContent: AnyView? = nil
+    ) {
+        self.onOpenMatching = onOpenMatching
+        self.onOpenSettingsPage = onOpenSettingsPage
+        self.matchingContent = matchingContent
         _viewModel = State(initialValue: viewModel)
     }
 
@@ -77,7 +86,7 @@ public struct SettingsView: View {
                 .zIndex(1)
                 .simultaneousGesture(TapGesture().onEnded { dismissSearchSuggestions() })
             HStack(spacing: 0) {
-                if viewModel.page != .myPage {
+                if matchingContent == nil, viewModel.page != .myPage {
                     settingsSidebar
                         .foregroundStyle(sidebarPalette.textNeutralDefault)
                         .tint(sidebarPalette.textBrandDefault)
@@ -89,7 +98,10 @@ public struct SettingsView: View {
                         .frame(width: 1)
                         .accessibilityHidden(true)
                 }
-                pageContent
+                Group {
+                    if let matchingContent { matchingContent }
+                    else { pageContent }
+                }
                     .environment(\.settingsAppearancePalette, palette)
                     .background(palette.backgroundDefault)
                     .environment(\.colorScheme, palette.colorScheme ?? colorScheme)
@@ -154,7 +166,7 @@ public struct SettingsView: View {
                 accessibleProfileMenuFocus = .trigger
             }
         }
-        .toolbar { navigationToolbar }
+        .toolbar { if matchingContent == nil { navigationToolbar } }
         .toolbarBackground(UMCColor.Custom.backgroundAppShell, for: .windowToolbar)
         .toolbarBackgroundVisibility(.visible, for: .windowToolbar)
         .toolbarColorScheme(.dark, for: .windowToolbar)
@@ -192,7 +204,23 @@ public struct SettingsView: View {
                 railItem(AppLocalization.string("활동"), symbol: "calendar.badge.checkmark")
                 railItem(AppLocalization.string("스레드"), symbol: "bubble.left")
                 railItem(AppLocalization.string("프로젝트"), symbol: "square.grid.2x2")
-                railItem(AppLocalization.string("커뮤니티"), symbol: "person.2")
+                if let onOpenMatching {
+                    Button(action: onOpenMatching) {
+                        Image(systemName: "person.2")
+                            .frame(width: 44, height: 44)
+                            .contentShape(.rect)
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(sidebarChromeForeground)
+                    .background(
+                        matchingContent == nil ? Color.clear : UMCColor.Primitives.teal800,
+                        in: .rect(cornerRadius: UMCRadius.value8)
+                    )
+                    .accessibilityLabel("프로젝트 매칭")
+                    .help("프로젝트 매칭")
+                } else {
+                    railItem(AppLocalization.string("커뮤니티"), symbol: "person.2")
+                }
                 railItem(AppLocalization.string("도움말"), symbol: "questionmark.circle")
             }
             Spacer(minLength: UMCSpacing.value24)
@@ -254,11 +282,13 @@ public struct SettingsView: View {
                 profileMenuButton(
                     AppLocalization.string("마이페이지"), symbol: "person.crop.circle", focus: .myPage
                 ) {
+                    onOpenSettingsPage?()
                     viewModel.showProfile()
                 }
                 profileMenuButton(
                     AppLocalization.string("설정"), symbol: "gearshape", focus: .settings
                 ) {
+                    onOpenSettingsPage?()
                     viewModel.showSettings()
                 }
             }
@@ -356,13 +386,14 @@ public struct SettingsView: View {
             SettingsToolbarHost(content: HStack(spacing: UMCSpacing.value4) {
                     navigationButton(
                         AppLocalization.string("뒤로"), symbol: "chevron.left",
-                        isEnabled: viewModel.canGoBack
+                        isEnabled: matchingContent != nil || viewModel.canGoBack
                     ) {
-                    viewModel.goBack()
+                    if matchingContent != nil { onOpenSettingsPage?() }
+                    else { viewModel.goBack() }
                 }
                     navigationButton(
                         AppLocalization.string("앞으로"), symbol: "chevron.right",
-                        isEnabled: viewModel.canGoForward
+                        isEnabled: matchingContent == nil && viewModel.canGoForward
                     ) {
                     viewModel.goForward()
                 }
