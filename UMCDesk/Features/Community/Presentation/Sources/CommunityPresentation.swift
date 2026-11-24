@@ -148,44 +148,49 @@ private struct ThreadBrowser: View {
 
     private func rows(_ items: [CommunityThread]) -> some View {
         ForEach(items) { item in
-            HStack(alignment: .top) {
+            let selected = selection == item.id
+            let title = selected ? UMCColor.Semantic.textInverse : UMCColor.Semantic.textNeutralDefault
+            let detail = selected ? UMCColor.Semantic.textInverse : UMCColor.Semantic.textNeutralMedium600
+            HStack(alignment: .top, spacing: 8) {
                 Text(item.icon).accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(item.title).font(.headline).lineLimit(1)
-                        .foregroundStyle(CommunitySelectionTextStyle(
-                            isSelected: selection == item.id,
-                            isListFocused: resultsFocused,
-                            unselected: .primary
-                        ))
+                    Text(item.title).font(.headline).lineLimit(1).foregroundStyle(title)
                     if let category = item.category {
                         Text(["PROJECT": "프로젝트", "STUDY": "스터디",
                               "FREE": "자유", "QNA": "질문"][category] ?? category)
-                            .font(.caption).foregroundStyle(.secondary)
                     }
                     if item.membershipState == "KICKED" {
-                        Text("내보내짐 · 확인 필요").font(.caption)
+                        Text("내보내짐 · 확인 필요")
                     } else if let description = item.description, !description.isEmpty {
-                        Text(description).lineLimit(2).font(.caption)
-                            .foregroundStyle(CommunitySelectionTextStyle(
-                                isSelected: selection == item.id,
-                                isListFocused: resultsFocused,
-                                unselected: .secondary
-                            ))
+                        Text(description).lineLimit(2)
                     }
                     if item.membershipState != "KICKED" {
                         Text(item.isMuted ? "알림 꺼짐" : (item.isJoined ? "참여 중" : "미참여"))
-                            .font(.caption).foregroundStyle(.secondary)
                     }
                 }
+                .font(.caption)
                 Spacer(minLength: 2)
                 if item.isPinned { Image(systemName: "pin.fill").accessibilityLabel("고정됨") }
                 if item.unread != "0" {
                     Text(item.unread).font(.caption.bold())
-                        .padding(.horizontal, 5).padding(.vertical, 2)
+                        .foregroundStyle(UMCColor.Semantic.textBrandStrong)
+                        .padding(.horizontal, 6).padding(.vertical, 2)
                         .background(UMCColor.Semantic.surfaceBrandMedium, in: Capsule())
                         .accessibilityLabel("안 읽은 메시지 " + item.unread)
                 }
-            }.padding(.vertical, 4).tag(item.id)
+            }
+            .foregroundStyle(detail)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 8)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background {
+                if selected {
+                    RoundedRectangle(cornerRadius: 8).fill(UMCColor.Semantic.fillPrimaryInverseStronger600)
+                }
+            }
+            .listRowInsets(EdgeInsets())
+            .listRowBackground(UMCColor.Custom.backgroundDefault)
+            .tag(item.id)
         }
     }
 
