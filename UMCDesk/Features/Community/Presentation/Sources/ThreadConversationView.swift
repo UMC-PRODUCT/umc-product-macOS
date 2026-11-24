@@ -90,10 +90,10 @@ private struct ConversationTimeline: View {
                             offset == 0 || !sameDay(date, model.messages[offset - 1].createdAt)
                         {
                             HStack {
-                                Rectangle().frame(height: 1)
+                                Rectangle().fill(.separator).frame(height: 1)
                                 Text(date, format: .dateTime.month().day().weekday())
                                     .font(.caption).fixedSize()
-                                Rectangle().frame(height: 1)
+                                Rectangle().fill(.separator).frame(height: 1)
                             }.foregroundStyle(.secondary)
                         }
                         row(message)
@@ -208,45 +208,21 @@ private struct ConversationTimeline: View {
                     .accessibilityHidden(true)
             }
             VStack(alignment: own ? .trailing : .leading, spacing: 5) {
-                if !own && !message.author.isEmpty { Text(message.author).font(.caption) }
+                if !own && !message.author.isEmpty { Text(message.author).font(.caption.weight(.semibold)) }
                 VStack(alignment: .leading, spacing: 6) {
                     if let reply = message.replyID {
                         let original = model.messages.first { $0.id == reply && !$0.isHidden }
                         Label(original?.text ?? "메시지에 답장", systemImage: "arrowshape.turn.up.left")
-                            .font(.caption).lineLimit(2)
+                            .font(.caption).foregroundStyle(.secondary).lineLimit(2)
                     }
                     if !message.text.isEmpty { Text(message.text).textSelection(.enabled) }
                     if !message.files.isEmpty {
                         attachments(message.files)
                     }
-                }.padding(14)
-                    .background(
-                        own
-                            ? UMCColor.Semantic.surfaceBrandMedium
-                            : UMCColor.Custom.backgroundSurfaceGreyWeaker,
-                        in: .rect(cornerRadius: 14))
+                }
+                .modifier(MessageBubble(own: own))
                 if !message.isHidden {
-                    HStack(spacing: 4) {
-                        ForEach(message.reactions, id: \.emoji) { reaction in
-                            Button("\(reaction.emoji) \(reaction.count)") {
-                                react(reaction.emoji, message: message)
-                            }.tint(reaction.reactedByMe ? Color.accentColor : nil)
-                                .disabled(!active || model.busy)
-                        }
-                        if active {
-                            Menu("반응 추가", systemImage: "face.smiling") {
-                                ForEach(["👍", "❤️", "🔥", "🎉", "👀"], id: \.self) { emoji in
-                                    Button(emoji) { react(emoji, message: message) }
-                                }
-                                Button("답장") { model.selectReply(message.id) }
-                            }.labelStyle(.iconOnly).fixedSize().disabled(model.busy)
-                            if !own, management != nil {
-                                Menu("메시지 더보기", systemImage: "ellipsis") {
-                                    reportButton(message)
-                                }.labelStyle(.iconOnly).fixedSize()
-                            }
-                        }
-                    }
+                    messageActions(message, own: own)
                 }
                 if let date = date(message.createdAt) {
                     HStack(spacing: 4) {
@@ -272,14 +248,70 @@ private struct ConversationTimeline: View {
         }
     }
 
+    private func messageActions(_ message: ThreadConversationMessage, own: Bool) -> some View {
+        ViewThatFits(in: .horizontal) {
+            actionStrip(message, own: own)
+            ScrollView(.horizontal) { actionStrip(message, own: own) }
+        }
+    }
+
+    private func actionStrip(_ message: ThreadConversationMessage, own: Bool) -> some View {
+        HStack(spacing: 5) {
+            ForEach(message.reactions, id: \.emoji) { reaction in
+                Button {
+                    react(reaction.emoji, message: message)
+                } label: {
+                    HStack(spacing: 4) {
+                        Text(reaction.emoji)
+                        Text(reaction.count).font(.caption.weight(.semibold)).monospacedDigit()
+                        if reaction.reactedByMe {
+                            Image(systemName: "checkmark").font(.caption2.bold())
+                        }
+                    }
+                    .padding(.horizontal, 8)
+                    .frame(minHeight: 24)
+                    .foregroundStyle(reaction.reactedByMe
+                        ? UMCColor.Semantic.textBrandStrong : UMCColor.Semantic.textNeutralDefault)
+                    .modifier(ConversationGlass(shape: Capsule(), branded: reaction.reactedByMe,
+                                                interactive: true))
+                    .contentShape(Capsule())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("\(reaction.emoji) 반응 \(reaction.count)개")
+                .accessibilityAddTraits(reaction.reactedByMe ? .isSelected : [])
+                .disabled(!active || model.busy)
+            }
+            if active {
+                Menu("반응 추가", systemImage: "face.smiling") {
+                    ForEach(["👍", "❤️", "🔥", "🎉", "👀"], id: \.self) { emoji in
+                        Button(emoji) { react(emoji, message: message) }
+                    }
+                    Divider()
+                    Button("답장") { model.selectReply(message.id) }
+                }
+                .disabled(model.busy)
+                .help("반응 추가 또는 답장")
+                if !own, management != nil {
+                    Menu("메시지 더보기", systemImage: "ellipsis") {
+                        reportButton(message)
+                    }
+                    .help("메시지 더보기")
+                }
+            }
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .labelStyle(.iconOnly)
+        .fixedSize(horizontal: true, vertical: false)
+    }
+
     private func outgoingRow(_ item: ThreadConversationModel.Outgoing) -> some View {
         VStack(alignment: .trailing, spacing: 5) {
             VStack(alignment: .leading, spacing: 6) {
                 if !item.content.isEmpty { Text(item.content) }
                 if !item.files.isEmpty { Text("사진 \(item.files.count)장") }
             }
-            .padding(14)
-            .background(UMCColor.Semantic.surfaceBrandMedium, in: .rect(cornerRadius: 14))
+            .modifier(MessageBubble(own: true))
             if let failure = item.failure {
                 ViewThatFits(in: .horizontal) {
                     HStack { failedDelivery(item, reason: failure) }
@@ -372,14 +404,12 @@ private struct ConversationTimeline: View {
                     editText.unicodeScalars.count > 2_000)
             }
         }
-        .padding(16)
-        .background(UMCColor.Custom.backgroundSurfaceGreyWeaker, in: .rect(cornerRadius: 14))
-        .padding(.horizontal, 24).padding(.vertical, 12)
+        .modifier(ComposerPanel())
     }
 
     private var composer: some View {
         @Bindable var model = model
-        return VStack(alignment: .leading, spacing: 8) {
+        return VStack(alignment: .leading, spacing: 10) {
             if !model.draftIsOutgoing, let reply = model.reply {
                 HStack {
                     Label(
@@ -395,35 +425,104 @@ private struct ConversationTimeline: View {
                 }
             }
             TextField("메시지 보내기…", text: $model.composerText, axis: .vertical)
-                .textFieldStyle(.plain).lineLimit(1...6)
-            HStack {
-                Button("사진 첨부", systemImage: "plus") { picking = true }
-                    .disabled(!model.draftIsOutgoing && model.attachments.count >= 4)
-                Button("참여자 멘션", systemImage: "at") { mentioning = true }
-                    .popover(isPresented: $mentioning) {
-                        ConversationMentions(model: model) { person in
-                            model.mention(person)
-                            mentioning = false
-                        }
+                .textFieldStyle(.plain)
+                .font(.body)
+                .lineLimit(1...6)
+                .padding(.horizontal, 4)
+                .frame(minHeight: 30, alignment: .topLeading)
+            HStack(spacing: 6) {
+                Button { picking = true } label: {
+                    Label("사진 첨부", systemImage: "plus").frame(width: 28, height: 28)
+                }
+                .disabled(!model.draftIsOutgoing && model.attachments.count >= 4)
+                .help("사진 첨부")
+                Button { mentioning = true } label: {
+                    Label("참여자 멘션", systemImage: "at").frame(width: 28, height: 28)
+                }
+                .help("참여자 멘션")
+                .popover(isPresented: $mentioning) {
+                    ConversationMentions(model: model) { person in
+                        model.mention(person)
+                        mentioning = false
                     }
+                }
                 Spacer()
                 if model.composerText.unicodeScalars.count > 1_800 {
-                    Text("\(model.text.unicodeScalars.count) / 2,000").font(.caption)
+                    Text("\(model.composerText.unicodeScalars.count) / 2,000").font(.caption)
                 }
                 if model.busy { ProgressView().controlSize(.small) }
-                Button("메시지 전송", systemImage: "arrow.up.circle.fill") { requestSend() }
-                    .disabled(!model.canSend || model.draftIsOutgoing).keyboardShortcut(.return, modifiers: .command)
-            }.labelStyle(.iconOnly)
-        }.disabled(model.busy || !model.loaded)
-            .padding(16).background(
-                UMCColor.Custom.backgroundSurfaceGreyWeaker,
-                in: .rect(cornerRadius: 14)
-            )
-            .padding(.horizontal, 24).padding(.vertical, 12)
+                Button(action: requestSend) {
+                    Label("메시지 전송", systemImage: "arrow.up")
+                        .font(.body.weight(.semibold))
+                        .frame(width: 30, height: 30)
+                        .foregroundStyle(UMCColor.Semantic.textInverse)
+                        .background(model.canSend && !model.draftIsOutgoing
+                            ? UMCColor.Semantic.textNeutralDefault
+                            : UMCColor.Semantic.textDisabled, in: Circle())
+                        .contentShape(Circle())
+                }
+                .disabled(!model.canSend || model.draftIsOutgoing)
+                .keyboardShortcut(.return, modifiers: .command)
+                .help("메시지 전송 (⌘↩)")
+            }
+            .buttonStyle(.plain)
+            .labelStyle(.iconOnly)
+        }
+        .disabled(model.busy || !model.loaded)
+        .modifier(ComposerPanel())
     }
 
     private func requestSend() {
         if model.attachments.isEmpty { model.send() } else { confirmingPhotos = true }
+    }
+}
+
+private struct ComposerPanel: ViewModifier {
+    func body(content: Content) -> some View {
+        content
+            .padding(14)
+            .modifier(ConversationGlass(shape: RoundedRectangle(cornerRadius: 22)))
+            .padding(.horizontal, 20)
+            .padding(.vertical, 12)
+    }
+}
+
+private struct MessageBubble: ViewModifier {
+    let own: Bool
+
+    func body(content: Content) -> some View {
+        let shape = RoundedRectangle(cornerRadius: 16, style: .continuous)
+        content
+            .padding(.vertical, 10)
+            .padding(.horizontal, 14)
+            .foregroundStyle(UMCColor.Semantic.textNeutralDefault)
+            .modifier(ConversationGlass(shape: shape, branded: own))
+    }
+}
+
+private struct ConversationGlass<Surface: InsettableShape>: ViewModifier {
+    let shape: Surface
+    var branded = false
+    var interactive = false
+
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+    @Environment(\.colorSchemeContrast) private var contrast
+
+    func body(content: Content) -> some View {
+        if reduceTransparency || contrast == .increased {
+            content
+                .background(branded ? UMCColor.Semantic.surfaceBrandMedium
+                    : UMCColor.Custom.backgroundSurfaceGreyWeaker, in: shape)
+                .overlay {
+                    shape.strokeBorder(branded ? UMCColor.Semantic.borderPrimaryStrong500
+                        : UMCColor.Semantic.borderNeutralStronger600)
+                        .allowsHitTesting(false)
+                }
+        } else {
+            content.glassEffect(
+                .regular.tint(branded ? UMCColor.Semantic.fillPrimaryMedium100 : nil)
+                    .interactive(interactive), in: shape)
+        }
     }
 }
 
