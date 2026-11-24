@@ -31,7 +31,7 @@ jobs:
           # XCTest subprocesses can invoke developer tool shims without DEVELOPER_DIR.
           sudo xcode-select --switch "$DEVELOPER_DIR"
           env -u DEVELOPER_DIR /usr/bin/python3 --version
-          xcode_version="$(xcodebuild -version)"
+          xcode_version="$(env -u DEVELOPER_DIR xcodebuild -version)"
           echo "$xcode_version"
           grep -Fxq 'Xcode 27.2' <<< "$xcode_version"
       - name: Test automation scripts
