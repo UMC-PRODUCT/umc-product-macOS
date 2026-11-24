@@ -89,12 +89,14 @@ struct SettingsTransportTests {
     func avoidsUnauthenticatedRequest() async throws {
         let store = SettingsTestTokenStore()
         try await store.clear()
-        let repository = makeRepository(store: store)
+        let resetter = SettingsResetRecorder()
+        let repository = makeRepository(store: store, resetter: resetter)
         SettingsURLProtocol.state.resetRequest()
         await #expect(throws: SettingsError.authenticationRequired) {
             _ = try await repository.fetchProfile()
         }
         #expect(SettingsURLProtocol.state.lastRequest == nil)
+        #expect(await resetter.count == 0)
     }
 
     @Test("Terminal refresh failure clears tokens and resets the shared session")
@@ -120,15 +122,15 @@ struct SettingsTransportTests {
         }
     }
 
-    @Test("A second unauthorized response follows the shared retry policy")
-    func repeatedUnauthorizedPreservesSessionPolicy() async throws {
+    @Test("A second unauthorized response expires the rejected session")
+    func repeatedUnauthorizedExpiresSession() async throws {
         let store = SettingsTestTokenStore()
         let repository = makeRepository(store: store, refreshService: SettingsSuccessfulRefresh())
         SettingsURLProtocol.state.setResponse(status: 401, data: Data())
-        await #expect(throws: UMCFoundation.NetworkError.maxRetryExceeded) {
+        await #expect(throws: SettingsError.authenticationRequired) {
             _ = try await repository.fetchProfile()
         }
-        #expect(await store.getAccessToken() == "new-access")
+        #expect(await store.getAccessToken() == nil)
     }
 
     @Test("Challenger rejection preserves the server's specific guidance")

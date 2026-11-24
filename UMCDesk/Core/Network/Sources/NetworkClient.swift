@@ -7,13 +7,22 @@
 
 import Aquila
 import Foundation
+import Synchronization
 import UMCFoundation
+
+/// Hides account-owned UI before logout waits for outstanding requests and credential writes.
+public protocol SessionLogoutObserving: SessionResetting {
+    @MainActor func logoutWillBegin()
+}
 
 public actor NetworkClient {
     // MARK: - Property
 
     nonisolated let aquilaClient: Aquila.NetworkClient
+    private let logoutObserver: (any SessionLogoutObserving)?
     private let logoutTokens: LogoutTokenStore
+    nonisolated let accountScope: UUID?
+    private var loginTask: Task<Void, Error>?
     public private(set) var sessionGeneration = UUID()
     private var activeRequests = 0
     private var drained: CheckedContinuation<Void, Never>?
@@ -34,6 +43,8 @@ public actor NetworkClient {
         maxRetryCount: Int = 1,
         sessionResetter: (any SessionResetting)? = nil
     ) {
+        logoutObserver = sessionResetter as? any SessionLogoutObserving
+        self.accountScope = nil
         let logoutTokens = LogoutTokenStore(backing: tokenStore)
         self.logoutTokens = logoutTokens
         aquilaClient = Aquila.NetworkClient(
@@ -47,12 +58,48 @@ public actor NetworkClient {
         )
     }
 
+    private init(sharing client: NetworkClient, scope: UUID) {
+        logoutObserver = nil
+        accountScope = scope
+        aquilaClient = client.aquilaClient
+        logoutTokens = client.logoutTokens
+    }
+
+    public func boundToCurrentAccount() async throws -> NetworkClient {
+        if accountScope != nil {
+            try await validateScope()
+            return self
+        }
+        guard let scope = await logoutTokens.credentials()?.scope else { throw CancellationError() }
+        return NetworkClient(sharing: self, scope: scope)
+    }
+
+    nonisolated func validateScope() async throws {
+        if let accountScope, await logoutTokens.credentials()?.scope != accountScope {
+            throw CancellationError()
+        }
+    }
+
+    public func currentAccessToken() async throws -> String {
+        guard let credentials = await logoutTokens.credentials(),
+              accountScope == nil || accountScope == credentials.scope else {
+            throw CancellationError()
+        }
+        return credentials.accessToken
+    }
+
     // MARK: - Function
 
     public func request(_ urlRequest: URLRequest) async throws -> (Data, HTTPURLResponse) {
         do {
-            return try await aquilaClient.request(urlRequest)
+            try await validateScope()
+            let result = try await CredentialRequest.$scope.withValue(accountScope) {
+                try await aquilaClient.request(urlRequest)
+            }
+            try await validateScope()
+            return result
         } catch {
+            try await validateScope()
             throw Self.appError(from: error)
         }
     }
@@ -67,9 +114,40 @@ public actor NetworkClient {
 
     public func forceRefreshToken() async throws -> TokenPair {
         do {
-            return try await aquilaClient.forceRefreshToken()
+            try await validateScope()
+            let result = try await CredentialRequest.$scope.withValue(accountScope) {
+                try await aquilaClient.forceRefreshToken()
+            }
+            try await validateScope()
+            return result
         } catch {
             throw Self.appError(from: error)
+        }
+    }
+
+    public func signIn(_ authenticate: @escaping @Sendable () async throws -> TokenPair) async throws {
+        guard accountScope == nil, loginTask == nil, logoutTask == nil else { throw CancellationError() }
+        let task = Task {
+            guard !(await aquilaClient.hasAccessToken()) else { throw CancellationError() }
+            let pair = try await authenticate()
+            try Task.checkCancellation()
+            guard !pair.accessToken.isEmpty, !pair.refreshToken.isEmpty else {
+                throw UMCFoundation.NetworkError.invalidResponse
+            }
+            do {
+                try await logoutTokens.save(accessToken: pair.accessToken, refreshToken: pair.refreshToken)
+                try Task.checkCancellation()
+            } catch {
+                try await logoutTokens.clear()
+                throw error
+            }
+        }
+        loginTask = task
+        defer { loginTask = nil }
+        try await withTaskCancellationHandler {
+            try await task.value
+        } onCancel: {
+            task.cancel()
         }
     }
 
@@ -97,10 +175,19 @@ public actor NetworkClient {
     }
 
     public func logoutReturningRefreshToken() async throws -> String? {
+        guard accountScope == nil else { throw CancellationError() }
         if let logoutTask { return try await logoutTask.value }
+        let pendingLogin = loginTask
+        pendingLogin?.cancel()
+        logoutTokens.suspendAccountAccess()
         sessionGeneration = UUID()
         let task = Task<String?, Error> {
-            defer { logoutTask = nil }
+            await logoutObserver?.logoutWillBegin()
+            _ = await pendingLogin?.result
+            defer {
+                logoutTokens.resumeAccountAccess()
+                logoutTask = nil
+            }
             do {
                 // A new sign-in must wait until all requests holding the old credentials finish.
                 await waitForRequests()
@@ -120,7 +207,8 @@ public actor NetworkClient {
     }
 
     public func isLoggedIn() async -> Bool {
-        await aquilaClient.hasAccessToken()
+        guard let credentials = await logoutTokens.credentials() else { return false }
+        return accountScope == nil || accountScope == credentials.scope
     }
 
     nonisolated static func appError(
@@ -170,6 +258,8 @@ private struct AppTokenRefreshService: TokenRefreshService {
 
 private actor LogoutTokenStore: TokenStore {
     private let backing: any TokenStore
+    // Logout revokes all bound clients in the same actor turn that closes sign-in.
+    private let scope = Mutex<UUID?>(UUID())
     private var issuedRefreshToken: String?
     private var clearedRefreshToken: String?
 
@@ -177,8 +267,35 @@ private actor LogoutTokenStore: TokenStore {
         self.backing = backing
     }
 
-    func getAccessToken() async -> String? { await backing.getAccessToken() }
-    func getRefreshToken() async -> String? { await backing.getRefreshToken() }
+    nonisolated func suspendAccountAccess() {
+        scope.withLock { $0 = nil }
+    }
+
+    nonisolated func resumeAccountAccess() {
+        scope.withLock { $0 = UUID() }
+    }
+
+    func credentials() async -> (scope: UUID, accessToken: String)? {
+        guard let current = scope.withLock({ $0 }),
+              let token = await backing.getAccessToken(),
+              scope.withLock({ $0 == current }) else { return nil }
+        return (current, token)
+    }
+
+    func getAccessToken() async -> String? {
+        let token = await backing.getAccessToken()
+        return permitsRead ? token : nil
+    }
+
+    func getRefreshToken() async -> String? {
+        let token = await backing.getRefreshToken()
+        return permitsRead ? token : nil
+    }
+
+    private var permitsRead: Bool {
+        guard let expected = CredentialRequest.scope else { return true }
+        return scope.withLock { $0 == expected }
+    }
 
     func save(accessToken: String, refreshToken: String) async throws {
         try await backing.save(accessToken: accessToken, refreshToken: refreshToken)
@@ -191,6 +308,9 @@ private actor LogoutTokenStore: TokenStore {
     }
 
     func clear() async throws {
+        scope.withLock {
+            if $0 != nil { $0 = UUID() }
+        }
         let refreshToken: String?
         if let issuedRefreshToken {
             refreshToken = issuedRefreshToken
@@ -206,4 +326,8 @@ private actor LogoutTokenStore: TokenStore {
         defer { clearedRefreshToken = nil }
         return clearedRefreshToken
     }
+}
+
+enum CredentialRequest {
+    @TaskLocal static var scope: UUID?
 }

@@ -165,7 +165,7 @@ struct SettingsAppearanceTests {
             window.setContentSize(size)
             host.layoutSubtreeIfNeeded()
             window.displayIfNeeded()
-            #expect(size.width == (dialog == .editLinks ? 560 : 440))
+            #expect(size.width == (dialog == .editLinks ? 640 : 440))
             #expect(size.height <= 680)
             let fields = descendants(in: host, type: NSTextField.self).filter(\.isEditable)
                 #expect(

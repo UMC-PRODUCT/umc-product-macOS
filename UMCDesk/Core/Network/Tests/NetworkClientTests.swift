@@ -319,6 +319,147 @@ struct NetworkClientTests {
         }
     }
 
+    // MARK: - 계정에 귀속된 클라이언트
+
+    @Test("같은 계정의 401은 갱신된 토큰으로 한 번만 재시도한다",
+          arguments: AccountTransport.allCases)
+    fileprivate func boundClientRefreshes(transport: AccountTransport) async throws {
+        let store = MockTokenStore(accessToken: "first", refreshToken: "first-refresh")
+        let refresh = MockTokenRefreshService(behavior: .success(
+            TokenPair(accessToken: "rotated", refreshToken: "rotated-refresh")
+        ))
+        let root = makeClient(store: store, refresh: refresh)
+        let bound = try await root.boundToCurrentAccount()
+        StubURLProtocol.handler = { request in
+            let authorized = request.value(forHTTPHeaderField: "Authorization") == "Bearer rotated"
+            return (Data(), authorized ? 200 : 401, nil)
+        }
+
+        #expect(try await bound.currentAccessToken() == "first")
+        #expect(try await transport.status(using: bound) == 200)
+        let rebound = try await bound.boundToCurrentAccount()
+        #expect(try await rebound.currentAccessToken() == "rotated")
+        #expect(await refresh.receivedRefreshTokens == ["first-refresh"])
+        #expect(await store.getRefreshToken() == "rotated-refresh")
+        #expect(StubURLProtocol.capturedRequests.map {
+            $0.value(forHTTPHeaderField: "Authorization")
+        } == ["Bearer first", "Bearer rotated"])
+    }
+
+    @Test("계정 전환 후 이전 클라이언트의 진행 중인 응답과 새 요청을 거절한다",
+          arguments: AccountTransport.allCases, [200, 401])
+    fileprivate func boundClientRejectsPreviousAccount(
+        transport: AccountTransport, delayedStatus: Int
+    ) async throws {
+        let store = MockTokenStore(accessToken: "first", refreshToken: "first-refresh")
+        let refresh = MockTokenRefreshService(behavior: .failure(.invalidRefreshToken))
+        let root = makeClient(store: store, refresh: refresh)
+        let first = try await root.boundToCurrentAccount()
+
+        // Hold only the stubbed transport response. Token operations remain free to finish.
+        let (started, signal) = AsyncStream<Void>.makeStream()
+        let release = DispatchSemaphore(value: 0)
+        StubURLProtocol.handler = { _ in
+            signal.yield()
+            guard release.wait(timeout: .now() + 5) == .success else { throw URLError(.timedOut) }
+            return (Data(), delayedStatus, nil)
+        }
+        let pending = _Concurrency.Task<Int, Error> {
+            defer { signal.finish() }
+            return try await transport.status(using: first)
+        }
+        defer { release.signal() }
+        var arrival = started.makeAsyncIterator()
+        _ = try #require(await arrival.next())
+        try await root.logout()
+        await #expect(throws: CancellationError.self) { _ = try await root.boundToCurrentAccount() }
+        try await root.signIn { TokenPair(accessToken: "second", refreshToken: "second-refresh") }
+        release.signal()
+
+        await #expect(throws: CancellationError.self) { _ = try await pending.value }
+        await #expect(throws: CancellationError.self) { _ = try await first.currentAccessToken() }
+        await #expect(throws: CancellationError.self) { _ = try await transport.status(using: first) }
+        #expect(StubURLProtocol.capturedRequests.map {
+            $0.value(forHTTPHeaderField: "Authorization")
+        } == ["Bearer first"])
+        #expect(await refresh.callCount == 0)
+
+        let second = try await root.boundToCurrentAccount()
+        #expect(try await second.currentAccessToken() == "second")
+        #expect(await store.getRefreshToken() == "second-refresh")
+        #expect(await store.clearCallCount == 1)
+        #expect(await store.saveCallCount == 1)
+    }
+
+    @Test("설정 요청이 끝나기 전 로그아웃하면 기존 REST 요청과 STOMP 토큰 읽기를 즉시 거절한다")
+    func logoutRevokesAccountWhileSettingsRequestDrains() async throws {
+        let store = MockTokenStore(accessToken: "first", refreshToken: "first-refresh")
+        let refresh = MockTokenRefreshService(behavior: .failure(.invalidRefreshToken))
+        let root = makeClient(store: store, refresh: refresh)
+        let first = try await root.boundToCurrentAccount()
+        let generation = await root.sessionGeneration
+        let adapter = MoyaNetworkAdapter(networkClient: root)
+        let (started, signal) = AsyncStream<Void>.makeStream()
+        let release = DispatchSemaphore(value: 0)
+        StubURLProtocol.handler = { _ in
+            signal.yield()
+            guard release.wait(timeout: .now() + 5) == .success else { throw URLError(.timedOut) }
+            return (Data(), 200, nil)
+        }
+        let settings = _Concurrency.Task {
+            defer { signal.finish() }
+            let target = AdapterTarget(query: AdapterQuery(search: "profile"))
+            return try await adapter.request(target, in: generation).statusCode
+        }
+        defer { release.signal() }
+        var arrival = started.makeAsyncIterator()
+        _ = try #require(await arrival.next())
+        let logout = _Concurrency.Task { try await root.logoutReturningRefreshToken() }
+        while await root.sessionGeneration == generation { await _Concurrency.Task.yield() }
+
+        #expect(await store.getAccessToken() == "first")
+        #expect(await first.isLoggedIn() == false)
+        await #expect(throws: CancellationError.self) { _ = try await first.currentAccessToken() }
+        await #expect(throws: CancellationError.self) { _ = try await root.currentAccessToken() }
+        await #expect(throws: CancellationError.self) { _ = try await root.boundToCurrentAccount() }
+        for transport in AccountTransport.allCases {
+            await #expect(throws: CancellationError.self) {
+                _ = try await transport.status(using: first)
+            }
+        }
+        await #expect(throws: CancellationError.self) {
+            try await root.signIn { TokenPair(accessToken: "second", refreshToken: "second-refresh") }
+        }
+        #expect(StubURLProtocol.capturedRequests.count == 1)
+        #expect(await store.clearCallCount == 0)
+
+        release.signal()
+        #expect(try await settings.value == 200)
+        #expect(try await logout.value == "first-refresh")
+        try await root.signIn { TokenPair(accessToken: "second", refreshToken: "second-refresh") }
+        await #expect(throws: CancellationError.self) { _ = try await first.currentAccessToken() }
+        let second = try await root.boundToCurrentAccount()
+        #expect(try await second.currentAccessToken() == "second")
+    }
+
+    @Test("만료된 클라이언트는 새 계정에 재바인딩하거나 자격 증명을 갱신·삭제할 수 없다")
+    func expiredAccountCannotRebind() async throws {
+        let store = MockTokenStore(accessToken: "first", refreshToken: "first-refresh")
+        let refresh = MockTokenRefreshService(behavior: .failure(.invalidRefreshToken))
+        let root = makeClient(store: store, refresh: refresh)
+        let first = try await root.boundToCurrentAccount()
+        try await root.logout()
+        try await root.signIn { TokenPair(accessToken: "second", refreshToken: "second-refresh") }
+
+        await #expect(throws: CancellationError.self) { _ = try await first.boundToCurrentAccount() }
+        await #expect(throws: CancellationError.self) { _ = try await first.forceRefreshToken() }
+        await #expect(throws: CancellationError.self) { try await first.logout() }
+        #expect(await first.isLoggedIn() == false)
+        #expect(await refresh.callCount == 0)
+        #expect(await store.getAccessToken() == "second")
+        #expect(await store.getRefreshToken() == "second-refresh")
+    }
+
     @Test("Adapter query DTO preserves URL encoding and skips authentication")
     func adapterEncodesQueryWithoutAuth() async throws {
         let refresh = MockTokenRefreshService(behavior: .failure(.invalidRefreshToken))
@@ -438,4 +579,20 @@ private struct AdapterTarget: TargetType {
         .requestParameters(parameters: query.toParameters, encoding: URLEncoding.queryString)
     }
     var headers: [String: String]? { nil }
+}
+
+private enum AccountTransport: CaseIterable, Sendable {
+    case urlRequest
+    case moya
+
+    func status(using client: NetworkClient) async throws -> Int {
+        switch self {
+        case .urlRequest:
+            let url = URL(string: "https://api.umc.test/api/v1/me")!
+            return try await client.request(URLRequest(url: url)).1.statusCode
+        case .moya:
+            let adapter = MoyaNetworkAdapter(networkClient: client)
+            return try await adapter.request(AdapterTarget(query: AdapterQuery(search: ""))).statusCode
+        }
+    }
 }

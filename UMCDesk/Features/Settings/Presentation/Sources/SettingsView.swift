@@ -9,16 +9,24 @@ import UMCFoundation
 import AppKit
 import CoreDesignSystem
 import SettingsDomain
+import CoreRouting
+import CoreUIComponents
 import SwiftUI
 
 public struct SettingsView: View {
     // MARK: - Property
 
-    private let onOpenMatching: (() -> Void)?
-    private let onOpenSettingsPage: (() -> Void)?
-    private let matchingContent: AnyView?
+    @Environment(\.openWindow) private var openWindow
     @State private var viewModel: SettingsViewModel
+    private let onSelectSection: ((DeskSection?) -> Void)?
+    private let section: DeskSection?
+    private let matchingSelected: Bool
+    private let onOpenMatching: (() -> Void)?
+    private let featureContent: AnyView?
+    @State private var pendingSearchResultID: String?
     @State private var showsSearchSuggestions = false
+    @State private var railHelpFocus = UMCWindowButtonFocus()
+    @State private var tabbedPastSearchResults = false
     @FocusState private var searchFocus: SearchFocus?
 
     private enum SearchFocus: Hashable {
@@ -61,18 +69,21 @@ public struct SettingsView: View {
     }
 
     fileprivate enum Constants {
+        static let backTab = KeyEquivalent("\u{19}")
         static let railWidth: CGFloat = 44
         static let sidebarWidth: CGFloat = 271
         static let contentWidth: CGFloat = 760
     }
 
-    public init(
-        viewModel: SettingsViewModel, onOpenMatching: (() -> Void)? = nil,
-        onOpenSettingsPage: (() -> Void)? = nil, matchingContent: AnyView? = nil
-    ) {
+    public init(viewModel: SettingsViewModel, section: DeskSection? = nil,
+                featureContent: AnyView? = nil, matchingSelected: Bool = false,
+                onOpenMatching: (() -> Void)? = nil,
+                onSelectSection: ((DeskSection?) -> Void)? = nil) {
+        self.matchingSelected = matchingSelected
         self.onOpenMatching = onOpenMatching
-        self.onOpenSettingsPage = onOpenSettingsPage
-        self.matchingContent = matchingContent
+        self.section = section
+        self.featureContent = featureContent
+        self.onSelectSection = onSelectSection
         _viewModel = State(initialValue: viewModel)
     }
 
@@ -86,7 +97,7 @@ public struct SettingsView: View {
                 .zIndex(1)
                 .simultaneousGesture(TapGesture().onEnded { dismissSearchSuggestions() })
             HStack(spacing: 0) {
-                if matchingContent == nil, viewModel.page != .myPage {
+                if featureContent == nil, viewModel.page != .myPage {
                     settingsSidebar
                         .foregroundStyle(sidebarPalette.textNeutralDefault)
                         .tint(sidebarPalette.textBrandDefault)
@@ -99,7 +110,7 @@ public struct SettingsView: View {
                         .accessibilityHidden(true)
                 }
                 Group {
-                    if let matchingContent { matchingContent }
+                    if let featureContent { featureContent }
                     else { pageContent }
                 }
                     .environment(\.settingsAppearancePalette, palette)
@@ -154,8 +165,18 @@ public struct SettingsView: View {
         }
         .defaultFocus($searchFocus, nil)
         .onChange(of: searchFocus) { _, focus in
-            if focus == .field { showsSearchSuggestions = true }
-            else if focus == nil { showsSearchSuggestions = false }
+            if focus == .field {
+                // AppKit wraps back to search when the page has no eligible next key view.
+                let event = NSApp.currentEvent
+                let wrapped = tabbedPastSearchResults && event?.type != .leftMouseDown &&
+                    event?.modifierFlags.contains(.shift) != true
+                tabbedPastSearchResults = false
+                if wrapped, railHelpFocus.focus() {
+                    showsSearchSuggestions = false
+                } else {
+                    showsSearchSuggestions = true
+                }
+            } else if focus == nil { showsSearchSuggestions = false }
         }
         .onChange(of: viewModel.searchText) { _, _ in
             if searchFocus == .field { showsSearchSuggestions = true }
@@ -166,7 +187,7 @@ public struct SettingsView: View {
                 accessibleProfileMenuFocus = .trigger
             }
         }
-        .toolbar { if matchingContent == nil { navigationToolbar } }
+        .toolbar { if featureContent == nil { navigationToolbar } }
         .toolbarBackground(UMCColor.Custom.backgroundAppShell, for: .windowToolbar)
         .toolbarBackgroundVisibility(.visible, for: .windowToolbar)
         .toolbarColorScheme(.dark, for: .windowToolbar)
@@ -199,29 +220,50 @@ public struct SettingsView: View {
     private var appRail: some View {
         VStack(spacing: 0) {
             VStack(spacing: 0) {
-                railItem(AppLocalization.string("홈"), symbol: "house")
-                railItem(AppLocalization.string("공지"), symbol: "megaphone")
-                railItem(AppLocalization.string("활동"), symbol: "calendar.badge.checkmark")
-                railItem(AppLocalization.string("스레드"), symbol: "bubble.left")
-                railItem(AppLocalization.string("프로젝트"), symbol: "square.grid.2x2")
+                ForEach(DeskSection.allCases, id: \.self) { item in
+                    if let onSelectSection {
+                        Button { onSelectSection(item) } label: {
+                            Image(systemName: item.symbol)
+                                .frame(width: 44, height: 44)
+                                .contentShape(.rect)
+                        }
+                        .buttonStyle(SettingsPlainButtonStyle())
+                        .foregroundStyle(sidebarChromeForeground)
+                        .background(section == item ? UMCColor.Primitives.teal800 : .clear,
+                                    in: .rect(cornerRadius: UMCRadius.value8))
+                        .accessibilityAddTraits(section == item ? .isSelected : [])
+                        .accessibilityLabel(item.title)
+                        .help(item.title)
+                    } else {
+                        railItem(item.title, symbol: item.symbol)
+                    }
+                }
                 if let onOpenMatching {
                     Button(action: onOpenMatching) {
-                        Image(systemName: "person.2")
+                        Image(systemName: "person.2.badge.gearshape")
                             .frame(width: 44, height: 44)
-                            .contentShape(.rect)
                     }
-                    .buttonStyle(.plain)
-                    .foregroundStyle(sidebarChromeForeground)
-                    .background(
-                        matchingContent == nil ? Color.clear : UMCColor.Primitives.teal800,
-                        in: .rect(cornerRadius: UMCRadius.value8)
-                    )
+                    .buttonStyle(SettingsPlainButtonStyle())
+                    .background(matchingSelected ? UMCColor.Primitives.teal800 : .clear,
+                                in: .rect(cornerRadius: UMCRadius.value8))
+                    .accessibilityAddTraits(matchingSelected ? .isSelected : [])
                     .accessibilityLabel("프로젝트 매칭")
                     .help("프로젝트 매칭")
-                } else {
-                    railItem(AppLocalization.string("커뮤니티"), symbol: "person.2")
                 }
-                railItem(AppLocalization.string("도움말"), symbol: "questionmark.circle")
+                SettingsHelpButton(foreground: sidebarChromeForeground, focusTarget: railHelpFocus) {
+                    openWindow(id: DeskWindow.support)
+                }
+                .onKeyPress(keys: [.tab, Constants.backTab]) { press in
+                    guard featureContent == nil, viewModel.page != .myPage else { return .ignored }
+                    let backwards = press.modifiers.contains(.shift) || press.key == Constants.backTab
+                    guard !backwards || !railHelpFocus.hasFollowingKeyView else { return .ignored }
+                    tabbedPastSearchResults = false
+                    showsSearchSuggestions = true
+                    searchFocus = backwards ? searchFocusRows.last ?? .field : .field
+                    return .handled
+                }
+                .modifier(SettingsTooltip(
+                    title: AppLocalization.string("도움말"), isSuppressed: showsProfileMenu))
             }
             Spacer(minLength: UMCSpacing.value24)
             Button { showsProfileMenu.toggle() } label: {
@@ -282,13 +324,13 @@ public struct SettingsView: View {
                 profileMenuButton(
                     AppLocalization.string("마이페이지"), symbol: "person.crop.circle", focus: .myPage
                 ) {
-                    onOpenSettingsPage?()
+                    onSelectSection?(nil)
                     viewModel.showProfile()
                 }
                 profileMenuButton(
                     AppLocalization.string("설정"), symbol: "gearshape", focus: .settings
                 ) {
-                    onOpenSettingsPage?()
+                    onSelectSection?(nil)
                     viewModel.showSettings()
                 }
             }
@@ -386,14 +428,13 @@ public struct SettingsView: View {
             SettingsToolbarHost(content: HStack(spacing: UMCSpacing.value4) {
                     navigationButton(
                         AppLocalization.string("뒤로"), symbol: "chevron.left",
-                        isEnabled: matchingContent != nil || viewModel.canGoBack
+                        isEnabled: viewModel.canGoBack
                     ) {
-                    if matchingContent != nil { onOpenSettingsPage?() }
-                    else { viewModel.goBack() }
+                    viewModel.goBack()
                 }
                     navigationButton(
                         AppLocalization.string("앞으로"), symbol: "chevron.right",
-                        isEnabled: matchingContent == nil && viewModel.canGoForward
+                        isEnabled: viewModel.canGoForward
                     ) {
                     viewModel.goForward()
                 }
@@ -483,7 +524,7 @@ public struct SettingsView: View {
                 .contentShape(.rect)
                 .onTapGesture { dismissSearchSuggestions() }
         }
-        .onKeyPress(keys: [.downArrow, .upArrow, .tab]) { press in
+        .onKeyPress(keys: [.downArrow, .upArrow, .tab, Constants.backTab]) { press in
             moveSearchFocus(press)
         }
     }
@@ -616,20 +657,28 @@ public struct SettingsView: View {
         }
     }
 
+    private var searchFocusRows: [SearchFocus] {
+        if viewModel.isSearching { return viewModel.searchResults.map { .result($0.id) } }
+        return suggestionItems.map(\.focus)
+    }
+
     private func moveSearchFocus(_ press: KeyPress) -> KeyPress.Result {
         guard viewModel.isSearching || showsSearchSuggestions else { return .ignored }
-        let rows = viewModel.isSearching ? viewModel.searchResults.map {
-            SearchFocus.result($0.id)
-        } : suggestionItems.map(\.focus)
-        let positions: [SearchFocus] = [.field] + rows
+        let positions: [SearchFocus] = [.field] + searchFocusRows
         guard let focus = searchFocus, let index = positions.firstIndex(of: focus) else {
             return .ignored
         }
-        let backwards = press.key == .upArrow || press.modifiers.contains(.shift)
+        let backwards = press.key == .upArrow || press.key == Constants.backTab ||
+            press.modifiers.contains(.shift)
         let next = index + (backwards ? -1 : 1)
         guard positions.indices.contains(next) else {
-            if press.key == .tab {
+            if press.key == .tab || press.key == Constants.backTab {
                 showsSearchSuggestions = false
+                if backwards || !railHelpFocus.hasFollowingKeyView {
+                    tabbedPastSearchResults = false
+                    return railHelpFocus.focus() ? .handled : .ignored
+                }
+                tabbedPastSearchResults = true
                 return .ignored
             }
             return .handled
@@ -639,12 +688,14 @@ public struct SettingsView: View {
     }
 
     private func dismissSearchSuggestions() {
+        tabbedPastSearchResults = false
         showsSearchSuggestions = false
         searchFocus = nil
     }
 
     private func selectSearchResult(_ result: SettingsSearchResult) {
         viewModel.selectSearchResult(result)
+        pendingSearchResultID = result.id
         dismissSearchSuggestions()
     }
 
@@ -682,30 +733,37 @@ public struct SettingsView: View {
         if viewModel.page == .myPage {
             SettingsProfileView(viewModel: viewModel)
         } else {
-            ScrollView {
-                VStack(alignment: .leading, spacing: UMCSpacing.value24) {
-                    VStack(alignment: .leading, spacing: UMCSpacing.value4) {
-                        Text(viewModel.page.title)
-                            .umcTypography(.title1Bold)
-                            .accessibilityAddTraits(.isHeader)
-                        Text(AppLocalization.string("이 Mac에서 사용하는 앱의 환경을 설정하세요."))
-                            .umcTypography(.bodyRegular)
-                            .foregroundStyle(palette.textNeutralWeak500)
+            ScrollViewReader { proxy in
+                ScrollView {
+                    VStack(alignment: .leading, spacing: UMCSpacing.value24) {
+                        VStack(alignment: .leading, spacing: UMCSpacing.value4) {
+                            Text(viewModel.page.title)
+                                .umcTypography(.title1Bold)
+                                .accessibilityAddTraits(.isHeader)
+                            Text(AppLocalization.string("이 Mac에서 사용하는 앱의 환경을 설정하세요."))
+                                .umcTypography(.bodyRegular)
+                                .foregroundStyle(palette.textNeutralWeak500)
+                        }
+                        switch viewModel.page {
+                        case .general: SettingsGeneralView(viewModel: viewModel)
+                        case .appearance: SettingsAppearanceView(viewModel: viewModel)
+                        case .notifications: SettingsNotificationsView(viewModel: viewModel)
+                        case .privacy: SettingsPrivacyView(viewModel: viewModel)
+                        case .about: SettingsAboutView(viewModel: viewModel)
+                        case .myPage: EmptyView()
+                        }
                     }
-                    switch viewModel.page {
-                    case .general: SettingsGeneralView(viewModel: viewModel)
-                    case .appearance: SettingsAppearanceView(viewModel: viewModel)
-                    case .notifications: SettingsNotificationsView(viewModel: viewModel)
-                    case .privacy: SettingsPrivacyView(viewModel: viewModel)
-                    case .about: SettingsAboutView(viewModel: viewModel)
-                    case .myPage: EmptyView()
-                    }
+                    .frame(maxWidth: Constants.contentWidth, alignment: .leading)
+                    .padding(UMCSpacing.value32)
+                    .frame(maxWidth: .infinity, alignment: .center)
                 }
-                .frame(maxWidth: Constants.contentWidth, alignment: .leading)
-                .padding(UMCSpacing.value32)
-                .frame(maxWidth: .infinity, alignment: .center)
+                .scrollBounceBehavior(.basedOnSize)
+                .onChange(of: pendingSearchResultID) { _, identifier in
+                    guard let identifier else { return }
+                    proxy.scrollTo(identifier, anchor: .center)
+                    pendingSearchResultID = nil
+                }
             }
-            .scrollBounceBehavior(.basedOnSize)
         }
     }
 

@@ -50,10 +50,14 @@ public final class SettingsViewModel {
     }
     var dialog: SettingsDialog?
     var dialogMessage: String?
-    private(set) var linkEditorFocus: SettingsLinkKind = .github
+    private(set) var linkEditorFocus: SettingsLinkKind?
     var linkDraft = SettingsProfileLinks()
     var linkErrors: [SettingsLinkKind: String] = [:]
-    var challengerCode = "" { didSet { if codeStep == .entry { dialogMessage = nil } } }
+    var challengerCode = "" {
+        didSet {
+            if challengerCode != oldValue, codeStep == .entry { dialogMessage = nil }
+        }
+    }
     var codeStep: SettingsCodeStep = .entry
     var registeredActivities: [SettingsActivity] = []
     var toast: SettingsToast?
@@ -136,9 +140,18 @@ public final class SettingsViewModel {
     public func showProfile() { navigate(to: .myPage) }
     public func showSettings() { navigate(to: .general) }
 
-    public func invalidateAccount() async {
-        guard !isLoggingOut else { return }
+    public func refreshSignedInAccount() async {
+        discardAccountState()
+        await refreshProfile(showsToast: false)
+    }
+
+    public func discardAccountState() {
         clearAccount()
+        isLoggingOut = false
+    }
+
+    public func invalidateAccount() async {
+        discardAccountState()
         await systemActions.clearAccountNotifications()
     }
 
@@ -178,7 +191,7 @@ public final class SettingsViewModel {
         await refreshCacheSize()
     }
 
-    func refreshProfile(showsToast: Bool = true) async {
+    public func refreshProfile(showsToast: Bool = true) async {
         guard !isRefreshing, !isAccountBusy else { return }
         let generation = accountGeneration
         isRefreshing = true
@@ -209,7 +222,7 @@ public final class SettingsViewModel {
         }
     }
 
-    func editLinks(focusing kind: SettingsLinkKind = .github) {
+    func editLinks(focusing kind: SettingsLinkKind? = nil) {
         guard let profile, !isAccountBusy else { return }
         linkEditorFocus = kind
         linkDraft = profile.links
@@ -315,7 +328,7 @@ public final class SettingsViewModel {
         isLoggingOut = true
         isRefreshing = false
         dialogMessage = nil
-        defer { isLoggingOut = false }
+        defer { if accountGeneration == generation { isLoggingOut = false } }
         do {
             try await useCase.logout()
             guard generation == accountGeneration else { return }
@@ -448,16 +461,18 @@ public final class SettingsViewModel {
 
     private func handleAuthentication(_ error: any Error) async -> Bool {
         guard error as? SettingsError == .authenticationRequired else { return false }
+        let hadAccount = profile != nil
         clearAccount()
-        profileState = .failed(SettingsError.authenticationRequired)
-        await systemActions.clearAccountNotifications()
+        if hadAccount { await systemActions.clearAccountNotifications() }
         return true
     }
 
     private func finishLogout() async {
         clearAccount()
+        isLoggingOut = false
+        let generation = accountGeneration
         await systemActions.clearAccountNotifications()
-        onLogout?()
+        if generation == accountGeneration { onLogout?() }
     }
 
     private func clearAccount() {

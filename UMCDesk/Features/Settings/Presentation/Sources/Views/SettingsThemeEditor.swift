@@ -41,6 +41,7 @@ struct SettingsThemeEditor: View {
                 }
                 .accessibilityLabel(AppLocalization.string("테마 선택, \(theme.name)"))
             }
+            .id("colorTheme")
             SettingsDivider()
             DisclosureGroup {
                 VStack(alignment: .leading, spacing: UMCSpacing.value16) {
@@ -98,6 +99,7 @@ struct SettingsThemeEditor: View {
                     .umcTypography(.headlineRegular)
             }
             .disclosureGroupStyle(SettingsColorDisclosureStyle())
+            .id("themeColors")
             if hasLowContrast {
                 HStack(alignment: .top, spacing: UMCSpacing.value8) {
                     Label(

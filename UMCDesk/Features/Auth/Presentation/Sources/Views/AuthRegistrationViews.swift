@@ -5,6 +5,7 @@
 //  Created by euijjang97 on 10/10/26.
 //
 
+import AuthDomain
 import UMCFoundation
 import CoreDesignSystem
 import CoreUIComponents
@@ -31,16 +32,25 @@ struct AuthRegistration: View {
                             placeholder: AppLocalization.string("이름을 입력해 주세요."),
                             text: $form.name, field: .name, focus: $focusedField
                         )
+                        .onSubmit { focusedField = .nickname }
                         AuthTextField(
                             AppLocalization.string("닉네임"),
                             placeholder: AppLocalization.string("닉네임을 입력해 주세요."),
                             text: $form.nickname, field: .nickname, focus: $focusedField
                         )
+                        .onSubmit { focusedField = .email }
                     }
-                    AuthEmailVerificationFields(form: form, focus: $focusedField)
+                    AuthEmailVerificationFields(viewModel: viewModel, form: form, focus: $focusedField)
                     AuthSchoolPicker(form: form)
+                    if viewModel.repository != nil && (form.schools.isEmpty || form.terms.isEmpty) {
+                        Button("학교·약관 다시 불러오기") {
+                            Task { await viewModel.loadRegistrationOptions() }
+                        }
+                    }
                     if form.emailVerification == .verified && !form.school.isEmpty {
-                        AuthPasswordFields(form: form, focus: $focusedField)
+                        AuthPasswordFields(
+                            form: form, focus: $focusedField, submit: viewModel.completeRegistration
+                        )
                             .transition(AuthMotion.pageTransition(reduceMotion: reduceMotion))
                     }
                     AuthTermsAgreement(form: form)
@@ -57,6 +67,7 @@ struct AuthRegistration: View {
                 }
             }
         }
+        .task { await viewModel.loadRegistrationOptions() }
         .onAppear { focusedField = form.initialFocus }
         .animation(AuthMotion.animation(reduceMotion: reduceMotion),
             value: form.emailVerification)
@@ -81,16 +92,13 @@ struct AuthPasswordReset: View {
             )
             VStack(spacing: UMCSpacing.value32) {
                 VStack(spacing: UMCSpacing.value20) {
-                    AuthEmailVerificationFields(form: form, focus: $focusedField)
-                    AuthPasswordFields(form: form, focus: $focusedField, isReset: true)
+                    AuthEmailVerificationFields(viewModel: viewModel, form: form, focus: $focusedField)
+                    AuthPasswordFields(form: form, focus: $focusedField, isReset: true,
+                                       submit: viewModel.resetPassword)
                 }
                 VStack(spacing: UMCSpacing.value16) {
                     AuthButton(title: AppLocalization.string("비밀번호 변경")) {
-                        if form.canResetPassword {
-                            viewModel.navigate(to: .passwordResetComplete)
-                        } else {
-                            form.showsPasswordError = true
-                        }
+                        viewModel.resetPassword()
                     }
                     .disabled(form.emailVerification != .verified || form.password.isEmpty)
                     AuthButton(title: AppLocalization.string("로그인으로 돌아가기"), kind: .tertiary) {
@@ -104,6 +112,7 @@ struct AuthPasswordReset: View {
 }
 
 private struct AuthEmailVerificationFields: View {
+    let viewModel: AuthViewModel
     @Bindable var form: AuthFormState
     let focus: FocusState<AuthField?>.Binding
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -119,12 +128,9 @@ private struct AuthEmailVerificationFields: View {
                     isInvalid: form.showsEmailError,
                     showsClear: focus.wrappedValue == .email
                 )
+                .onSubmit { viewModel.sendVerification() }
                 AuthButton(title: buttonTitle) {
-                    if form.requestVerificationCode() {
-                        focus.wrappedValue = .verificationCode
-                    } else {
-                        focus.wrappedValue = .email
-                    }
+                    viewModel.sendVerification()
                 }
                 .frame(width: 183)
                 .disabled(!form.canSubmitEmailVerification)
@@ -143,15 +149,9 @@ private struct AuthEmailVerificationFields: View {
                             text: $form.verificationCode, field: .verificationCode, focus: focus,
                             isInvalid: form.emailVerification == .invalid
                         )
+                        .onSubmit { viewModel.verifyCode() }
                         AuthButton(title: AppLocalization.string("인증번호 확인")) {
-                            #if DEBUG || UMC_PRERELEASE
-                            if form.verificationCode != "123456" {
-                                form.emailVerification = .invalid
-                                return
-                            }
-                            #endif
-                            form.emailVerification = .verified
-                            focus.wrappedValue = nil
+                            viewModel.verifyCode()
                         }
                         .frame(width: 183)
                         .disabled(
@@ -166,6 +166,13 @@ private struct AuthEmailVerificationFields: View {
                     }
                 }
                 .transition(AuthMotion.pageTransition(reduceMotion: reduceMotion))
+            }
+        }
+        .onChange(of: form.emailVerification) { _, state in
+            switch state {
+            case .sent, .invalid: focus.wrappedValue = .verificationCode
+            case .verified: focus.wrappedValue = viewModel.screen == .passwordReset ? .password : nil
+            case .idle: break
             }
         }
         .animation(AuthMotion.animation(reduceMotion: reduceMotion),
@@ -185,6 +192,7 @@ private struct AuthPasswordFields: View {
     @Bindable var form: AuthFormState
     let focus: FocusState<AuthField?>.Binding
     var isReset = false
+    let submit: () -> Void
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
@@ -192,11 +200,12 @@ private struct AuthPasswordFields: View {
             HStack(alignment: .top, spacing: UMCSpacing.value12) {
                 AuthTextField(
                     isReset ? AppLocalization.string("새 비밀번호") : AppLocalization.string("비밀번호"),
-                    placeholder: AppLocalization.string("숫자, 특수문자를 포함한 8자리 이상"),
+                    placeholder: AppLocalization.string("문자·숫자·기호 중 2종류, 8~64자"),
                     text: $form.password, field: .password, focus: focus,
                     isSecure: true, showsValue: $form.showsPassword,
                     isDisabled: form.emailVerification != .verified
                 )
+                .onSubmit { focus.wrappedValue = .passwordConfirmation }
                 AuthTextField(
                     isReset
                         ? AppLocalization.string("새 비밀번호 확인") : AppLocalization.string("비밀번호 확인"),
@@ -205,6 +214,7 @@ private struct AuthPasswordFields: View {
                     isSecure: true, showsValue: $form.showsPasswordConfirmation,
                     isDisabled: form.emailVerification != .verified
                 )
+                .onSubmit { submit() }
             }
             if form.showsPasswordError {
                 Text(AppLocalization.string("입력 조건을 충족하지 않거나 비밀번호가 일치하지 않아요."))
@@ -276,16 +286,25 @@ private struct AuthSchoolOptions: View {
     @Bindable var form: AuthFormState
     @State private var hoveredSchool: String?
 
+    private var schools: [RegistrationSchool] {
+        #if DEBUG || UMC_PRERELEASE
+        if !form.usesServerTerms {
+            return AuthPreviewSchool.all.map { RegistrationSchool(id: $0.id, name: $0.name) }
+        }
+        #endif
+        return form.schools
+    }
+
     var body: some View {
         ScrollView {
             VStack(spacing: 0) {
-                #if DEBUG || UMC_PRERELEASE
-                ForEach(AuthPreviewSchool.all) { school in
+                ForEach(schools) { school in
                     Button {
+                        form.schoolID = school.id
                         form.school = school.name
                         form.showsSchoolPicker = false
                     } label: {
-                        Text(school.label)
+                        Text(school.name)
                             .umcTypography(.title4Regular)
                             .frame(maxWidth: .infinity, minHeight: 48, alignment: .leading)
                             .padding(.horizontal, UMCSpacing.value16)
@@ -297,7 +316,6 @@ private struct AuthSchoolOptions: View {
                     .buttonStyle(.plain)
                     .onHover { hoveredSchool = $0 ? school.id : nil }
                 }
-                #endif
             }
         }
         .padding(UMCSpacing.value4)
@@ -313,25 +331,51 @@ private struct AuthSchoolOptions: View {
 
 private struct AuthTermsAgreement: View {
     @Bindable var form: AuthFormState
+    @Environment(\.openURL) private var openURL
     @State private var selectedTerm: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: UMCSpacing.value8) {
             Toggle(AppLocalization.string("전체 약관 동의"), isOn: Binding(
-                get: { form.agreesToService && form.agreesToPrivacy },
-                set: { form.agreesToService = $0; form.agreesToPrivacy = $0 }
+                get: {
+                    if form.usesServerTerms {
+                        return !form.terms.isEmpty && form.acceptedTerms.count == form.terms.count
+                    }
+                    return form.agreesToService && form.agreesToPrivacy
+                },
+                set: { value in
+                    form.agreesToService = value
+                    form.agreesToPrivacy = value
+                    form.acceptedTerms = value ? Set(form.terms.map(\.id)) : []
+                }
             ))
             .frame(minHeight: 40)
             Rectangle()
                 .fill(UMCColor.Semantic.borderNeutralMedium300)
                 .frame(height: 1)
                 .accessibilityHidden(true)
-            AuthTermRow(
-                title: AppLocalization.string("[필수] 서비스 이용약관"), isOn: $form.agreesToService
-            ) { selectedTerm = AppLocalization.string("서비스 이용약관") }
-            AuthTermRow(
-                title: AppLocalization.string("[필수] 개인정보 처리방침"), isOn: $form.agreesToPrivacy
-            ) { selectedTerm = AppLocalization.string("개인정보 처리방침") }
+            if form.usesServerTerms {
+                ForEach(form.terms) { term in
+                    AuthTermRow(
+                        title: (term.isMandatory ? "[필수] " : "[선택] ") + term.title,
+                        isOn: Binding(get: { form.acceptedTerms.contains(term.id) }, set: {
+                            if $0 { form.acceptedTerms.insert(term.id) }
+                            else { form.acceptedTerms.remove(term.id) }
+                        })
+                    ) {
+                        if let url = URL(string: term.link), url.scheme == "https" {
+                            openURL(url)
+                        } else { selectedTerm = term.title }
+                    }
+                }
+            } else {
+                AuthTermRow(
+                    title: AppLocalization.string("[필수] 서비스 이용약관"), isOn: $form.agreesToService
+                ) { selectedTerm = AppLocalization.string("서비스 이용약관") }
+                AuthTermRow(
+                    title: AppLocalization.string("[필수] 개인정보 처리방침"), isOn: $form.agreesToPrivacy
+                ) { selectedTerm = AppLocalization.string("개인정보 처리방침") }
+            }
         }
         .toggleStyle(UMCCheckboxStyle())
         .umcTypography(.title3Regular)

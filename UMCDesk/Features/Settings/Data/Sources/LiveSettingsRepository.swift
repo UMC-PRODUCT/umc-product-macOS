@@ -81,7 +81,7 @@ public struct LiveSettingsRepository: SettingsRepository {
     private func accountError(_ error: Error, generation: UUID) async throws -> Error {
         if let networkError = error as? NetworkError {
             switch networkError {
-            case .unauthorized, .noRefreshToken, .tokenRefreshFailed:
+            case .unauthorized, .noRefreshToken, .tokenRefreshFailed, .maxRetryExceeded:
                 try await client.invalidateSession(generation: generation)
                 return SettingsError.authenticationRequired
             case .requestFailed(_, let data):

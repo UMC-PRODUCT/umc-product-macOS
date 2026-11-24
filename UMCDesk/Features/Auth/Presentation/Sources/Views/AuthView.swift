@@ -5,9 +5,22 @@
 //  Created by euijjang97 on 10/10/26.
 //
 
+import AuthDomain
 import CoreDesignSystem
 import SwiftUI
 import UMCFoundation
+
+public enum AuthEntry {
+    case login, challenger, withdrawal
+
+    var screen: AuthScreen {
+        switch self {
+        case .login: .loginSelection
+        case .challenger: .challengerIntro
+        case .withdrawal: .withdrawalConfirmation
+        }
+    }
+}
 
 public struct AuthView: View {
     // MARK: - Property
@@ -15,16 +28,38 @@ public struct AuthView: View {
     @State private var viewModel: AuthViewModel
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    fileprivate enum Constants {
-        static let sidebarWidth: CGFloat = 576
-        static let sidebarFraction: CGFloat = 0.4
-        static let referenceViewportWidth: CGFloat = 864
-    }
-
     // MARK: - Init
 
+    #if DEBUG || UMC_PRERELEASE
     public init() {
         _viewModel = State(initialValue: AuthViewModel())
+    }
+
+    #endif
+
+    public init(login: @escaping @MainActor (String, String) async throws -> Void) {
+        let model = AuthViewModel()
+        model.login = login
+        _viewModel = State(initialValue: model)
+    }
+
+    public init(
+        login: @escaping @MainActor (String, String) async throws -> Void,
+        repository: any AuthFlowRepository, entry: AuthEntry = .login,
+        onSignOut: (@MainActor () async throws -> Void)? = nil,
+        onMemberRefresh: (@MainActor () async throws -> Void)? = nil,
+        onCloseAccount: (() -> Void)? = nil
+    ) {
+        let model = AuthViewModel()
+        model.login = login
+        model.repository = repository
+        model.entry = entry
+        model.navigate(to: entry.screen)
+        model.onCloseAccount = onCloseAccount
+        model.onSignOut = onSignOut
+        model.onMemberRefresh = onMemberRefresh
+        model.form.usesServerTerms = true
+        _viewModel = State(initialValue: model)
     }
 
     init(viewModel: AuthViewModel) {
@@ -34,48 +69,32 @@ public struct AuthView: View {
     // MARK: - Body
 
     public var body: some View {
-        HStack(spacing: 0) {
-            AuthBrandPanel(
-                quote: viewModel.quoteOverride.map { AppLocalization.string($0) }
-                    ?? viewModel.screen.copy.quote,
-                author: viewModel.authorOverride.map { AppLocalization.string($0) }
-                    ?? viewModel.screen.copy.author,
-                category: viewModel.screen.copy.category
-            )
-            // Figma pins the brand panel to Light in both screen appearances.
-            .environment(\.colorScheme, .light)
-            .containerRelativeFrame(.horizontal) { width, _ in
-                min(width * Constants.sidebarFraction, Constants.sidebarWidth)
+        AuthPageLayout(
+            screen: viewModel.screen,
+            quote: viewModel.quoteOverride.map { AppLocalization.string($0) }
+                ?? viewModel.screen.copy.quote,
+            author: viewModel.authorOverride.map { AppLocalization.string($0) }
+                ?? viewModel.screen.copy.author
+        ) {
+            ZStack {
+                AuthPageContent(screen: viewModel.screen, viewModel: viewModel)
+                    .id(viewModel.navigationID)
+                    .transition(AuthMotion.pageTransition(reduceMotion: reduceMotion))
             }
-
-            ScrollView {
-                ZStack {
-                    AuthPageContent(screen: viewModel.screen, viewModel: viewModel)
-                        .id(viewModel.navigationID)
-                        .transition(AuthMotion.pageTransition(reduceMotion: reduceMotion))
-                }
-                .containerRelativeFrame(.horizontal) { viewportWidth, _ in
-                    let availableWidth = max(0, viewportWidth - UMCSpacing.value64)
-                    let scale = max(1, viewportWidth / Constants.referenceViewportWidth)
-                    let preferredWidth = viewModel.screen.contentWidth * scale
-                    return min(availableWidth, min(
-                        preferredWidth, viewModel.screen.maximumContentWidth
-                    ))
-                }
-                .padding(UMCSpacing.value32)
-                .frame(minWidth: 0, maxWidth: .infinity)
-                .animation(AuthMotion.animation(reduceMotion: reduceMotion),
-                    value: viewModel.navigationID)
-            }
-            .defaultScrollAnchor(.center, for: .alignment)
-            .scrollBounceBehavior(.basedOnSize)
-            .frame(minWidth: 0, maxWidth: .infinity)
+            .animation(AuthMotion.animation(reduceMotion: reduceMotion),
+                value: viewModel.navigationID)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
-        .background(UMCColor.Custom.backgroundDefault)
-        .tint(UMCColor.Semantic.textBrandDefault)
+        .disabled(viewModel.isSigningIn || viewModel.isWorking)
+        .overlay { if viewModel.isSigningIn || viewModel.isWorking { ProgressView() } }
+        .task {
+            if viewModel.entry == .login && !viewModel.hasCheckedStatus { viewModel.checkStatus() }
+        }
+        .alert("안내", isPresented: Binding(
+            get: { viewModel.notice != nil }, set: { if !$0 { viewModel.notice = nil } }
+        )) { Button("확인", role: .cancel) {} } message: { Text(viewModel.notice ?? "") }
+        .onDisappear { viewModel.cancelLogin() }
         #if DEBUG || UMC_PRERELEASE
-        .focusedSceneValue(\.authPreviewModel, $viewModel)
+        .focusedSceneValue(\.authPreviewModel, viewModel.login == nil ? $viewModel : nil)
         .task(id: viewModel.navigationID) { await viewModel.runPreviewFlow() }
         .onAppear {
             let arguments = ProcessInfo.processInfo.arguments
@@ -88,6 +107,55 @@ public struct AuthView: View {
             }
         }
         #endif
+    }
+}
+
+private enum AuthLayoutMetrics {
+    static let sidebarWidth: CGFloat = 576
+    static let sidebarFraction: CGFloat = 0.4
+    static let referenceViewportWidth: CGFloat = 864
+}
+
+struct AuthPageLayout<Content: View>: View {
+    let screen: AuthScreen
+    let quote: String
+    let author: String
+    @ViewBuilder let content: Content
+
+    var body: some View {
+        HStack(spacing: 0) {
+            AuthBrandPanel(
+                quote: quote,
+                author: author,
+                category: screen.copy.category
+            )
+            // Figma pins the brand panel to Light in both screen appearances.
+            .environment(\.colorScheme, .light)
+            .containerRelativeFrame(.horizontal) { width, _ in
+                min(width * AuthLayoutMetrics.sidebarFraction, AuthLayoutMetrics.sidebarWidth)
+            }
+
+            ScrollView {
+                content
+                    .containerRelativeFrame(.horizontal) { viewportWidth, _ in
+                        let availableWidth = max(0, viewportWidth - UMCSpacing.value64)
+                        let reference = AuthLayoutMetrics.referenceViewportWidth
+                        let scale = max(1, viewportWidth / reference)
+                        let preferredWidth = screen.contentWidth * scale
+                        return min(availableWidth, min(
+                            preferredWidth, screen.maximumContentWidth
+                        ))
+                    }
+                    .padding(UMCSpacing.value32)
+                    .frame(minWidth: 0, maxWidth: .infinity)
+            }
+            .defaultScrollAnchor(.center, for: .alignment)
+            .scrollBounceBehavior(.basedOnSize)
+            .frame(minWidth: 0, maxWidth: .infinity)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+        .background(UMCColor.Custom.backgroundDefault)
+        .tint(UMCColor.Semantic.textBrandDefault)
     }
 }
 

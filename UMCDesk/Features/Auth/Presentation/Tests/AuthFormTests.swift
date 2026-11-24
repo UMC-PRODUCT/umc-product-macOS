@@ -5,11 +5,65 @@
 //  Created by euijjang97 on 10/10/26.
 //
 
+import Foundation
 import Testing
 @testable import AuthPresentation
 
 @MainActor
 struct AuthFormTests {
+    @Test("A direct withdrawal cancellation returns to the account host")
+    func directWithdrawalCancellation() {
+        let model = AuthViewModel()
+        var didClose = false
+        model.entry = .withdrawal
+        model.onCloseAccount = { didClose = true }
+        model.navigate(to: .withdrawalConfirmation)
+        model.cancelAccountAction()
+        #expect(didClose)
+        #expect(!model.withdrew)
+    }
+
+    @Test("Public pre-release metadata requires matching uploaded assets and official notes")
+    func validatesReleaseContract() throws {
+        let base = "https://github.com/UMC-PRODUCT/umc-product-macOS/releases"
+        let tag = "v0.0.1-build.10"
+        let prefix = "\(base)/download/\(tag)/"
+        let name = "UMC-Desk-0.0.1-build10.dmg"
+        let notes = "\(base)/tag/\(tag)"
+        let manifest: [String: Any] = [
+            "status": "available", "version": "0.0.1", "dmgUrl": prefix + name,
+            "notesUrl": notes, "sizeBytes": 200,
+        ]
+        func release(_ manifest: [String: Any], draft: Bool = false) throws -> [String: Any] {
+            let json = try JSONSerialization.data(withJSONObject: manifest)
+            return [
+                "tag_name": tag, "draft": draft, "prerelease": true,
+                "body": "```json\n" + String(decoding: json, as: UTF8.self) + "\n```",
+                "assets": [("release.json", 50), (name, 200)].map { name, size in
+                    ["name": name, "size": size, "state": "uploaded",
+                     "browser_download_url": prefix + name] as [String: Any]
+                },
+            ]
+        }
+        let valid = try release(manifest)
+        let entries = [
+            valid, try release(manifest, draft: true),
+            try release(manifest.merging(["notesUrl": "https://example.com"]) { $1 }),
+            try release(manifest.merging(["sizeBytes": 100]) { $1 }),
+            valid.merging(["assets": []]) { $1 },
+        ]
+        let data = try JSONSerialization.data(withJSONObject: entries)
+        let page = try AuthReleaseCatalog.releases(in: data)
+        #expect(page.count == 5)
+        #expect(page.valid.count == 1)
+        let latest = try #require(page.valid.first)
+        #expect(latest.notes.absoluteString == notes)
+        let installed = try #require(AuthReleaseVersion(version: "0.0.1", build: "9"))
+        let newerVersion = try #require(AuthReleaseVersion(version: "0.0.10", build: "1"))
+        #expect(installed < latest.version)
+        #expect(latest.version < newerVersion)
+    }
+
     @Test("Moving between authentication screens preserves entered form data")
     func navigationPreservesInput() {
         let viewModel = AuthViewModel()
@@ -194,10 +248,10 @@ struct AuthFormTests {
         #expect(!form.canRegister)
     }
 
-    @Test("Password input needs eight characters including a number and special character")
+    @Test("Password input needs eight characters with two character classes")
     func passwordRequirements() {
         let form = AuthFormState()
-        for password in ["short1!", "password!", "password1", "password "] {
+        for password in ["short1!", "password", "12345678", "password "] {
             form.password = password
             form.passwordConfirmation = password
             #expect(!form.passwordsMatchRequirements)

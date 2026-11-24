@@ -7,10 +7,25 @@
 
 import UMCFoundation
 import CoreDesignSystem
+import CoreRouting
+import CoreUIComponents
 import SwiftUI
 
+public enum SettingsPublishedDocument: String, Identifiable {
+    case service, privacy
+    public var id: Self { self }
+}
+
+extension EnvironmentValues {
+    @Entry public var settingsPublishedDocument: (@MainActor (SettingsPublishedDocument, @escaping () -> Void) -> AnyView)?
+}
+
 struct SettingsAboutView: View {
+    @Environment(\.settingsPublishedDocument) private var publishedDocument
+    @State private var selectedDocument: SettingsPublishedDocument?
+
     @Environment(\.settingsAppearancePalette) private var palette
+    @Environment(\.openWindow) private var openWindow
     @Bindable var viewModel: SettingsViewModel
     @Environment(\.openURL) private var openURL
 
@@ -32,50 +47,41 @@ struct SettingsAboutView: View {
                                 .foregroundStyle(palette.textNeutralWeak500)
                         }
                     }
+                    .id("appVersion")
                     SettingsDivider()
                     Text(AppLocalization.string("게시된 릴리스를 조회하며, 업데이트를 자동으로 설치하지 않아요."))
                         .umcTypography(.bodyRegular)
                         .foregroundStyle(palette.textNeutralMedium600)
                     SettingsRow(
-                        title: AppLocalization.string("업데이트"), description: releaseDescription
+                        title: AppLocalization.string("업데이트"), description: AppLocalization.string("공개 GitHub Releases에서 게시된 버전을 확인해요.")
                     ) {
-                        SettingsActionButton(
-                            title: viewModel.isCheckingRelease
-                                ? AppLocalization.string("확인 중")
-                                :
-                            AppLocalization.string("업데이트 확인"), kind: .brand) {
-                            Task { await viewModel.checkRelease() }
-                        }
-                        .disabled(viewModel.isCheckingRelease)
-                    }
-                    if let release = viewModel.release {
-                        HStack {
-                            Text(AppLocalization.string("게시된 릴리스: \(release.tag)"))
-                                .umcTypography(.bodyRegular)
-                            Spacer()
-                            SettingsActionButton(
-                                title: AppLocalization.string("릴리스 보기"), symbol: "arrow.up.right"
-                            ) {
-                                openURL(release.url)
-                            }
+                        UMCWindowOpeningButton(AppLocalization.string("업데이트 확인"),
+                                               cornerRadius: UMCRadius.value12) {
+                            openWindow(id: DeskWindow.updates)
+                        } label: { _ in
+                            Text(AppLocalization.string("업데이트 확인"))
+                                .umcTypography(.headlineRegular)
+                                .padding(.horizontal, UMCSpacing.value16)
+                                .frame(minHeight: 40)
+                                .foregroundStyle(palette.textBrandDefault)
                         }
                     }
-                    if let message = viewModel.releaseMessage {
-                        SettingsInlineMessage(message: message,
-                            isError: viewModel.releaseFailed)
-                    }
+                    .id("updates")
+
                 }
             }
             SettingsSection(title: AppLocalization.string("도움말 및 법적 정보")) {
                 SettingsCard {
                     VStack(spacing: UMCSpacing.value12) {
-                        unavailableLink(
+                        publishedLink(.service,
                             AppLocalization.string("이용약관"),
                             description: AppLocalization.string("서비스 이용에 필요한 약관을 확인해요."))
+                            .id("terms")
                         SettingsDivider()
-                        unavailableLink(
+                        publishedLink(.privacy,
                             AppLocalization.string("개인정보 처리방침"),
                             description: AppLocalization.string("개인정보 처리와 보관 기준을 확인해요."))
+                            .id("privacyPolicy")
                         SettingsDivider()
                         SettingsRow(
                             title: AppLocalization.string("오픈소스 라이선스"),
@@ -85,22 +91,49 @@ struct SettingsAboutView: View {
                                 viewModel.dialog = .licenses
                             }
                         }
+                        .id("licenses")
                         SettingsDivider()
                         SettingsRow(
-                            title: AppLocalization.string("문의하기(카카오톡)"),
+                            title: AppLocalization.string("고객센터"),
                             description: AppLocalization.string("도움이 필요하거나 의견이 있나요?")
                         ) {
-                            SettingsStatusText(text: AppLocalization.string("준비 중"))
+                            UMCWindowOpeningButton(
+                                AppLocalization.string("열기"), identifier: "settings.openSupport",
+                                cornerRadius: UMCRadius.value12,
+                                action: { openWindow(id: DeskWindow.support) }
+                            ) { hovered in
+                                Text(AppLocalization.string("열기"))
+                                    .umcTypography(.headlineRegular)
+                                    .foregroundStyle(palette.textNeutralMedium600)
+                                    .padding(.horizontal, UMCSpacing.value16)
+                                    .frame(minWidth: 64, minHeight: 40)
+                                    .background(hovered ? palette.fillNeutralWeakerHoverPressed :
+                                        palette.backgroundSurfaceWhite,
+                                        in: .rect(cornerRadius: UMCRadius.value12))
+                                    .overlay {
+                                        RoundedRectangle(cornerRadius: UMCRadius.value12)
+                                            .strokeBorder(palette.borderNeutralWeak200)
+                                    }
+                            }
                         }
+                        .id("contact")
                     }
                 }
             }
         }
+        .sheet(item: $selectedDocument) { document in
+            publishedDocument?(document) { selectedDocument = nil }
+        }
     }
 
-    private func unavailableLink(_ title: String, description: String) -> some View {
+    private func publishedLink(_ document: SettingsPublishedDocument, _ title: String,
+                               description: String) -> some View {
         SettingsRow(title: title, description: description) {
-            SettingsStatusText(text: AppLocalization.string("준비 중"))
+            SettingsActionButton(title: AppLocalization.string("열기")) {
+                selectedDocument = document
+            }
+            .disabled(publishedDocument == nil)
+            .accessibilityLabel(title)
         }
     }
 
@@ -116,15 +149,7 @@ struct SettingsAboutView: View {
         Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "—"
     }
 
-    private var releaseDescription: String {
-        if let checkedAt = viewModel.releaseCheckedAt {
-            let dateText = checkedAt.formatted(Date.FormatStyle(
-                date: .abbreviated, time: .shortened,
-                locale: AppLocalization.shared.language.locale))
-            return AppLocalization.string("마지막 확인: \(dateText)")
-        }
-        return AppLocalization.string("공개 GitHub Releases에서 게시된 버전을 확인해요.")
-    }
+
 }
 
 struct SettingsLicenseList: View {
