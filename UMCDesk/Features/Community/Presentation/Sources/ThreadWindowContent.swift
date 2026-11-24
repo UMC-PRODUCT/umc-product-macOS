@@ -154,7 +154,7 @@ struct ThreadDestination: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            HStack(spacing: 6) {
+            HStack(spacing: 8) {
                 Text(item.icon).accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(item.title).umcTypography(.title3Bold).lineLimit(1)
@@ -162,53 +162,8 @@ struct ThreadDestination: View {
                         Text("참여자 \(count)명").font(.caption).foregroundStyle(.secondary)
                     }
                 }
-                Spacer()
-                if !detached {
-                    Button {
-                        openWindow(value: key)
-                    } label: {
-                        ThreadToolbarLabel(title: "별도 창에서 열기", symbol: "macwindow.badge.plus")
-                    }
-                    .buttonStyle(.plain)
-                    .modifier(ThreadToolbarControl())
-                    .help("별도 창에서 열기")
-                }
-                if windowStore.accessEnd == nil, accessFailure == nil, item.membershipState != "KICKED",
-                   item.membershipState != "KICKED_ACKNOWLEDGED", active || shareDetail != nil {
-                    Menu {
-                        if let shareDetail {
-                            ThreadShareMenu(thread: shareDetail)
-                            if active { Divider() }
-                        }
-                        if active {
-                            Button("참여자") { destination = .members }
-                            if item.myRole == .owner || item.myRole == .admin {
-                                Button("참여자 초대") { destination = .invite }
-                                Button("스레드 편집") { destination = .edit }
-                            }
-                            Divider()
-                            Button(item.isPinned ? "고정 해제" : "스레드 고정") {
-                                change(.pin, !item.isPinned)
-                            }
-                            Button(item.isMuted ? "알림 켜기" : "알림 끄기") {
-                                change(.mute, !item.isMuted)
-                            }
-                            Divider()
-                            Button("스레드 나가기") { destination = .leave }
-                            if item.myRole == .owner || item.myRole == .admin {
-                                Button("스레드 삭제", role: .destructive) { destination = .delete }
-                            }
-                        }
-                    } label: {
-                        ThreadToolbarLabel(title: "스레드 설정", symbol: "ellipsis")
-                    }
-                    .menuStyle(.button)
-                    .buttonStyle(.plain)
-                    .menuIndicator(.hidden)
-                    .modifier(ThreadToolbarControl())
-                    .disabled(mutating)
-                    .help("스레드 설정")
-                }
+                Spacer(minLength: 0)
+                headerActions
             }
             .fixedSize(horizontal: false, vertical: true)
             .padding(.horizontal, 20).padding(.vertical, 12)
@@ -285,6 +240,67 @@ struct ThreadDestination: View {
         }
     }
 
+    private var canShowOptions: Bool {
+        windowStore.accessEnd == nil && accessFailure == nil
+            && item.membershipState != "KICKED" && item.membershipState != "KICKED_ACKNOWLEDGED"
+            && (active || shareDetail != nil)
+    }
+
+    @ViewBuilder private var headerActions: some View {
+        if !detached || canShowOptions {
+            HStack(spacing: 2) {
+                if !detached {
+                    Button {
+                        openWindow(value: key)
+                    } label: {
+                        ThreadToolbarLabel(title: "별도 창에서 열기", symbol: "arrow.up.forward.app")
+                    }
+                    .buttonStyle(.plain)
+                    .modifier(ThreadHeaderAction())
+                    .help("별도 창에서 열기")
+                }
+                if canShowOptions {
+                    Menu {
+                        if let shareDetail {
+                            ThreadShareMenu(thread: shareDetail)
+                            if active { Divider() }
+                        }
+                        if active {
+                            Button("참여자") { destination = .members }
+                            if item.myRole == .owner || item.myRole == .admin {
+                                Button("참여자 초대") { destination = .invite }
+                                Button("스레드 편집") { destination = .edit }
+                            }
+                            Divider()
+                            Button(item.isPinned ? "고정 해제" : "스레드 고정") {
+                                change(.pin, !item.isPinned)
+                            }
+                            Button(item.isMuted ? "알림 켜기" : "알림 끄기") {
+                                change(.mute, !item.isMuted)
+                            }
+                            Divider()
+                            Button("스레드 나가기") { destination = .leave }
+                            if item.myRole == .owner || item.myRole == .admin {
+                                Button("스레드 삭제", role: .destructive) { destination = .delete }
+                            }
+                        }
+                    } label: {
+                        ThreadToolbarLabel(title: "대화 옵션", symbol: "ellipsis")
+                    }
+                    .menuStyle(.button)
+                    .buttonStyle(.plain)
+                    .menuIndicator(.hidden)
+                    .modifier(ThreadHeaderAction())
+                    .disabled(mutating)
+                    .help("대화 옵션")
+                }
+            }
+            .padding(2)
+            .modifier(ThreadHeaderCapsule())
+            .fixedSize()
+        }
+    }
+
     private func change(_ preference: ThreadPreference, _ enabled: Bool) {
         guard !mutating else { return }
         mutating = true
@@ -322,7 +338,7 @@ private struct DeletedThreadView: View {
     }
 }
 
-struct ThreadToolbarLabel: View {
+private struct ThreadToolbarLabel: View {
     let title: LocalizedStringKey
     let symbol: String
 
@@ -335,12 +351,38 @@ struct ThreadToolbarLabel: View {
     }
 }
 
-struct ThreadToolbarControl: ViewModifier {
+private struct ThreadHeaderAction: ViewModifier {
+    @State private var hovering = false
+    @FocusState private var focused: Bool
+
     func body(content: Content) -> some View {
         content
             .foregroundStyle(.primary)
             .tint(.primary)
-            .frame(width: 28, height: 28)
-            .glassEffect(.regular.interactive(), in: .rect(cornerRadius: 9))
+            .focused($focused)
+            .background {
+                if hovering || focused {
+                    Capsule().fill(UMCColor.Semantic.fillNeutralMedium100)
+                }
+            }
+            .onHover { hovering = $0 }
+    }
+}
+
+private struct ThreadHeaderCapsule: ViewModifier {
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+    @Environment(\.colorSchemeContrast) private var contrast
+
+    func body(content: Content) -> some View {
+        if reduceTransparency || contrast == .increased {
+            content
+                .background(UMCColor.Custom.backgroundSurfaceGreyWeaker, in: Capsule())
+                .overlay {
+                    Capsule().strokeBorder(UMCColor.Semantic.borderNeutralStronger600)
+                        .allowsHitTesting(false)
+                }
+        } else {
+            content.glassEffect(.regular, in: Capsule())
+        }
     }
 }

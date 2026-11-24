@@ -53,7 +53,7 @@ struct ThreadSearchFieldTests {
             focusSearch: { activated.append("search") }, create: { activated.append("create") },
             showAll: { activated.append("all") })
         let root = NSHostingMenu(rootView: tools)
-        let menu = try #require(root.item(withTitle: "스레드 도구")?.submenu)
+        let menu = try #require(root.item(withTitle: "도구")?.submenu)
         for title in ["제목·소개 검색", "스레드 만들기", "전체 스레드"] {
             let action = try #require(menu.item(withTitle: title))
             menu.performActionForItem(at: menu.index(of: action))

@@ -69,10 +69,11 @@ private struct ThreadBrowser: View {
                     ThreadBrowserTools(filter: $filter, participation: $participation,
                                        focusSearch: { focusRequest += 1 },
                                        create: { creating = true }, showAll: showAll)
-                        .labelStyle(.iconOnly)
                         .menuStyle(.borderlessButton)
-                        .menuIndicator(.hidden)
-                        .modifier(ThreadToolbarControl())
+                        .menuIndicator(.visible)
+                        .foregroundStyle(.primary)
+                        .fixedSize()
+                        .accessibilityLabel("스레드 도구")
                         .help("스레드 도구")
                 }
                 ThreadSearchField(query: $query, focusRequest: focusRequest, selectResult: selectFirst)
@@ -267,7 +268,7 @@ struct ThreadBrowserTools: View {
     let showAll: () -> Void
 
     var body: some View {
-        Menu("스레드 도구", systemImage: "slider.horizontal.3") {
+        Menu("도구") {
             Button("제목·소개 검색", systemImage: "magnifyingglass") {
                 focusSearch()
             }.keyboardShortcut("f")
