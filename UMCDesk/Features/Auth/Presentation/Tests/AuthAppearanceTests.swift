@@ -139,7 +139,10 @@ struct AuthAppearanceTests {
                 #expect(abs(scrollView.documentVisibleRect.maxY - document.bounds.maxY) < 0.5)
             } else {
                 let centeredOrigin = (document.bounds.height - viewport.bounds.height) / 2
-                #expect(abs(viewport.bounds.minY - centeredOrigin) < 0.5)
+                // AppKit can round a half-pixel center to either neighboring pixel.
+                let window = try #require(viewport.window)
+                let halfPixel = 0.5 / window.backingScaleFactor
+                #expect(abs(viewport.bounds.minY - centeredOrigin) <= halfPixel)
             }
         }
     }
