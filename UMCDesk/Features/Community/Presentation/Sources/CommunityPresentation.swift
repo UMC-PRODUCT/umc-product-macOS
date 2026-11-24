@@ -69,7 +69,12 @@ private struct ThreadBrowser: View {
                     ThreadBrowserTools(filter: $filter, participation: $participation,
                                        focusSearch: { focusRequest += 1 },
                                        create: { creating = true }, showAll: showAll)
+                        .menuStyle(.borderlessButton)
+                        .menuIndicator(.visible)
+                        .foregroundStyle(.primary)
                         .fixedSize()
+                        .accessibilityLabel("스레드 도구")
+                        .help("스레드 도구")
                 }
                 ThreadSearchField(query: $query, focusRequest: focusRequest, selectResult: selectFirst)
                     .frame(height: 28)
@@ -93,6 +98,12 @@ private struct ThreadBrowser: View {
                         rows(threads)
                     }
                 }
+                .listStyle(.plain)
+                .contentMargins(.horizontal, 0, for: .scrollContent)
+                .contentMargins(.vertical, 0, for: .scrollContent)
+                .scrollContentBackground(.hidden)
+                // The macOS plain list retains an eight-point gutter around its rows.
+                .padding(.horizontal, -8)
                 .frame(minHeight: 0, maxHeight: .infinity)
                 .focused($resultsFocused)
                 .accessibilityLabel("스레드 검색 결과")
@@ -151,43 +162,43 @@ private struct ThreadBrowser: View {
             let selected = selection == item.id
             let title = selected ? UMCColor.Semantic.textInverse : UMCColor.Semantic.textNeutralDefault
             let detail = selected ? UMCColor.Semantic.textInverse : UMCColor.Semantic.textNeutralMedium600
+            let kicked = item.membershipState == "KICKED"
+            let status = kicked ? "내보내짐" : (item.isMuted ? "알림 꺼짐" : (item.isJoined ? "참여 중" : "미참여"))
+            let category = item.category.map { ThreadListFilter(rawValue: $0)?.title ?? $0 }
+            let preview = [category, kicked ? "확인 필요" : item.description]
+                .compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · ")
             HStack(alignment: .top, spacing: 8) {
                 Text(item.icon).accessibilityHidden(true)
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(item.title).font(.headline).lineLimit(1).foregroundStyle(title)
-                    if let category = item.category {
-                        Text(["PROJECT": "프로젝트", "STUDY": "스터디",
-                              "FREE": "자유", "QNA": "질문"][category] ?? category)
+                VStack(alignment: .leading, spacing: 3) {
+                    HStack(spacing: 5) {
+                        Text(item.title).font(.headline).lineLimit(1).foregroundStyle(title)
+                            .layoutPriority(1)
+                        if item.isPinned {
+                            Image(systemName: "pin.fill").font(.caption2).accessibilityLabel("고정됨")
+                        }
+                        Spacer(minLength: 2)
+                        Text(status).font(.caption2).lineLimit(1).fixedSize()
+                        if item.unread != "0" {
+                            Text(item.unread).font(.caption2.bold())
+                                .foregroundStyle(UMCColor.Semantic.textBrandStrong)
+                                .padding(.horizontal, 5).padding(.vertical, 1)
+                                .background(UMCColor.Semantic.surfaceBrandMedium, in: Capsule())
+                                .accessibilityLabel("안 읽은 메시지 " + item.unread)
+                        }
                     }
-                    if item.membershipState == "KICKED" {
-                        Text("내보내짐 · 확인 필요")
-                    } else if let description = item.description, !description.isEmpty {
-                        Text(description).lineLimit(2)
-                    }
-                    if item.membershipState != "KICKED" {
-                        Text(item.isMuted ? "알림 꺼짐" : (item.isJoined ? "참여 중" : "미참여"))
-                    }
-                }
-                .font(.caption)
-                Spacer(minLength: 2)
-                if item.isPinned { Image(systemName: "pin.fill").accessibilityLabel("고정됨") }
-                if item.unread != "0" {
-                    Text(item.unread).font(.caption.bold())
-                        .foregroundStyle(UMCColor.Semantic.textBrandStrong)
-                        .padding(.horizontal, 6).padding(.vertical, 2)
-                        .background(UMCColor.Semantic.surfaceBrandMedium, in: Capsule())
-                        .accessibilityLabel("안 읽은 메시지 " + item.unread)
+                    if !preview.isEmpty { Text(preview).font(.caption).lineLimit(1) }
                 }
             }
             .foregroundStyle(detail)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 8)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 9)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background {
                 if selected {
                     RoundedRectangle(cornerRadius: 8).fill(UMCColor.Semantic.fillPrimaryInverseStronger600)
                 }
             }
+            .contentShape(Rectangle())
             .listRowInsets(EdgeInsets())
             .listRowBackground(UMCColor.Custom.backgroundDefault)
             .tag(item.id)
@@ -257,7 +268,7 @@ struct ThreadBrowserTools: View {
     let showAll: () -> Void
 
     var body: some View {
-        Menu("스레드 도구", systemImage: "slider.horizontal.3") {
+        Menu("도구") {
             Button("제목·소개 검색", systemImage: "magnifyingglass") {
                 focusSearch()
             }.keyboardShortcut("f")

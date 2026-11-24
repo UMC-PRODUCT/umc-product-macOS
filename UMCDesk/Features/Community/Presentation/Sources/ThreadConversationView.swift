@@ -57,6 +57,7 @@ private struct ConversationTimeline: View {
     @State private var deleting: ThreadConversationMessage?
     @State private var preview: ThreadConversationFile?
     @State private var editText = ""
+    @FocusState private var composerFocused: Bool
 
     init(thread: CommunityThread, accountID: String, repository: any ThreadConversationRepository,
          management: (any ThreadManagementRepository)?, defaults: UserDefaults) {
@@ -72,56 +73,64 @@ private struct ConversationTimeline: View {
     private var active: Bool { thread.isJoined && thread.membershipState == "ACTIVE" }
 
     var body: some View {
-        VStack(spacing: 0) {
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: UMCSpacing.value12) {
-                    if !model.messages.isEmpty { summaryPanel }
-                    if model.cursor != nil {
-                        Button("이전 메시지") { Task { await model.refresh(older: true) } }
-                    }
-                    if model.loaded && model.messages.isEmpty && model.outgoing.isEmpty {
-                        ContentUnavailableView("아직 메시지가 없어요", systemImage: "bubble.left")
-                    } else if !model.loaded && model.failure == nil {
-                        ProgressView("대화를 불러오는 중")
-                    }
-                    ForEach(Array(model.messages.enumerated()), id: \.element.id) {
-                        offset, message in
-                        if let date = date(message.createdAt),
-                            offset == 0 || !sameDay(date, model.messages[offset - 1].createdAt)
-                        {
-                            HStack {
-                                Rectangle().fill(.separator).frame(height: 1)
-                                Text(date, format: .dateTime.month().day().weekday())
-                                    .font(.caption).fixedSize()
-                                Rectangle().fill(.separator).frame(height: 1)
-                            }.foregroundStyle(.secondary)
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: UMCSpacing.value12) {
+                if !model.messages.isEmpty { summaryPanel }
+                if model.cursor != nil {
+                    Button("이전 메시지") { Task { await model.refresh(older: true) } }
+                }
+                if model.loaded && model.messages.isEmpty && model.outgoing.isEmpty {
+                    ContentUnavailableView("아직 메시지가 없어요", systemImage: "bubble.left")
+                } else if !model.loaded && model.failure == nil {
+                    ProgressView("대화를 불러오는 중")
+                }
+                ForEach(Array(model.messages.enumerated()), id: \.element.id) {
+                    offset, message in
+                    if let date = date(message.createdAt),
+                        offset == 0 || !sameDay(date, model.messages[offset - 1].createdAt)
+                    {
+                        HStack(spacing: 8) {
+                            Rectangle().fill(.separator).frame(width: 32, height: 1)
+                            Text(date, format: .dateTime.month().day().weekday())
+                                .font(.caption).fixedSize()
+                            Rectangle().fill(.separator).frame(width: 32, height: 1)
                         }
-                        row(message)
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 4)
                     }
-                    ForEach(model.outgoing) { item in
-                        outgoingRow(item)
-                    }
-                }.padding(UMCSpacing.value24)
+                    row(message)
+                }
+                ForEach(model.outgoing) { item in
+                    outgoingRow(item)
+                }
             }
-            .frame(minHeight: 0, maxHeight: .infinity)
-            .defaultScrollAnchor(.bottom, for: .initialOffset)
-            if let failure = model.failure {
-                HStack {
-                    Text(failure).font(.callout)
-                    Spacer()
-                    if model.canRetry {
-                        Button("다시 시도") { model.retry() }.disabled(model.busy || model.cooldown)
-                    }
-                    Button("닫기", systemImage: "xmark") { model.failure = nil }.labelStyle(
-                        .iconOnly)
-                }.padding(.horizontal, UMCSpacing.value24)
-            }
-            if active {
-                Group {
-                    if let editing { editComposer(editing) } else { composer }
-                }.fixedSize(horizontal: false, vertical: true)
-            } else {
-                Text("참여자만 메시지를 보낼 수 있어요.").padding()
+            .padding(.horizontal, UMCSpacing.value24)
+            .padding(.vertical, UMCSpacing.value16)
+        }
+        .frame(minHeight: 0, maxHeight: .infinity)
+        .defaultScrollAnchor(.bottom, for: .initialOffset)
+        .scrollEdgeEffectStyle(.soft, for: .bottom)
+        .safeAreaBar(edge: .bottom, spacing: 0) {
+            VStack(spacing: 0) {
+                if let failure = model.failure {
+                    HStack {
+                        Text(failure).font(.callout)
+                        Spacer()
+                        if model.canRetry {
+                            Button("다시 시도") { model.retry() }.disabled(model.busy || model.cooldown)
+                        }
+                        Button("닫기", systemImage: "xmark") { model.failure = nil }.labelStyle(
+                            .iconOnly)
+                    }.padding(.horizontal, UMCSpacing.value24)
+                }
+                if active {
+                    Group {
+                        if let editing { editComposer(editing) } else { composer }
+                    }.fixedSize(horizontal: false, vertical: true)
+                } else {
+                    Text("참여자만 메시지를 보낼 수 있어요.").padding()
+                }
             }
         }
         .frame(minHeight: 0, maxHeight: .infinity, alignment: .top)
@@ -207,8 +216,14 @@ private struct ConversationTimeline: View {
                     .background(UMCColor.Semantic.surfaceBrandMedium, in: .rect(cornerRadius: 10))
                     .accessibilityHidden(true)
             }
-            VStack(alignment: own ? .trailing : .leading, spacing: 5) {
-                if !own && !message.author.isEmpty { Text(message.author).font(.caption.weight(.semibold)) }
+            MessageDetails(own: own, canAct: active && !message.isHidden,
+                           sent: own && !message.isHidden, date: date(message.createdAt),
+                           reactionsEnabled: !model.busy,
+                           react: { react($0, message: message) }) {
+                if !own && !message.author.isEmpty {
+                    Text(message.author).font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                }
                 VStack(alignment: .leading, spacing: 6) {
                     if let reply = message.replyID {
                         let original = model.messages.first { $0.id == reply && !$0.isHidden }
@@ -216,64 +231,72 @@ private struct ConversationTimeline: View {
                             .font(.caption).foregroundStyle(.secondary).lineLimit(2)
                     }
                     if !message.text.isEmpty { Text(message.text).textSelection(.enabled) }
-                    if !message.files.isEmpty {
-                        attachments(message.files)
-                    }
+                    if !message.files.isEmpty { attachments(message.files) }
                 }
                 .modifier(MessageBubble(own: own))
-                if !message.isHidden {
-                    messageActions(message, own: own)
-                }
-                if let date = date(message.createdAt) {
-                    HStack(spacing: 4) {
-                        Text(date, format: .dateTime.hour().minute())
-                        if own && !message.isHidden { Text("· 전송 완료") }
-                    }.font(.caption).foregroundStyle(.secondary)
-                }
-            }.contextMenu {
-                if active && !message.isHidden {
-                    Button("답장") { model.selectReply(message.id) }
-                    if own {
-                        Button("수정") {
-                            editText = message.text
-                            editing = message
-                        }
-                        Button("삭제", role: .destructive) { deleting = message }
-                    } else if management != nil {
-                        reportButton(message)
+                if !message.isHidden && !message.reactions.isEmpty {
+                    ViewThatFits(in: .horizontal) {
+                        reactionStrip(message)
+                        ScrollView(.horizontal) { reactionStrip(message) }
+                            .defaultScrollAnchor(own ? .trailing : .leading, for: .initialOffset)
                     }
                 }
+            } actions: { dismiss in
+                messageCommands(message, own: own, dismiss: dismiss)
             }
             if !own { Spacer(minLength: 32) }
         }
     }
 
-    private func messageActions(_ message: ThreadConversationMessage, own: Bool) -> some View {
-        ViewThatFits(in: .horizontal) {
-            actionStrip(message, own: own)
-            ScrollView(.horizontal) { actionStrip(message, own: own) }
+    @ViewBuilder
+    private func messageCommands(
+        _ message: ThreadConversationMessage, own: Bool, dismiss: @escaping () -> Void
+    ) -> some View {
+        Button("답장") {
+            dismiss()
+            model.selectReply(message.id)
+        }
+        if own {
+            Button("수정") {
+                dismiss()
+                editText = message.text
+                editing = message
+            }
+            Button("삭제", role: .destructive) {
+                dismiss()
+                deleting = message
+            }
+        } else if management != nil {
+            Button("메시지 신고", systemImage: "flag", role: .destructive) {
+                dismiss()
+                reporting = message
+            }
         }
     }
 
-    private func actionStrip(_ message: ThreadConversationMessage, own: Bool) -> some View {
+    private func reactionStrip(_ message: ThreadConversationMessage) -> some View {
         HStack(spacing: 5) {
             ForEach(message.reactions, id: \.emoji) { reaction in
                 Button {
                     react(reaction.emoji, message: message)
                 } label: {
-                    HStack(spacing: 4) {
-                        Text(reaction.emoji)
-                        Text(reaction.count).font(.caption.weight(.semibold)).monospacedDigit()
-                        if reaction.reactedByMe {
-                            Image(systemName: "checkmark").font(.caption2.bold())
-                        }
+                    HStack(spacing: 3) {
+                        Text(reaction.emoji).font(.caption)
+                        Text(reaction.count).font(.caption2.weight(.medium)).monospacedDigit()
                     }
-                    .padding(.horizontal, 8)
-                    .frame(minHeight: 24)
+                    .padding(.horizontal, 7)
+                    .frame(minHeight: 21)
                     .foregroundStyle(reaction.reactedByMe
                         ? UMCColor.Semantic.textBrandStrong : UMCColor.Semantic.textNeutralDefault)
                     .modifier(ConversationGlass(shape: Capsule(), branded: reaction.reactedByMe,
                                                 interactive: true))
+                    .overlay {
+                        if reaction.reactedByMe {
+                            Capsule().strokeBorder(UMCColor.Semantic.borderPrimaryStrong500,
+                                                   lineWidth: 1)
+                                .allowsHitTesting(false)
+                        }
+                    }
                     .contentShape(Capsule())
                 }
                 .buttonStyle(.plain)
@@ -281,27 +304,7 @@ private struct ConversationTimeline: View {
                 .accessibilityAddTraits(reaction.reactedByMe ? .isSelected : [])
                 .disabled(!active || model.busy)
             }
-            if active {
-                Menu("반응 추가", systemImage: "face.smiling") {
-                    ForEach(["👍", "❤️", "🔥", "🎉", "👀"], id: \.self) { emoji in
-                        Button(emoji) { react(emoji, message: message) }
-                    }
-                    Divider()
-                    Button("답장") { model.selectReply(message.id) }
-                }
-                .disabled(model.busy)
-                .help("반응 추가 또는 답장")
-                if !own, management != nil {
-                    Menu("메시지 더보기", systemImage: "ellipsis") {
-                        reportButton(message)
-                    }
-                    .help("메시지 더보기")
-                }
-            }
         }
-        .menuStyle(.borderlessButton)
-        .menuIndicator(.hidden)
-        .labelStyle(.iconOnly)
         .fixedSize(horizontal: true, vertical: false)
     }
 
@@ -354,10 +357,6 @@ private struct ConversationTimeline: View {
         }
     }
 
-    private func reportButton(_ message: ThreadConversationMessage) -> some View {
-        Button("메시지 신고", systemImage: "flag", role: .destructive) { reporting = message }
-    }
-
     private func date(_ value: String?) -> Date? {
         guard let value else { return nil }
         return (try? Date(value, strategy: .iso8601))
@@ -391,6 +390,7 @@ private struct ConversationTimeline: View {
             Text(message.text).lineLimit(1).font(.caption).foregroundStyle(.secondary)
             TextField("메시지", text: $editText, axis: .vertical)
                 .textFieldStyle(.plain).lineLimit(1...6)
+                .focused($composerFocused)
             HStack {
                 Spacer()
                 Button("취소") { editing = nil }.keyboardShortcut(.cancelAction)
@@ -404,12 +404,12 @@ private struct ConversationTimeline: View {
                     editText.unicodeScalars.count > 2_000)
             }
         }
-        .modifier(ComposerPanel())
+        .modifier(ComposerPanel(focused: composerFocused))
     }
 
     private var composer: some View {
         @Bindable var model = model
-        return VStack(alignment: .leading, spacing: 10) {
+        return VStack(alignment: .leading, spacing: 8) {
             if !model.draftIsOutgoing, let reply = model.reply {
                 HStack {
                     Label(
@@ -426,10 +426,15 @@ private struct ConversationTimeline: View {
             }
             TextField("메시지 보내기…", text: $model.composerText, axis: .vertical)
                 .textFieldStyle(.plain)
-                .font(.body)
+                .font(.system(size: 15))
                 .lineLimit(1...6)
+                .focused($composerFocused)
                 .padding(.horizontal, 4)
-                .frame(minHeight: 30, alignment: .topLeading)
+                .frame(minHeight: 34, alignment: .topLeading)
+                .background {
+                    Color.clear.contentShape(Rectangle())
+                        .onTapGesture { composerFocused = true }
+                }
             HStack(spacing: 6) {
                 Button { picking = true } label: {
                     Label("사진 첨부", systemImage: "plus").frame(width: 28, height: 28)
@@ -454,7 +459,7 @@ private struct ConversationTimeline: View {
                 Button(action: requestSend) {
                     Label("메시지 전송", systemImage: "arrow.up")
                         .font(.body.weight(.semibold))
-                        .frame(width: 30, height: 30)
+                        .frame(width: 32, height: 32)
                         .foregroundStyle(UMCColor.Semantic.textInverse)
                         .background(model.canSend && !model.draftIsOutgoing
                             ? UMCColor.Semantic.textNeutralDefault
@@ -469,7 +474,7 @@ private struct ConversationTimeline: View {
             .labelStyle(.iconOnly)
         }
         .disabled(model.busy || !model.loaded)
-        .modifier(ComposerPanel())
+        .modifier(ComposerPanel(focused: composerFocused))
     }
 
     private func requestSend() {
@@ -477,13 +482,124 @@ private struct ConversationTimeline: View {
     }
 }
 
+private struct MessageDetails<Bubble: View, Actions: View>: View {
+    let own: Bool
+    let canAct: Bool
+    let sent: Bool
+    let date: Date?
+    let reactionsEnabled: Bool
+    let react: (String) -> Void
+    @ViewBuilder let bubble: () -> Bubble
+    @ViewBuilder let actions: (@escaping () -> Void) -> Actions
+
+    private let emojiChoices = ["👍", "❤️", "🔥", "🎉", "👀"]
+    @State private var showingActions = false
+    @State private var hovering = false
+    @FocusState private var menuFocused: Bool
+    @Environment(\.accessibilityVoiceOverEnabled) private var voiceOver
+
+    var body: some View {
+        VStack(alignment: own ? .trailing : .leading, spacing: 4) {
+            bubble()
+            HStack(spacing: 5) {
+                if own && canAct { actionButton }
+                if let date {
+                    if sent {
+                        Image(systemName: "checkmark").accessibilityLabel("전송 완료")
+                            .help("전송 완료")
+                    }
+                    Text(date, format: .dateTime.hour().minute())
+                }
+                if !own && canAct { actionButton }
+            }
+            .font(.caption2)
+            .foregroundStyle(.secondary)
+        }
+        .onHover { hovering = $0 }
+        .contextMenu {
+            if canAct {
+                Menu("반응 추가", systemImage: "face.smiling") {
+                    ForEach(emojiChoices, id: \.self) { emoji in
+                        Button(emoji) { react(emoji) }
+                    }
+                }
+                .disabled(!reactionsEnabled)
+                Divider()
+                actions({})
+            }
+        }
+    }
+
+    private var actionButton: some View {
+        Button {
+            showingActions.toggle()
+        } label: {
+            Image(systemName: "face.smiling")
+                .foregroundStyle(hovering || menuFocused || voiceOver || showingActions
+                    ? Color.secondary : Color.clear)
+                .frame(width: 24, height: 20)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .focused($menuFocused)
+        .accessibilityLabel("메시지 반응 및 동작")
+        .help("반응 추가 및 메시지 동작")
+        .popover(isPresented: $showingActions) { actionPopover }
+    }
+
+    private var actionPopover: some View {
+        VStack(alignment: .leading, spacing: 9) {
+            HStack(spacing: 3) {
+                ForEach(emojiChoices, id: \.self) { emoji in
+                    Button {
+                        showingActions = false
+                        react(emoji)
+                    } label: {
+                        Text(emoji).font(.system(size: 21))
+                            .frame(width: 32, height: 32)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.borderless)
+                    .accessibilityLabel("\(emoji) 반응")
+                    .disabled(!reactionsEnabled)
+                }
+            }
+            Divider()
+            HStack(spacing: 14) {
+                actions { showingActions = false }
+            }
+            .buttonStyle(.borderless)
+            .controlSize(.small)
+            .padding(.horizontal, 5)
+        }
+        .padding(10)
+        .fixedSize()
+    }
+}
+
 private struct ComposerPanel: ViewModifier {
+    let focused: Bool
+    @Environment(\.colorSchemeContrast) private var contrast
+
     func body(content: Content) -> some View {
+        let shape = RoundedRectangle(cornerRadius: 24, style: .continuous)
         content
-            .padding(14)
-            .modifier(ConversationGlass(shape: RoundedRectangle(cornerRadius: 22)))
-            .padding(.horizontal, 20)
-            .padding(.vertical, 12)
+            .padding(.horizontal, 14)
+            .padding(.top, 16)
+            .padding(.bottom, 10)
+            .modifier(ConversationGlass(shape: shape))
+            .overlay {
+                if focused {
+                    shape.strokeBorder(UMCColor.Semantic.borderPrimaryStrong500,
+                                       lineWidth: contrast == .increased ? 2 : 1)
+                        .allowsHitTesting(false)
+                }
+            }
+            .frame(maxWidth: 840)
+            .padding(.horizontal, 16)
+            .padding(.top, 4)
+            .padding(.bottom, 12)
+            .frame(maxWidth: .infinity)
     }
 }
 
@@ -491,7 +607,9 @@ private struct MessageBubble: ViewModifier {
     let own: Bool
 
     func body(content: Content) -> some View {
-        let shape = RoundedRectangle(cornerRadius: 16, style: .continuous)
+        let shape = UnevenRoundedRectangle(
+            topLeadingRadius: 17, bottomLeadingRadius: own ? 17 : 6,
+            bottomTrailingRadius: own ? 6 : 17, topTrailingRadius: 17)
         content
             .padding(.vertical, 10)
             .padding(.horizontal, 14)

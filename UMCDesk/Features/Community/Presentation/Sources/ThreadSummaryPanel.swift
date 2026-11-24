@@ -13,23 +13,24 @@ struct ThreadSummaryPanel: View {
     let unread: String
 
     var body: some View {
-        HStack(spacing: UMCSpacing.value12) {
-            Image(systemName: "sparkles").accessibilityHidden(true)
-            Text(unread == "0" ? "최근 대화" : "읽지 않은 메시지 \(unread)개")
-                .umcTypography(.title4Bold)
-            Spacer()
-            Button("요약 보기", action: start)
-                .buttonStyle(SummaryButtonStyle(kind: .ai, width: 90))
-                .disabled(!model.messages.contains { !$0.isHidden && !$0.text.isEmpty })
+        Button(action: start) {
+            HStack(spacing: 7) {
+                Image(systemName: "sparkles").accessibilityHidden(true)
+                Text(unread == "0" ? "최근 대화 요약" : "읽지 않은 메시지 \(unread)개 요약")
+                    .font(.callout.weight(.medium))
+                Image(systemName: "chevron.right")
+                    .font(.caption2.bold()).accessibilityHidden(true)
+            }
+            .padding(.horizontal, 4)
+            .foregroundStyle(UMCColor.Semantic.textBrandStrong)
         }
-        .padding(.horizontal, 14)
-        .frame(minHeight: 58)
-        .foregroundStyle(UMCColor.Semantic.textNeutralMedium600)
-        .background(UMCColor.Semantic.surfaceBrandWeak, in: .rect(cornerRadius: 12))
-        .overlay {
-            RoundedRectangle(cornerRadius: 12).strokeBorder(UMCColor.Semantic.borderPrimaryWeaker100)
-                .allowsHitTesting(false)
-        }
+        .buttonStyle(.bordered)
+        .buttonBorderShape(.capsule)
+        .controlSize(.regular)
+        .tint(UMCColor.Semantic.textBrandDefault)
+        .help("요약 보기")
+        .disabled(!model.messages.contains { !$0.isHidden && !$0.text.isEmpty })
+        .frame(maxWidth: .infinity, alignment: .leading)
         .sheet(isPresented: Binding(
             get: { if case .closed = model.summary.phase { false } else { true } },
             set: { if !$0 { model.summary.close() } }
