@@ -27,6 +27,7 @@ struct SettingsPrivacyView: View {
                             viewModel.openSystemSettings(.location)
                         }
                     }
+                    .id("locationAccess")
                 }
             }
             SettingsSection(title: AppLocalization.string("이 Mac의 저장 공간")) {
@@ -47,6 +48,7 @@ struct SettingsPrivacyView: View {
                             }
                             .disabled(!viewModel.canClearCache)
                         }
+                        .id("cache")
                     }
                 }
             }

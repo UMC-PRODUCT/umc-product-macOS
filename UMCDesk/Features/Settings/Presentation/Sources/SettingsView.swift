@@ -23,6 +23,7 @@ public struct SettingsView: View {
     private let matchingSelected: Bool
     private let onOpenMatching: (() -> Void)?
     private let featureContent: AnyView?
+    @State private var pendingSearchResultID: String?
     @State private var showsSearchSuggestions = false
     @State private var railHelpFocus = UMCWindowButtonFocus()
     @State private var tabbedPastSearchResults = false
@@ -694,6 +695,7 @@ public struct SettingsView: View {
 
     private func selectSearchResult(_ result: SettingsSearchResult) {
         viewModel.selectSearchResult(result)
+        pendingSearchResultID = result.id
         dismissSearchSuggestions()
     }
 
@@ -731,30 +733,37 @@ public struct SettingsView: View {
         if viewModel.page == .myPage {
             SettingsProfileView(viewModel: viewModel)
         } else {
-            ScrollView {
-                VStack(alignment: .leading, spacing: UMCSpacing.value24) {
-                    VStack(alignment: .leading, spacing: UMCSpacing.value4) {
-                        Text(viewModel.page.title)
-                            .umcTypography(.title1Bold)
-                            .accessibilityAddTraits(.isHeader)
-                        Text(AppLocalization.string("이 Mac에서 사용하는 앱의 환경을 설정하세요."))
-                            .umcTypography(.bodyRegular)
-                            .foregroundStyle(palette.textNeutralWeak500)
+            ScrollViewReader { proxy in
+                ScrollView {
+                    VStack(alignment: .leading, spacing: UMCSpacing.value24) {
+                        VStack(alignment: .leading, spacing: UMCSpacing.value4) {
+                            Text(viewModel.page.title)
+                                .umcTypography(.title1Bold)
+                                .accessibilityAddTraits(.isHeader)
+                            Text(AppLocalization.string("이 Mac에서 사용하는 앱의 환경을 설정하세요."))
+                                .umcTypography(.bodyRegular)
+                                .foregroundStyle(palette.textNeutralWeak500)
+                        }
+                        switch viewModel.page {
+                        case .general: SettingsGeneralView(viewModel: viewModel)
+                        case .appearance: SettingsAppearanceView(viewModel: viewModel)
+                        case .notifications: SettingsNotificationsView(viewModel: viewModel)
+                        case .privacy: SettingsPrivacyView(viewModel: viewModel)
+                        case .about: SettingsAboutView(viewModel: viewModel)
+                        case .myPage: EmptyView()
+                        }
                     }
-                    switch viewModel.page {
-                    case .general: SettingsGeneralView(viewModel: viewModel)
-                    case .appearance: SettingsAppearanceView(viewModel: viewModel)
-                    case .notifications: SettingsNotificationsView(viewModel: viewModel)
-                    case .privacy: SettingsPrivacyView(viewModel: viewModel)
-                    case .about: SettingsAboutView(viewModel: viewModel)
-                    case .myPage: EmptyView()
-                    }
+                    .frame(maxWidth: Constants.contentWidth, alignment: .leading)
+                    .padding(UMCSpacing.value32)
+                    .frame(maxWidth: .infinity, alignment: .center)
                 }
-                .frame(maxWidth: Constants.contentWidth, alignment: .leading)
-                .padding(UMCSpacing.value32)
-                .frame(maxWidth: .infinity, alignment: .center)
+                .scrollBounceBehavior(.basedOnSize)
+                .onChange(of: pendingSearchResultID) { _, identifier in
+                    guard let identifier else { return }
+                    proxy.scrollTo(identifier, anchor: .center)
+                    pendingSearchResultID = nil
+                }
             }
-            .scrollBounceBehavior(.basedOnSize)
         }
     }
 

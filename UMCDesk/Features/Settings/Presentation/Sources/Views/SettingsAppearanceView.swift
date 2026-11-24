@@ -34,6 +34,7 @@ struct SettingsAppearanceView: View {
                                     image: "settingsThemeDark")
                             }
                         }
+                        .id("theme")
                         SettingsDivider()
                         SettingsThemeEditor(preferences: preferences)
                     }
@@ -71,10 +72,12 @@ struct SettingsAppearanceView: View {
                             .accessibilityValue(
                                 preferences.language == .korean ? "한국어" : "English")
                         }
+                        .id("language")
                         SettingsDivider()
                         SettingsRow(title: AppLocalization.string("글꼴"), description: "") {
                             SettingsFontPicker(preferences: preferences)
                         }
+                        .id("font")
                         SettingsDivider()
                         SettingsRow(title: AppLocalization.string("본문 크기"), description: "") {
                             Menu {
@@ -100,6 +103,7 @@ struct SettingsAppearanceView: View {
                             .accessibilityLabel(AppLocalization.string("본문 크기"))
                             .accessibilityValue(bodyTextSizeTitle)
                         }
+                        .id("bodyTextSize")
                     }
                     .pickerStyle(.inline)
                 }
@@ -113,6 +117,7 @@ struct SettingsAppearanceView: View {
                 }
                 .buttonStyle(.link)
             }
+            .id("accessibility")
             .padding(.horizontal, UMCSpacing.value20)
             SettingsDivider()
             HStack {
@@ -124,6 +129,7 @@ struct SettingsAppearanceView: View {
                     viewModel.resetAppearance()
                 }
                 .disabled(viewModel.isDefaultAppearance)
+                .id("resetAppearance")
             }
             .padding(.horizontal, UMCSpacing.value20)
         }

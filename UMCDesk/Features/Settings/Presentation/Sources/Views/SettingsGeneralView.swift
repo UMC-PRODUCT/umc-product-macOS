@@ -37,6 +37,7 @@ struct SettingsGeneralView: View {
                             .controlSize(.large)
                             .frame(width: 160, alignment: .trailing)
                         }
+                        .id("launchPage")
                         SettingsDivider()
                         SettingsRow(
                             title: AppLocalization.string("Mac 로그인 시 자동 실행"),
@@ -51,6 +52,7 @@ struct SettingsGeneralView: View {
                             .disabled(viewModel.isChangingLoginItem ||
                                 viewModel.systemStatus.loginItem == .unavailable)
                         }
+                        .id("launchAtLogin")
                         if viewModel.isChangingLoginItem {
                             SettingsStatusText(text: AppLocalization.string("변경 중…"))
                         } else if viewModel.systemStatus.loginItem == .requiresApproval {
@@ -80,6 +82,7 @@ struct SettingsGeneralView: View {
                                 .labelsHidden()
                                 .toggleStyle(.switch)
                         }
+                        .id("menuBar")
                         SettingsDivider()
                         SettingsRow(title: AppLocalization.string("마지막 창을 닫으면"), description:
                             AppLocalization.string("계속 실행하면 Dock에서 앱을 다시 열 수 있어요.")) {
@@ -98,6 +101,7 @@ struct SettingsGeneralView: View {
                             .controlSize(.large)
                             .frame(width: 160, alignment: .trailing)
                         }
+                        .id("windowClose")
                     }
                 }
             }
@@ -112,6 +116,7 @@ struct SettingsGeneralView: View {
                             viewModel.openSystemSettings(.defaultBrowser)
                         }
                     }
+                    .id("externalLinks")
                 }
             }
         }

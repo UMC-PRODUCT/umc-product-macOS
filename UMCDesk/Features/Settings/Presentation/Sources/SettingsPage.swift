@@ -165,11 +165,11 @@ struct SettingsSearchResult: Identifiable {
                 summary: AppLocalization.string(
                     "공개 GitHub Releases에서 게시된 버전을 확인해요. 자동으로 설치하지 않아요.", language: language)),
         .init(id: "terms", page: .about, title: AppLocalization.string("이용약관", language: language),
-            summary: AppLocalization.string("서비스 이용에 필요한 약관을 확인해요. 준비 중", language: language)),
+            summary: AppLocalization.string("서비스 이용에 필요한 약관을 확인해요.", language: language)),
             .init(
                 id: "privacyPolicy", page: .about,
                 title: AppLocalization.string("개인정보 처리방침", language: language),
-            summary: AppLocalization.string("개인정보 처리와 보관 기준을 확인해요. 준비 중", language: language)),
+            summary: AppLocalization.string("개인정보 처리와 보관 기준을 확인해요.", language: language)),
             .init(
                 id: "licenses", page: .about,
                 title: AppLocalization.string("오픈소스 라이선스", language: language),

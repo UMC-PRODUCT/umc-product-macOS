@@ -47,6 +47,7 @@ struct SettingsAboutView: View {
                                 .foregroundStyle(palette.textNeutralWeak500)
                         }
                     }
+                    .id("appVersion")
                     SettingsDivider()
                     Text(AppLocalization.string("게시된 릴리스를 조회하며, 업데이트를 자동으로 설치하지 않아요."))
                         .umcTypography(.bodyRegular)
@@ -65,6 +66,7 @@ struct SettingsAboutView: View {
                                 .foregroundStyle(palette.textBrandDefault)
                         }
                     }
+                    .id("updates")
 
                 }
             }
@@ -74,10 +76,12 @@ struct SettingsAboutView: View {
                         publishedLink(.service,
                             AppLocalization.string("이용약관"),
                             description: AppLocalization.string("서비스 이용에 필요한 약관을 확인해요."))
+                            .id("terms")
                         SettingsDivider()
                         publishedLink(.privacy,
                             AppLocalization.string("개인정보 처리방침"),
                             description: AppLocalization.string("개인정보 처리와 보관 기준을 확인해요."))
+                            .id("privacyPolicy")
                         SettingsDivider()
                         SettingsRow(
                             title: AppLocalization.string("오픈소스 라이선스"),
@@ -87,6 +91,7 @@ struct SettingsAboutView: View {
                                 viewModel.dialog = .licenses
                             }
                         }
+                        .id("licenses")
                         SettingsDivider()
                         SettingsRow(
                             title: AppLocalization.string("고객센터"),
@@ -111,6 +116,7 @@ struct SettingsAboutView: View {
                                     }
                             }
                         }
+                        .id("contact")
                     }
                 }
             }

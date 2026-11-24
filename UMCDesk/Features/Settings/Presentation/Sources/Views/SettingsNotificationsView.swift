@@ -42,6 +42,7 @@ struct SettingsNotificationsView: View {
                             }
                         }
                     }
+                    .id("notificationAccess")
                 }
             }
             SettingsSection(title: AppLocalization.string("받을 알림")) {
@@ -50,17 +51,21 @@ struct SettingsNotificationsView: View {
                         pendingNotification(
                             AppLocalization.string("출석 가능 시간"),
                             description: AppLocalization.string("출석 알림 연결 시 사용할 수신 설정이에요."))
+                            .id("attendanceNotifications")
                         SettingsDivider()
                         pendingNotification(
                             AppLocalization.string("새 공지"),
                             description: AppLocalization.string("공지 알림 연결 시 사용할 수신 설정이에요."))
+                            .id("noticeNotifications")
                         SettingsDivider()
                         pendingNotification(
                             AppLocalization.string("스레드 메시지"),
                             description: AppLocalization.string("메시지 알림 연결 시 사용할 수신 설정이에요."))
+                            .id("threadNotifications")
                         SettingsDivider()
                         pendingNotification(AppLocalization.string("알림 내용 표시"),
                             description: AppLocalization.string("알림 연결 시 이름 · 제목 · 본문 표시 여부예요."))
+                            .id("notificationContent")
                     }
                 }
             }

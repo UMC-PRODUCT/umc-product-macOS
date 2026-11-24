@@ -59,8 +59,10 @@ struct SettingsSearchTests {
         #expect(SettingsPage.search("개인 프로젝트").isEmpty)
         #expect(SettingsPage.search("자동으로 설치").map(\.id) == ["updates"])
         #expect(SettingsPage.search("고객센터").contains { $0.id == "contact" })
+        let pending = SettingsPage.search("준비 중").map(\.id)
+        #expect(!pending.contains("terms") && !pending.contains("privacyPolicy"))
         for identifier in ["attendanceNotifications", "noticeNotifications",
-            "threadNotifications", "notificationContent", "terms", "privacyPolicy"] {
+            "threadNotifications", "notificationContent"] {
             #expect(SettingsPage.search("준비 중").contains { $0.id == identifier })
         }
     }
