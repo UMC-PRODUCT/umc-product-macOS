@@ -37,7 +37,7 @@ final class DataPreviewFixtures: @unchecked Sendable {
         }
     }
 
-    static func body(_ request: URLRequest) -> [String: Any] {
+    static func json(_ request: URLRequest) -> Any? {
         var bytes = request.httpBody ?? Data()
         if bytes.isEmpty, let stream = request.httpBodyStream {
             stream.open()
@@ -49,7 +49,7 @@ final class DataPreviewFixtures: @unchecked Sendable {
                 bytes.append(contentsOf: buffer.prefix(count))
             }
         }
-        return (try? JSONSerialization.jsonObject(with: bytes)) as? [String: Any] ?? [:]
+        return try? JSONSerialization.jsonObject(with: bytes)
     }
 
     private static func commonResult(for request: URLRequest) -> Any? {
@@ -57,6 +57,13 @@ final class DataPreviewFixtures: @unchecked Sendable {
         let role = ["challengerId": "101", "gisuId": "10", "gisu": "10",
                     "roleType": "CENTRAL_OPERATING_TEAM_MEMBER"]
         switch request.url?.path {
+        case "/api/v1/terms":
+            return ["terms": [
+                ["id": "1", "type": "SERVICE", "typeDescription": "서비스 이용약관",
+                 "isMandatory": true, "link": "https://preview.invalid/terms/service"] as [String: Any],
+                ["id": "2", "type": "PRIVACY", "typeDescription": "개인정보 처리방침",
+                 "isMandatory": true, "link": "https://preview.invalid/terms/privacy"] as [String: Any]
+            ]]
         case "/api/v1/member/me":
             return ["id": "101", "name": "김유엠", "nickname": "유엠",
                     "email": "umc@preview.invalid", "schoolName": "한빛대학교",

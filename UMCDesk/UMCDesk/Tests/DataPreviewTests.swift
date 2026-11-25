@@ -23,10 +23,16 @@ struct DataPreviewTests {
         #expect(!notices.content.isEmpty)
         #expect(try await account.notices.detail(id: "21").id == "21")
         #expect(try await account.notices.readCounts(id: "21").readCount == "2")
+        try await account.notices.vote(options: ["1"], replacing: false, id: "21")
+        #expect(try await account.notices.detail(id: "21").vote?.mySelectedOptionIds == ["1"])
         #expect(try await account.activity.schedules().count == 3)
         #expect(try await account.activity.groups().count == 2)
         #expect(try await account.activity.study().count == 4)
         #expect(try await account.activity.reviews().first?.mayDecide == true)
+        try await account.activity.decide(scheduleID: "801", memberID: "105", approve: true)
+        #expect(try await account.activity.reviews().first?.participants.first?.status == "PRESENT")
+        _ = try await account.activity.attend(scheduleID: "801", reason: nil, coordinate: nil)
+        #expect(try await account.activity.schedules().first { $0.id == "801" }?.status == "PRESENT_PENDING")
         #expect(try await account.activity.directory(keyword: "", part: nil, page: 0).members.count == 5)
         #expect(try await account.projects().map(\.name) == ["모아", "사이"])
         #expect(try await account.posts.posts(scope: .all, category: nil, keyword: "",
@@ -36,7 +42,12 @@ struct DataPreviewTests {
         #expect(try await session.conversations.members(thread: "41", query: "").count == 3)
         await session.progress.refreshOnce()
         #expect(session.progress.card?.status == "APPROVED")
-        #expect(session.support.tickets.count > 0)
+        let roster = try await session.matching.publishedTeam(projectId: "3")
+        #expect(roster?.partGroups.flatMap(\.members).contains { $0.memberId == account.memberID } == true)
+        #expect(try await session.documents.terms().count == 2)
+        let ticket = try #require(session.support.create(subject: "확인 요청", content: "문의 내용", team: .product))
+        #expect(session.support.myTickets.contains { $0.id == ticket })
+        #expect(session.support.tickets.contains { !$0.belongsToCurrentUser })
     }
 
     @Test func editsAreVisibleOnlyInTheCurrentWorkspace() async throws {

@@ -28,7 +28,7 @@ struct DeskPreviewCommunityData {
         guard parts.starts(with: ["api", "v1"]) else { return nil }
         let route = Array(parts.dropFirst(2))
         if request.httpMethod != "GET" {
-            return mutate(route, method: request.httpMethod ?? "", body: DataPreviewFixtures.body(request))
+            return mutate(route, method: request.httpMethod ?? "", body: DataPreviewFixtures.json(request) as? Row ?? [:])
         }
         switch route.first {
         case "notices": return noticeResult(Array(route.dropFirst()), query)
@@ -47,6 +47,8 @@ struct DeskPreviewCommunityData {
     }
 
     private var nextID = 1000
+    private var roomMemberIDs: [String: [String]] = [:]
+    private var roomRoles: [String: [String: String]] = [:]
     private var blocked: Set<String> = []
     private var comments: [String: [Row]] = ["31": [
         ["commentId": "71", "challengerName": "김유엠", "challengerNickname": "유엠",
@@ -118,7 +120,35 @@ struct DeskPreviewCommunityData {
             case []:
                 if method == "DELETE" { notices.remove(at: index) }
                 else { notices[index].merge(body) { _, new in new } }
+            case ["votes"]:
+                var vote = body
+                vote["status"] = "OPEN"
+                vote["options"] = (body["options"] as? [String] ?? []).enumerated().map {
+                    ["optionId": String($0.offset + 1), "content": $0.element, "voteCount": "0"]
+                }
+                vote["totalParticipants"] = "0"
+                vote["mySelectedOptionIds"] = [String]()
+                notices[index]["vote"] = vote
+                notices[index]["hasVote"] = true
+            case ["votes", "responses"]:
+                guard var vote = notices[index]["vote"] as? Row else { return nil }
+                let selection = (body["optionIds"] as? [Int] ?? []).map(String.init)
+                vote["mySelectedOptionIds"] = selection
+                vote["totalParticipants"] = "1"
+                vote["options"] = (vote["options"] as? [Row] ?? []).map { row in
+                    var option = row
+                    option["voteCount"] = selection.contains(row["optionId"] as? String ?? "") ? "1" : "0"
+                    return option
+                }
+                notices[index]["vote"] = vote
+            case ["vote"]:
+                notices[index]["hasVote"] = false
+                notices[index]["vote"] = nil
             case ["reminders"], ["read"]: break
+            case ["images"]:
+                let files = body["imageIds"] as? [String] ?? []
+                notices[index]["images"] = files.map { ["id": $0, "fileId": $0, "url": "https://preview.invalid/image/" + $0] }
+                notices[index]["hasImages"] = !files.isEmpty
             case ["links"]:
                 let links = body["links"] as? [String] ?? []
                 notices[index]["links"] = links.enumerated().map { ["id": String($0.offset + 1), "url": $0.element] }
@@ -133,6 +163,8 @@ struct DeskPreviewCommunityData {
                 var room = Self.room(id, body["category"] as? String ?? "FREE", body["icon"] as? String ?? "💬",
                                      body["title"] as? String ?? "", body["description"] as? String ?? "")
                 room["myRole"] = "OWNER"
+                roomMemberIDs[id] = ["101"]
+                room["memberCount"] = "1"
                 rooms.insert(room, at: 0)
                 return room
             }
@@ -147,7 +179,21 @@ struct DeskPreviewCommunityData {
             case ["leave"]:
                 rooms[index]["membershipState"] = "LEFT"
                 rooms[index]["isJoined"] = false
-            default: return nil
+            case ["invite"]:
+                let invited = (body["memberIds"] as? [Int] ?? []).map(String.init)
+                var members = memberIDs(thread[0])
+                members.append(contentsOf: invited.filter { !members.contains($0) })
+                roomMemberIDs[thread[0]] = members
+                rooms[index]["memberCount"] = String(members.count)
+            case ["kick", "acknowledge"]: break
+            default:
+                guard thread.count >= 3, thread[1] == "members" else { return nil }
+                if method == "DELETE" {
+                    roomMemberIDs[thread[0]] = memberIDs(thread[0]).filter { $0 != thread[2] }
+                    rooms[index]["memberCount"] = String(memberIDs(thread[0]).count)
+                } else if thread.last == "role", let role = body["role"] as? String {
+                    roomRoles[thread[0], default: [:]][thread[2]] = role
+                } else { return nil }
             }
             return rooms[index]
         }
@@ -164,11 +210,15 @@ struct DeskPreviewCommunityData {
         return nil
     }
 
+    private func memberIDs(_ room: String) -> [String] {
+        roomMemberIDs[room] ?? ["101", "102", "103"]
+    }
+
     private static let people = [
         ["memberId": "101", "name": "김유엠", "nickname": "유엠", "part": "WEB"],
-        ["memberId": "102", "name": "이서윤", "nickname": "윤", "part": "PLAN"],
-        ["memberId": "103", "name": "박도현", "nickname": "도도", "part": "DESIGN"],
-        ["memberId": "104", "name": "정하늘", "nickname": "하늘", "part": "WEB"]
+        ["memberId": "102", "name": "서하늘", "nickname": "하늘", "part": "DESIGN"],
+        ["memberId": "103", "name": "윤지우", "nickname": "지우", "part": "SPRINGBOOT"],
+        ["memberId": "104", "name": "박도윤", "nickname": "도윤", "part": "PLAN"]
     ]
 
     private static func matches(_ term: String?, in row: Row, fields: [String]) -> Bool {
@@ -194,11 +244,23 @@ struct DeskPreviewCommunityData {
 
     private static func notice(_ id: String, _ title: String, _ body: String,
                                tab: String = "CHALLENGER") -> Row {
-        ["id": id, "title": title, "content": body, "createdAt": "2026-11-24T09:00:00Z",
+        var row: Row = ["id": id, "title": title, "content": body, "createdAt": "2026-11-24T09:00:00Z",
          "mustRead": id == "21", "viewCount": "28", "authorMemberId": "102",
-         "author": ["nickname": "윤", "organizationName": "중앙 운영진"],
+         "author": ["nickname": "하늘", "organizationName": "중앙 운영진"],
          "targetInfo": ["targetGisuId": "10", "targetNoticeTab": tab, "targetParts": []],
          "hasImages": false, "hasLinks": false, "hasVote": false, "images": [], "links": []]
+        if id == "21" {
+            row["links"] = [["id": "1", "url": "https://preview.invalid/demo-day"]]
+            row["hasLinks"] = true
+            row["hasVote"] = true
+            row["vote"] = ["title": "리허설에 참석할 시간을 골라 주세요.", "status": "OPEN",
+                "isAnonymous": false, "allowMultipleChoice": false, "totalParticipants": "0",
+                "endsAtExclusive": Date.now.addingTimeInterval(86400 * 7).ISO8601Format(),
+                "mySelectedOptionIds": [String](), "options": [
+                    ["optionId": "1", "content": "오후 2시", "voteCount": "0"],
+                    ["optionId": "2", "content": "오후 4시", "voteCount": "0"]]] as Row
+        }
+        return row
     }
 
     private func noticeResult(_ path: [String], _ query: [String: String]) -> Any? {
@@ -340,14 +402,15 @@ struct DeskPreviewCommunityData {
             }, "hasMore": false]
         case ["members"], ["invitable"]:
             let inviting = path.last == "invitable"
-            let candidates = inviting ? Array(Self.people.suffix(1)) : Array(Self.people.prefix(3))
+            let candidates = Self.people.filter { memberIDs(id).contains($0["memberId"] ?? "") != inviting }
             let rows = candidates.filter { Self.matches(query["q"], in: $0, fields: ["name", "nickname"]) }
                 .map { person in
                     var row = person
                     row["generation"] = "10"
                     if !inviting {
                         let owner = id == "41" ? "101" : "102"
-                        row["role"] = person["memberId"] == owner ? "OWNER" : "MEMBER"
+                        row["role"] = roomRoles[id]?[person["memberId"] ?? ""]
+                            ?? (person["memberId"] == owner ? "OWNER" : "MEMBER")
                         row["state"] = "ACTIVE"
                     }
                     return row

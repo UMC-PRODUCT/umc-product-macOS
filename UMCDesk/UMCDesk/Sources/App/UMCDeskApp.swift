@@ -27,7 +27,8 @@ import SettingsPresentation
 struct UMCDeskApp: App {
     @NSApplicationDelegateAdaptor(AppLifecycleDelegate.self) private var lifecycle
     private let dependencies = AppDependencies()
-    @State private var dataPreview: DataPreviewSession?
+    @State private var previewMode = DataPreviewMode()
+    private var dataPreview: DataPreviewSession? { previewMode.session }
     #if DEBUG || UMC_PRERELEASE
     @State private var authPreview = AuthPreviewSession()
     @State private var typographyPreview = UMCTypographyPreview()
@@ -50,22 +51,22 @@ struct UMCDeskApp: App {
             if let dataPreview {
                 DataPreviewWindow(session: dataPreview)
             } else {
-            AppRootView(dependencies: dependencies)
-                .environment(\.settingsPublishedDocument, publishedDocument)
-                .toggleStyle(UMCCheckboxStyle())
-                .environment(\.locale, AppLocalization.shared.language.locale)
-                .onChange(of: preferences.language) {
-                    dependencies.restoreSupportedFonts()
-                }
-                .preferredColorScheme(preferences.theme.colorScheme)
-                .environment(\.umcBodyTextScale, preferences.bodyTextSize.scale)
-                .environment(\.umcFontDesign, preferences.font.design)
-                .environment(\.umcFontFamily, preferences.availableFontFamily)
-                .frame(minWidth: 1040, minHeight: 720)
-                #if DEBUG || UMC_PRERELEASE
-                .environment(\.umcTypographyPreview, typographyPreview)
-                #endif
-                .onAppear { lifecycle.preferences = preferences }
+                AppRootView(dependencies: dependencies)
+                    .environment(\.settingsPublishedDocument, publishedDocument)
+                    .toggleStyle(UMCCheckboxStyle())
+                    .environment(\.locale, AppLocalization.shared.language.locale)
+                    .onChange(of: preferences.language) {
+                        dependencies.restoreSupportedFonts()
+                    }
+                    .preferredColorScheme(preferences.theme.colorScheme)
+                    .environment(\.umcBodyTextScale, preferences.bodyTextSize.scale)
+                    .environment(\.umcFontDesign, preferences.font.design)
+                    .environment(\.umcFontFamily, preferences.availableFontFamily)
+                    .frame(minWidth: 1040, minHeight: 720)
+                    #if DEBUG || UMC_PRERELEASE
+                    .environment(\.umcTypographyPreview, typographyPreview)
+                    #endif
+                    .onAppear { lifecycle.preferences = preferences }
             }
         }
         .defaultSize(width: 1440, height: 960)
@@ -73,11 +74,7 @@ struct UMCDeskApp: App {
         .windowToolbarStyle(.unifiedCompact(showsTitle: false))
         .commands {
             AppSettingsCommands(dependencies: dependencies, preview: dataPreview)
-            DataPreviewCommands(active: dataPreview != nil, end: { dataPreview = nil }) { destination in
-                let session = dataPreview ?? DataPreviewSession()
-                session.select(destination)
-                dataPreview = session
-            }
+            DataPreviewCommands(active: dataPreview != nil, end: previewMode.end, select: previewMode.select)
             #if DEBUG || UMC_PRERELEASE
             AuthPreviewCommands(session: authPreview)
             #endif
@@ -178,7 +175,8 @@ struct UMCDeskApp: App {
         MenuBarExtra(
             "UMC Desk", systemImage: "square.grid.2x2", isInserted: $preferences.showsMenuBar
         ) {
-            AppMenuBarContent(dependencies: dependencies)
+            AppMenuBarContent(dependencies: dependencies, preview: dataPreview)
+                .id(dataPreview.map(ObjectIdentifier.init))
                 .environment(\.locale, AppLocalization.shared.language.locale)
                 .onChange(of: preferences.language) {
                     dependencies.restoreSupportedFonts()
@@ -423,6 +421,7 @@ private final class SettingsToolbarView: NSView {
 
 private struct AppMenuBarContent: View {
     let dependencies: AppDependencies
+    let preview: DataPreviewSession?
     @Environment(\.openWindow) private var openWindow
     @Environment(\.openSettings) private var openSettings
 
@@ -432,27 +431,41 @@ private struct AppMenuBarContent: View {
             NSApplication.shared.activate()
         }
         Button("매칭 진행 현황") {
-            dependencies.matchingProgress.showExpanded()
+            if let preview {
+                preview.select(.progress)
+                openWindow(id: "main")
+            } else { dependencies.matchingProgress.showExpanded() }
         }
         Button("내 매칭 지원") {
-            dependencies.openMatching(.applications)
+            if let preview {
+                preview.matchingPage = .applications
+                preview.select(.matching)
+            } else { dependencies.openMatching(.applications) }
             openWindow(id: "main")
             NSApplication.shared.activate()
         }
         Button(AppLocalization.string("마이페이지")) {
-            dependencies.selectSection(nil)
-            dependencies.settingsViewModel.showProfile()
-            dependencies.navigation.showsSettings = true
+            if let preview { preview.select(.profile) } else {
+                dependencies.selectSection(nil)
+                dependencies.settingsViewModel.showProfile()
+                dependencies.navigation.showsSettings = true
+            }
             openWindow(id: "main")
             NSApplication.shared.activate()
         }
         Button(AppLocalization.string("설정…")) {
-            dependencies.windowSettingsViewModel.showSettings()
-            openSettings()
+            if let preview {
+                preview.select(.settings)
+                openWindow(id: "main")
+            } else {
+                dependencies.windowSettingsViewModel.showSettings()
+                openSettings()
+            }
         }
-        if let account = dependencies.navigation.account {
+        if let account = preview?.account ?? dependencies.navigation.account {
             ActivityMenuContent(repository: account.activity) {
-                dependencies.selectSection(.activity)
+                if let preview { preview.select(.feature(.activity)) }
+                else { dependencies.selectSection(.activity) }
                 openWindow(id: "main")
                 NSApplication.shared.activate()
             }

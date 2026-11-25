@@ -27,7 +27,8 @@ struct FeatureAccount: Sendable {
     let environment: NetworkEnvironment
 
     init(memberID: String, boundClient bound: NetworkClient, environment: NetworkEnvironment,
-         defaults: UserDefaults, journalDirectory: URL? = nil) {
+         defaults: UserDefaults, journalDirectory: URL? = nil,
+         storeLocalImage: (@Sendable (URL) throws -> String)? = nil) {
         self.memberID = memberID
         self.client = bound
         self.environment = environment
@@ -38,7 +39,7 @@ struct FeatureAccount: Sendable {
             journalDirectory: journalDirectory
         )
         notices = LiveNoticeRepository(adapter: adapter, environment: environment,
-                                       journalDirectory: journalDirectory) {
+                                       journalDirectory: journalDirectory, storeLocalImage: storeLocalImage) {
             _ = try await bound.currentAccessToken()
         }
         posts = LiveCommunityPostRepository(

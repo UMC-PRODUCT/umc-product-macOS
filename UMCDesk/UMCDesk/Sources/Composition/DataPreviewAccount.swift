@@ -24,7 +24,12 @@ enum DataPreviewAccount {
                                    tokenStore: credentials, refreshService: credentials)
         return FeatureAccount(memberID: memberID, boundClient: client,
                               environment: NetworkEnvironment(baseURL: baseURL), defaults: defaults,
-                              journalDirectory: journalDirectory)
+                              journalDirectory: journalDirectory, storeLocalImage: { source in
+            let name = UUID().uuidString + "." + source.pathExtension
+            try FileManager.default.createDirectory(at: journalDirectory, withIntermediateDirectories: true)
+            try FileManager.default.copyItem(at: source, to: journalDirectory.appending(path: name))
+            return name
+        })
     }
 
     static let recentWork = [

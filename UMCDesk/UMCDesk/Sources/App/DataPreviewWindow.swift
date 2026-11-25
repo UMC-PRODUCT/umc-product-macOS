@@ -6,6 +6,9 @@
 //
 
 import ActivityPresentation
+import AuthData
+import AuthPresentation
+import CoreNetwork
 import CommunityPresentation
 import CoreDesignSystem
 import CoreRouting
@@ -45,6 +48,7 @@ final class DataPreviewSession {
     private let fixtures = DataPreviewFixtures()
     let matching = MatchingDesignPreview.makeUseCase()
     let progress: MatchingProgressController
+    let documents: LiveEmailLoginRepository
     let conversations: DataPreviewConversation
     let support = SupportFixture(emptyInquiries: false)
     var projectID: String?
@@ -56,13 +60,15 @@ final class DataPreviewSession {
     let settings: SettingsViewModel
 
     private let suite = "com.umc.product.macos.data-preview." + UUID().uuidString
-    private let journalDirectory = URL.temporaryDirectory.appending(path: UUID().uuidString)
+    let journalDirectory = URL.temporaryDirectory.appending(path: UUID().uuidString)
 
     init() {
         let defaults = UserDefaults(suiteName: suite)!
         self.defaults = defaults
         account = DataPreviewAccount.make(defaults: defaults, journalDirectory: journalDirectory,
                                           baseURL: fixtures.baseURL)
+        documents = LiveEmailLoginRepository(client: account.client,
+            adapter: MoyaNetworkAdapter(networkClient: account.client), environment: account.environment)
         conversations = DataPreviewConversation(repository: account.conversations)
         progress = MatchingProgressController(repository: matching)
         DataPreviewAccount.seedWorkspace(in: defaults)
@@ -88,6 +94,21 @@ final class DataPreviewSession {
         }
         self.destination = destination
     }
+}
+
+@MainActor
+@Observable
+final class DataPreviewMode {
+    private(set) var session: DataPreviewSession?
+
+    func select(_ destination: DataPreviewDestination) {
+        let workspace = session ?? DataPreviewSession()
+        workspace.settings.onLogout = { [weak self] in self?.end() }
+        workspace.select(destination)
+        session = workspace
+    }
+
+    func end() { session = nil }
 }
 
 struct DataPreviewCommands: Commands {
@@ -118,6 +139,7 @@ struct DataPreviewCommands: Commands {
 struct DataPreviewWindow: View {
     let session: DataPreviewSession
     @State private var showsUpdateInfo = false
+    @State private var externalLink: URL?
 
     var body: some View {
         let preferences = session.settings.preferences
@@ -134,13 +156,33 @@ struct DataPreviewWindow: View {
             if id == DeskWindow.support { session.select(.support) }
             if id == DeskWindow.updates { showsUpdateInfo = true }
         })
-        .environment(\.openURL, OpenURLAction { _ in .discarded })
+        .environment(\.settingsPublishedDocument, { document, close in
+            AnyView(AuthPublishedTermsView(repository: session.documents,
+                requested: document == .service ? .service : .privacy, onClose: close))
+        })
+        .environment(\.noticeLocalImage, { [directory = session.journalDirectory] name in
+            guard UUID(uuidString: (name as NSString).deletingPathExtension) != nil,
+                  name == (name as NSString).lastPathComponent else { return nil }
+            return directory.appending(path: name)
+        })
+        .environment(\.sampleActivityVenue, .init(latitude: 37.55, longitude: 127.04))
+        .environment(\.openURL, OpenURLAction { url in
+            externalLink = url
+            return .handled
+        })
         .environment(\.locale, preferences.language.locale)
         .preferredColorScheme(preferences.theme.colorScheme)
         .environment(\.umcBodyTextScale, preferences.bodyTextSize.scale)
         .toggleStyle(UMCCheckboxStyle())
         .frame(minWidth: 1040, minHeight: 720)
-        .alert("데이터 미리보기에서는 업데이트를 조회하지 않아요.", isPresented: $showsUpdateInfo) {}
+        .sheet(isPresented: $showsUpdateInfo) {
+            AuthUpdateCheckView(usesInstalledRelease: true) { showsUpdateInfo = false }
+        }
+        .alert("미리보기 외부 링크", isPresented: Binding(
+            get: { externalLink != nil }, set: { if !$0 { externalLink = nil } }
+        )) { Button("닫기", role: .cancel) {} } message: {
+            Text(externalLink?.absoluteString ?? "")
+        }
     }
 
     private var section: DeskSection? {

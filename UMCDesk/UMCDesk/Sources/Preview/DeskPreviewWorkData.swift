@@ -31,9 +31,17 @@ struct DeskPreviewWorkData {
         Member(id: "105", name: "최지우", nickname: "지니", part: "WEB", school: "가온대학교")
     ]
     private static let projects = [(id: "1", name: "모아"), (id: "3", name: "사이")]
-    private static var anchor: Date { .now }
+    private let anchor = Date.now
+    private var addedSchedules: [Row] = []
+    private var statuses: [String: String] = [:]
+    private var reviewedStatus = "PRESENT_PENDING"
+    private var names = ["301": "웹 파트 스터디", "302": "프로젝트 리뷰 모임"]
+    private var mentors = ["301": ["101"], "302": ["101"]]
+    private var attendees = ["301": ["105"], "302": ["102", "103", "104"]]
+    private var points: [String: [Row]] = [:]
+    private var nextID = 2000
 
-    func result(for request: URLRequest) -> Any? {
+    mutating func result(for request: URLRequest) -> Any? {
         guard let url = request.url else { return nil }
         let queryItems = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
         func query(_ key: String) -> String? { queryItems.first { $0.name == key }?.value }
@@ -44,10 +52,14 @@ struct DeskPreviewWorkData {
                 ["permissionType": "APPROVE", "hasPermission": true]
             ]]]]
         }
-        guard request.httpMethod == "GET" else { return nil }
+        if request.httpMethod != "GET" {
+            guard path.hasPrefix("/api/v2/schedules") || path.hasPrefix("/api/v1/study-groups")
+                    || path.hasPrefix("/api/v1/challenger/") else { return nil }
+            return mutate(path: path, request: request)
+        }
         switch path {
         case "/api/v2/schedules/me":
-            return Self.schedules(from: query("from"), to: query("to"),
+            return schedules(from: query("from"), to: query("to"),
                              tracked: query("isAttendanceRequired") == "true")
         case "/api/v2/schedules/capabilities":
             return ["canCreateSchedule": true, "canCreateAttendanceRequiredSchedule": true,
@@ -55,7 +67,7 @@ struct DeskPreviewWorkData {
         case "/api/v2/schedules/attendance":
             return [["scheduleId": "801", "name": "웹 파트 코드 리뷰",
                      "participants": [
-                        ["memberId": "105", "name": "최지우", "attendanceStatus": "PRESENT_PENDING"],
+                        ["memberId": "105", "name": "최지우", "attendanceStatus": reviewedStatus],
                         ["memberId": "102", "name": "서하늘", "attendanceStatus": "PRESENT"]
                      ]] as Row]
         case "/api/v2/curriculums/progress/me":
@@ -65,11 +77,17 @@ struct DeskPreviewWorkData {
                  "title": title, "originalWorkbooks": [["title": title + " 실습 노트"]]]
             }]
         case "/api/v1/study-groups/names":
-            return ["studyGroups": [["groupId": "301", "name": "웹 파트 스터디"],
-                                    ["groupId": "302", "name": "프로젝트 리뷰 모임"]]]
-        case "/api/v1/study-groups/301", "/api/v1/study-groups/302":
-            let peers = path.hasSuffix("/301") ? [Self.members[4]] : [Self.members[1], Self.members[2], Self.members[3]]
-            return ["mentors": [Self.members[0].row], "members": peers.map(\.row)]
+            return ["studyGroups": names.keys.sorted().map { ["groupId": $0, "name": names[$0]!] }]
+        case _ where path.hasPrefix("/api/v1/study-groups/"):
+            let id = url.lastPathComponent
+            guard names[id] != nil else { return nil }
+            return ["mentors": Self.members.filter { mentors[id]?.contains($0.id) == true }.map(\.row),
+                    "members": Self.members.filter { attendees[id]?.contains($0.id) == true }.map(\.row)]
+        case _ where path.hasPrefix("/api/v1/challenger/"):
+            let id = url.lastPathComponent
+            let records = points[id] ?? []
+            return ["challengerId": id, "points": records,
+                    "totalPoints": records.reduce(0) { $0 + ($1["point"] as? Int ?? 0) }] as Row
         case "/api/v1/authorization/resource-permission":
             guard let resource = query("resourceType"),
                   ["ATTENDANCE", "STUDY_GROUP", "CHALLENGER_POINT"].contains(resource),
@@ -115,18 +133,70 @@ struct DeskPreviewWorkData {
         }
     }
 
-    private static func schedules(from: String?, to: String?, tracked: Bool) -> [Row] {
+    private mutating func mutate(path: String, request: URLRequest) -> Any? {
+        nextID += 1
+        let id = String(nextID)
+        let json = DataPreviewFixtures.json(request)
+        let body = json as? Row ?? [:]
+        let route = path.split(separator: "/").map(String.init)
+        if path == "/api/v2/schedules" {
+            var row = body
+            row["scheduleId"] = id
+            row["isOnline"] = body["location"] == nil
+            row["isParticipant"] = true
+            row["isAttendanceChecked"] = body["attendancePolicy"] != nil
+            addedSchedules.append(row)
+            return id
+        }
+        if route.starts(with: ["api", "v2", "schedules"]), route.count == 6 {
+            let schedule = route[3]
+            if route.last == "decide" {
+                let decision = json as? [[String: Any]]
+                reviewedStatus = decision?.first?["isApproved"] as? Bool == true ? "PRESENT" : "ABSENT"
+                return [["status": reviewedStatus]]
+            }
+            let status = route.last == "excuse" ? "EXCUSED_PENDING" : "PRESENT_PENDING"
+            statuses[schedule] = status
+            return ["status": status]
+        }
+        if path == "/api/v1/study-groups/schedules" { return id }
+        if route.starts(with: ["api", "v1", "study-groups"]) {
+            let group = route.count > 3 ? route[3] : id
+            if let name = body["name"] as? String {
+                names[group] = name
+                if let ids = body["mentorIds"] as? [Int] { mentors[group] = ids.map(String.init) }
+                if let ids = body["memberIds"] as? [Int] { attendees[group] = ids.map(String.init) }
+            } else if route.count == 6 {
+                let member = route[5]
+                mentors[group]?.removeAll { $0 == member }
+                attendees[group]?.removeAll { $0 == member }
+                if route[4] == "mentors" { mentors[group, default: []].append(member) }
+                else { attendees[group, default: []].append(member) }
+            } else { return nil }
+            return Row()
+        }
+        if route.count == 5, route.last == "points" {
+            let member = route[3]
+            points[member, default: []].append(["id": id, "challengerId": member,
+                "pointType": "CUSTOM", "point": body["pointValue"] ?? 0,
+                "description": body["description"] ?? ""])
+            return ["challengerId": member]
+        }
+        return nil
+    }
+
+    private func schedules(from: String?, to: String?, tracked: Bool) -> [Row] {
         let calendar = Calendar.current
         let start = max(calendar.startOfDay(for: anchor), anchor.addingTimeInterval(-180))
         let entries: [(id: String, name: String, day: Int, online: Bool, status: String?)] =
             tracked ? [
                 ("801", "웹 파트 코드 리뷰", 0, true, nil),
-                ("802", "중간 발표 리허설", 2, false, nil),
+                ("802", "중간 발표 리허설", 0, false, nil),
                 ("803", "스터디 회고", -3, true, "PRESENT")
             ] : [("804", "기획·개발 싱크업", 1, true, nil)]
         let lower = from.flatMap { try? Date.ISO8601FormatStyle().parse($0) }
         let upper = to.flatMap { try? Date.ISO8601FormatStyle().parse($0) }
-        return entries.compactMap { entry -> Row? in
+        let seeded = entries.compactMap { entry -> Row? in
             guard let date = calendar.date(byAdding: .day, value: entry.day, to: start)
             else { return nil }
             let end = date.addingTimeInterval(3600)
@@ -136,7 +206,7 @@ struct DeskPreviewWorkData {
                             "startsAt": date.ISO8601Format(), "endsAt": end.ISO8601Format(),
                             "isOnline": entry.online, "isParticipant": true,
                             "isAttendanceChecked": tracked]
-            row["attendanceStatus"] = entry.status
+            row["attendanceStatus"] = statuses[entry.id] ?? entry.status
             if tracked {
                 row["attendancePolicy"] = [
                     "checkInStartAt": date.addingTimeInterval(-600).ISO8601Format(),
@@ -149,6 +219,17 @@ struct DeskPreviewWorkData {
                                    "latitude": 37.55, "longitude": 127.04] as Row
             }
             return row
+        }
+        return seeded + addedSchedules.compactMap { row in
+            guard row["isAttendanceChecked"] as? Bool == tracked,
+                  let start = row["startsAt"] as? String, let end = row["endsAt"] as? String,
+                  let date = try? Date.ISO8601FormatStyle().parse(start),
+                  let finish = try? Date.ISO8601FormatStyle().parse(end),
+                  finish >= (lower ?? .distantPast), date <= (upper ?? .distantFuture)
+            else { return nil }
+            var updated = row
+            updated["attendanceStatus"] = statuses[row["scheduleId"] as? String ?? ""]
+            return updated
         }
     }
 }

@@ -19,9 +19,11 @@ public struct AuthUpdateCheckView: View {
     @State private var status: Status = .checking
     @State private var attempt = 0
     @State private var openFailed = false
+    private let usesInstalledRelease: Bool
     private let onClose: () -> Void
 
-    public init(onClose: @escaping () -> Void) {
+    public init(usesInstalledRelease: Bool = false, onClose: @escaping () -> Void) {
+        self.usesInstalledRelease = usesInstalledRelease
         self.onClose = onClose
     }
 
@@ -64,6 +66,10 @@ public struct AuthUpdateCheckView: View {
                       let build = info["CFBundleVersion"] as? String,
                       let installed = AuthReleaseVersion(version: version, build: build) else {
                     throw URLError(.cannotParseResponse)
+                }
+                if usesInstalledRelease {
+                    status = .current(.init(version: installed, notes: URL(string: "https://preview.invalid/releases")!))
+                    return
                 }
                 let release = try await AuthReleaseCatalog.latest()
                 try Task.checkCancellation()

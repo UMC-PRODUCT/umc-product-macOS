@@ -259,4 +259,3 @@ struct SupportComposePreview: View {
         .frame(width: 460)
     }
 }
-
