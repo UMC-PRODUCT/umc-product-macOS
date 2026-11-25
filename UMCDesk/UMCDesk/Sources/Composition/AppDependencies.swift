@@ -254,11 +254,6 @@ final class AppDependencies {
     }
 
     func selectSection(_ section: DeskSection?) {
-        guard section == nil || navigation.account != nil else {
-            navigation.pendingSection = section
-            navigation.showsSettings = false
-            return
-        }
         navigation.selectFeature(section)
     }
 
