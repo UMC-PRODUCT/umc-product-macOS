@@ -10,7 +10,7 @@ import simd
 /// The dock lies on an x/z plane. North is negative z and the reception desk faces north.
 public struct DockRound {
     public enum Phase { case reception, first, choice, second, boss, won, lost }
-    public enum Seal: String, CaseIterable {
+    public enum Seal: String, CaseIterable, Sendable {
         case pair = "겹우표", echo = "메아리인", slide = "여백접기"
         public var action: String {
             switch self {
@@ -22,7 +22,7 @@ public struct DockRound {
     }
     public struct Spirit: Identifiable {
         public let id: Int
-        public let position: SIMD2<Double>
+        public fileprivate(set) var position: SIMD2<Double>
         public var folds: Int
         public let kite: Bool
     }
@@ -40,18 +40,29 @@ public struct DockRound {
     public private(set) var stampTime = 0.0
     public private(set) var hit = false
     public private(set) var hasWarning = false
-    public var exposed: Bool { phase == .boss && beat > 2.5 }
+    public var exposed: Bool { phase == .boss && beat > 2.5 && (faces != 1 || finalSweep) }
     public var score: Int { opened * 50 + (phase == .won ? 300 : 0) }
     public var playing: Bool { [.reception, .first, .second, .boss].contains(phase) }
     public var direction: SIMD2<Double> { .init(sin(heading), -cos(heading)) }
-    public var safeX: Double { faces == 2 ? -4 : 4 }
+    public var safeX: Double { laneCenter(at: position.y) }
+    public var slope: Double { faces == 2 || (faces == 1 && !finalSweep) ? -0.14 : 0.14 }
+    public func laneCenter(at z: Double) -> Double { (slope < 0 ? -3.0 : 3.0) + slope * z }
+    public private(set) var attacker: Int?
+    public private(set) var finalSweep = false
+    public var incomingGate: String? {
+        guard let next = queue.first else { return nil }
+        return next.0 < 0 ? "서쪽 봉투문" : "동쪽 우표문"
+    }
     public static let bossPosition = SIMD2<Double>(0, -10)
     private var group = 0
     private var serial = 0
+    private var attackIndex = 0
+    private var jumpStart = SIMD2<Double>.zero
     private var guardTime = 0.0
     private var nextSpawn = 0.0
     private var queue: [(Double, Double, Bool)] = []
-    private var echoPoint: SIMD2<Double>?
+    public private(set) var impactPoint = SIMD2<Double>.zero
+    public private(set) var echoPoint: SIMD2<Double>?
     private var echoWait = 0.0
     private var pendingImpact = false
     private var lastMove = SIMD2<Double>(0, -1)
@@ -137,7 +148,9 @@ public struct DockRound {
             if nextSpawn <= 0 {
                 let (x, z, kite) = queue.removeFirst()
                 serial += 1
-                spirits.append(.init(id: serial, position: .init(x, z), folds: kite ? 2 : 1,
+                var entry = SIMD2(x, z)
+                if simd_distance(entry, position) < 2.4 { entry.x = position.x < 0 ? 5 : -5 }
+                spirits.append(.init(id: serial, position: entry, folds: kite ? 2 : 1,
                                      kite: kite))
                 nextSpawn = phase == .second ? 0.28 : 1.1
             }
@@ -154,15 +167,30 @@ public struct DockRound {
         beat += step
         if prior < 0.9, beat >= 0.9 {
             warningPoint = position
+            if phase != .boss, !spirits.isEmpty {
+                let spirit = spirits[attackIndex % spirits.count]
+                attacker = spirit.id
+                jumpStart = spirit.position
+                attackIndex += 1
+            }
             hasWarning = true
+        }
+        if phase != .boss, beat > 1.9, beat <= 2.55,
+           let index = spirits.firstIndex(where: { $0.id == attacker && !$0.kite }) {
+            let t = min(1, (beat - 1.9) / 0.6)
+            spirits[index].position = jumpStart + (warningPoint - jumpStart) * t
         }
         if prior < 2.5, beat >= 2.5 {
             let danger = phase == .boss
                 ? abs(position.x - safeX) > 2.1
                 : simd_distance(position, warningPoint) < 1.65
-            if danger, guardTime == 0 { health -= 1; guardTime = 1 }
+            if danger, guardTime == 0, phase == .boss || spirits.contains(where: { $0.id == attacker }) { health -= 1; guardTime = 1 }
             hasWarning = false
             if health == 0 { phase = .lost }
+            if phase == .boss && faces == 1 && !finalSweep {
+                finalSweep = true
+                beat = 0
+            }
         }
         if beat >= (phase == .boss ? 6 : 4.4) { beat = 0 }
     }
@@ -179,6 +207,7 @@ public struct DockRound {
     }
 
     private mutating func impact() {
+        impactPoint = position + direction * 3
         if phase == .reception {
             guard aim(.init(0, 5), radius: 1.6) else { return }
             phase = .first
@@ -186,6 +215,7 @@ public struct DockRound {
             wave()
         } else if phase == .boss {
             guard exposed, aim(Self.bossPosition, radius: 2) else { return }
+            impactPoint = Self.bossPosition - direction * 0.9
             faces -= 1
             hit = true
             beat = 0
@@ -196,6 +226,7 @@ public struct DockRound {
             for target in targets.prefix(seal == .pair ? 2 : 1) {
                 guard let index = spirits.firstIndex(where: { $0.id == target.id }) else { continue }
                 hit = true
+                impactPoint = target.position - direction * 0.3
                 unfold(index)
                 if seal == .echo { echoPoint = target.position; echoWait = 0.48 }
             }

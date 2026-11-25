@@ -17,6 +17,7 @@ final class DockSession {
     var confirmingExit = false
     var keys: Set<UInt16> = []
     var sensitivity = 1.0
+    var music = 0.25
     var effects = 0.7
     var reduced = false
     var running: Bool { started && !paused && !confirmingExit && round.playing }
@@ -86,6 +87,7 @@ struct DockSessionView: View {
             if r.phase == .boss { return r.safeX > 0 ? "⚠ 동쪽 통로로 이동 →" : "⚠ ← 서쪽 통로로 이동" }
             return "⚠ 발밑의 고리 밖으로 이동"
         }
+        if let gate = r.incomingGate { return gate + " · 깃발이 펴집니다" }
         if r.phase == .boss { return "우편종지기 · 남은 면 \(r.faces)" }
         if let seal = r.seal { return "\(seal.rawValue) · \(seal.action) · Esc 일시 정지" }
         return "WASD 이동　← → 시점　F 소인　Esc 일시 정지"
@@ -106,6 +108,7 @@ struct DockSessionView: View {
             Text("꾹이와 함께 접지부두의 마지막 우편물을 펼치세요.")
             Text("WASD 이동 · 마우스 또는 ← → 회전\n클릭 또는 F 소인 · Esc 일시 정지")
             Slider(value: $session.sensitivity, in: 0.3...2) { Text("시점 감도") }
+            Slider(value: $session.music, in: 0...1) { Text("음악") }
             Slider(value: $session.effects, in: 0...1) { Text("효과음") }
             HStack {
                 Button("배달 시작") { session.started = true }.focused($focus, equals: "start")
@@ -155,8 +158,14 @@ private final class DockViewport: SCNView {
     var captured = false
     var previous = 0.0
     var elapsed = 0.0
-    let tap = NSSound(named: "Pop")
-    let bell = NSSound(named: "Glass")
+    let tap = DockViewport.sample("Postmark")
+    let bell = DockViewport.sample("Bell")
+    let music = DockViewport.sample("SortingRoom")
+
+    private static func sample(_ name: String) -> NSSound? {
+        guard let url = Bundle.module.url(forResource: name, withExtension: "wav") else { return nil }
+        return NSSound(contentsOf: url, byReference: false)
+    }
 
     init(_ session: DockSession) {
         self.session = session
@@ -217,9 +226,13 @@ private final class DockViewport: SCNView {
         previous = 0
         session.keys.removeAll()
         if enable {
+            music?.volume = Float(session.music)
+            music?.loops = true
+            if session.music > 0 { music?.play() }
             NSCursor.hide()
             CGAssociateMouseAndMouseCursorPosition(0)
         } else {
+            music?.stop()
             CGAssociateMouseAndMouseCursorPosition(1)
             NSCursor.unhide()
         }
@@ -261,6 +274,7 @@ private final class DockViewport: SCNView {
         if let monitor { NSEvent.removeMonitor(monitor); self.monitor = nil }
         tap?.stop()
         bell?.stop()
+        music?.stop()
         NotificationCenter.default.removeObserver(self)
     }
 }

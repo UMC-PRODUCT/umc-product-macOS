@@ -20,6 +20,7 @@ final class DockScenery {
     let right = SCNNode(), left = SCNNode(), finger = SCNNode()
     let boss = SCNNode(), envelope = SCNNode(), barrier = SCNNode()
     let warning = SCNNode(), bands = SCNNode(), boat = SCNNode()
+    let target = SCNNode(), impactMark = SCNNode(), echoMark = SCNNode()
     var actors: [Int: SCNNode] = [:]
     var materials: [NSColor: SCNMaterial] = [:]
 
@@ -46,6 +47,15 @@ final class DockScenery {
         scene.rootNode.addChildNode(sky)
         constructHarbor()
         constructTools()
+        decorateWharf()
+        // Static pier geometry shares materials. Batching removes hundreds of draw submissions.
+        let live = [camera, right, left, boss, envelope, warning, bands, boat, barrier,
+                    target, impactMark, echoMark]
+        let staticProps = SCNNode()
+        for child in scene.rootNode.childNodes where child.light == nil && !live.contains(child) {
+            staticProps.addChildNode(child)
+        }
+        scene.rootNode.addChildNode(staticProps.flattenedClone())
     }
 
     @discardableResult func shape(
@@ -175,6 +185,58 @@ final class DockScenery {
         node.scale = SCNVector3(scale, scale, scale)
     }
 
+    private func sign(_ text: String, x: CGFloat, y: CGFloat, z: CGFloat, width: CGFloat) {
+        box(width, 0.72, 0.1, ink, x, y, z)
+        let glyph = SCNText(string: text, extrusionDepth: 0.12)
+        glyph.font = .systemFont(ofSize: 11, weight: .black)
+        glyph.flatness = 0.8
+        let node = shape(glyph, stock, x, y, z + 0.07)
+        let (lo, hi) = node.boundingBox
+        let scale = min((width - 0.25) / (hi.x - lo.x), 0.48 / (hi.y - lo.y))
+        node.scale = SCNVector3(scale, scale, scale)
+        node.pivot = SCNMatrix4MakeTranslation((hi.x + lo.x)/2, (hi.y + lo.y)/2, 0)
+    }
+
+    private func decorateWharf() {
+        sign("서쪽 · 접수", x: -5, y: 3.6, z: -2.5, width: 3.4)
+        sign("동쪽 · 발송", x: 5, y: 3.6, z: -4, width: 3.4)
+        sign("접 지 부 두", x: 0, y: 4.12, z: -10, width: 4.4)
+        for i in 0..<9 {
+            let x = CGFloat(i) * 1.13 - 4.5
+            box(1.18, 0.035, 0.035, ink, x, 4.8 + x * x * 0.015, -8)
+            let flag = SCNCone(topRadius: 0.28, bottomRadius: 0, height: 0.56)
+            flag.radialSegmentCount = 3
+            shape(flag, i.isMultiple(of: 2) ? ink : crease, x, 4.5 + x*x*0.015, -8).scale.z = 0.08
+        }
+        for i in 0..<12 {
+            let x: CGFloat = i.isMultiple(of: 2) ? -7.65 : 7.65
+            let z = CGFloat(i / 2) * 3.1 - 9
+            let parcel = SCNNode()
+            parcel.position = SCNVector3(x, 0.36, z)
+            parcel.eulerAngles.y = CGFloat(i % 3) * 0.24
+            scene.rootNode.addChildNode(parcel)
+            box(0.95, 0.7, 1.02, crease, 0, 0, 0, parcel)
+            box(0.16, 0.72, 1.04, ink, 0.17, 0, 0, parcel)
+            box(0.97, 0.73, 0.08, stock, 0, 0, -0.18, parcel)
+        }
+        for x in [-13.0, 12.0] {
+            box(0.38, 7.2, 0.38, ink, x, 2.2, -13)
+            let spar = box(4.2, 0.24, 0.22, ink, x + 1.5, 5.4, -13)
+            spar.eulerAngles.z = -0.18
+            box(0.04, 2.2, 0.05, ink, x + 3.3, 3.96, -13)
+            box(1.1, 0.75, 1.1, crease, x + 3.3, 2.49, -13)
+        }
+        let front = ring(0.91, 0.07, alarm, target)
+        front.eulerAngles.x = .pi/2
+        target.position = SCNVector3(0, 1.52, -9.23)
+        scene.rootNode.addChildNode(target)
+        scene.rootNode.addChildNode(impactMark)
+        scene.rootNode.addChildNode(echoMark)
+        for (node, radius) in [(impactMark, 0.35), (echoMark, 0.7)] {
+            ring(radius, 0.055, ink, node).eulerAngles.x = .pi/2
+        }
+    }
+
     private func constructTools() {
         camera.addChildNode(right)
         camera.addChildNode(left)
@@ -210,6 +272,15 @@ final class DockScenery {
     func draw(_ round: DockRound, time: Double, reduced: Bool) {
         camera.position = SCNVector3(round.position.x, 1.58, round.position.y)
         camera.eulerAngles.y = -round.heading
+        target.isHidden = !round.exposed
+        impactMark.isHidden = round.stampTime <= 0 || round.stampTime > 0.22
+        impactMark.position = SCNVector3(round.impactPoint.x, 1.45, round.impactPoint.y)
+        impactMark.eulerAngles.y = -round.heading
+        echoMark.isHidden = round.echoPoint == nil
+        if let echo = round.echoPoint {
+            echoMark.position = SCNVector3(echo.x, 1.35, echo.y)
+            echoMark.eulerAngles.y = -round.heading
+        }
         envelope.isHidden = round.phase != .reception
         barrier.isHidden = round.seal != nil
         boss.eulerAngles.z = round.exposed && !reduced ? sin(time * 4) * 0.08 : 0
@@ -223,8 +294,9 @@ final class DockScenery {
         warning.position = SCNVector3(round.warningPoint.x, 0.06, round.warningPoint.y)
         bands.isHidden = !(round.hasWarning && round.phase == .boss)
         if !bands.isHidden {
+            bands.eulerAngles.y = atan(round.slope)
             for stripe in bands.childNodes {
-                stripe.isHidden = abs(stripe.position.x - round.safeX) < 2.1
+                stripe.isHidden = abs(stripe.position.x - round.laneCenter(at: 0)) < 2.1
             }
         }
         let active = Set(round.spirits.map(\.id))
@@ -244,7 +316,11 @@ final class DockScenery {
                 }
                 actors[spirit.id] = node
             }
-            let bob = reduced ? 0 : abs(sin(time * 2.8 + Double(spirit.id))) * 0.27
+            let attacks = round.attacker == spirit.id && round.hasWarning
+            let leap = attacks && !spirit.kite ? max(0, sin((round.beat - 1.9) / 0.6 * .pi)) : 0
+            let bob = reduced ? 0 : abs(sin(time * 2.8 + Double(spirit.id))) * 0.2 + leap * 0.7
+            let crouched = attacks && round.beat < 1.9 && !spirit.kite
+            node.scale.y = (spirit.kite ? 1.28 : 0.92) * (crouched ? 0.65 : 1)
             node.position = SCNVector3(spirit.position.x, (spirit.kite ? 1.6 : 1.05) + bob,
                                        spirit.position.y)
             node.eulerAngles.y = atan2(round.position.x - spirit.position.x,
