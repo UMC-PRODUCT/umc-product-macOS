@@ -310,8 +310,10 @@ struct ThreadBrowserTools: View {
             } label: {
                 row("분류 · 참여 상태 필터")
             }
-            .menuStyle(.borderlessButton)
+            .menuStyle(.button)
+            .buttonStyle(.plain)
             .menuIndicator(.hidden)
+            .frame(maxWidth: .infinity, minHeight: UMCSpacing.value40)
             .toggleStyle(.automatic)
             Button(action: showAll) { row("전체 스레드") }
                 .buttonStyle(.plain)

@@ -56,7 +56,8 @@ private struct TabTools<Actions: View>: ViewModifier {
                 ToolbarSpacer(.flexible, placement: .primaryAction)
                 ToolbarItem(placement: .primaryAction) {
                     ToolsTrigger(title: title, presented: presented, findShortcut: findShortcut,
-                                 focus: triggerFocus) {
+                                 isEnabled: isEnabled, focus: triggerFocus) {
+                        guard isEnabled else { return }
                         if presented { dismiss() } else { presented = true }
                     }
                     .frame(width: 32, height: 28)
@@ -136,6 +137,7 @@ private struct ToolsTrigger: NSViewRepresentable {
     let title: String
     let presented: Bool
     let findShortcut: Bool
+    let isEnabled: Bool
     let focus: UMCWindowButtonFocus
     let activate: () -> Void
 
@@ -151,11 +153,13 @@ private struct ToolsTrigger: NSViewRepresentable {
 
     func updateNSView(_ button: Control, context: Context) {
         focus.control = button
+        button.isEnabled = isEnabled
         button.activate = activate
         let symbol = presented ? "sidebar.right.fill" : "sidebar.right"
-        button.title = title
-        button.image = NSImage(systemSymbolName: symbol, accessibilityDescription: title)
-        button.setAccessibilityTitle(title)
+        button.toolTitle = title
+        button.image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)
+        button.imagePosition = .imageOnly
+        button.contentTintColor = .white
         button.toolTip = title
         button.setAccessibilityLabel(title)
         button.setAccessibilityValue(presented ? "열림" : "닫힘")
@@ -165,11 +169,16 @@ private struct ToolsTrigger: NSViewRepresentable {
     }
 
     final class Control: NSButton {
+        var toolTitle = ""
+        override func accessibilityLabel() -> String? { toolTitle }
+        override func accessibilityTitle() -> String? { toolTitle }
         var activate: (() -> Void)?
         override var acceptsFirstResponder: Bool { true }
         override var canBecomeKeyView: Bool { !isHiddenOrHasHiddenAncestor && isEnabled }
 
-        @objc func toggleTools() { activate?() }
+        @objc func toggleTools() {
+            if isEnabled { activate?() }
+        }
 
         override func keyDown(with event: NSEvent) {
             let modifiers = event.modifierFlags.intersection([.command, .shift, .control, .option])

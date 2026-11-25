@@ -31,6 +31,11 @@ struct ThreadSearchFieldTests {
             context: nil, characters: "f", charactersIgnoringModifiers: "f",
             isARepeat: false, keyCode: 3))
         #expect(window.performKeyEquivalent(with: findKey))
+        let focusDeadline = ContinuousClock.now + .seconds(2)
+        while field.currentEditor() == nil, ContinuousClock.now < focusDeadline {
+            try await Task.sleep(for: .milliseconds(10))
+            host.layoutSubtreeIfNeeded()
+        }
         let editor = try #require(field.currentEditor() as? NSTextView)
         editor.insertText("한글", replacementRange: .init(location: NSNotFound, length: 0))
         editor.doCommand(by: #selector(NSResponder.insertNewline(_:)))
