@@ -21,6 +21,7 @@ final class DockScenery {
     let boss = SCNNode(), envelope = SCNNode(), barrier = SCNNode()
     let warning = SCNNode(), bands = SCNNode(), boat = SCNNode()
     let target = SCNNode(), impactMark = SCNNode(), echoMark = SCNNode()
+    private lazy var mickey = DockMickey(in: self)
     var actors: [Int: SCNNode] = [:]
     var materials: [NSColor: SCNMaterial] = [:]
 
@@ -56,6 +57,9 @@ final class DockScenery {
             staticProps.addChildNode(child)
         }
         scene.rootNode.addChildNode(staticProps.flattenedClone())
+        // A raised sorting platform behind the west gate keeps the guide off the route.
+        box(1.8, 1.15, 1.4, crease, -4.3, 0.575, -6.1)
+        _ = mickey
     }
 
     @discardableResult func shape(
@@ -270,6 +274,7 @@ final class DockScenery {
     }
 
     func draw(_ round: DockRound, time: Double, reduced: Bool) {
+        mickey.pose(round, time: time, reduced: reduced)
         camera.position = SCNVector3(round.position.x, 1.58, round.position.y)
         camera.eulerAngles.y = -round.heading
         target.isHidden = !round.exposed
@@ -328,5 +333,103 @@ final class DockScenery {
             node.eulerAngles.z = spirit.kite ? 0.48 : 0
         }
         if round.phase == .won && !reduced { boat.position.z -= 0.02 }
+    }
+}
+
+/// Original monochrome dockhand. Each rigid ink silhouette batches independently
+/// so the shoulders, wrists, face and feet keep their own animation pivots.
+@MainActor
+private final class DockMickey {
+    let root = SCNNode()
+    private let body = SCNNode(), head = SCNNode(), eyes = SCNNode(), mouth = SCNNode()
+    private let arms = [SCNNode(), SCNNode()]
+    private let hands = [SCNNode(), SCNNode()]
+    private let soot = NSColor(white: 0.065, alpha: 1)
+    private let paper = NSColor(white: 0.94, alpha: 1)
+    private let flannel = NSColor(white: 0.44, alpha: 1)
+
+    init(in art: DockScenery) {
+        art.scene.rootNode.addChildNode(root)
+        root.addChildNode(body)
+        body.addChildNode(head)
+        head.position.y = 1.48
+        func oval(
+            _ parent: SCNNode, _ color: NSColor, _ x: CGFloat, _ y: CGFloat, _ z: CGFloat,
+            _ width: CGFloat, _ height: CGFloat, _ depth: CGFloat
+        ) {
+            let sphere = SCNSphere(radius: 1)
+            sphere.segmentCount = 24
+            let node = art.shape(sphere, color, x, y, z, parent: parent)
+            node.scale = SCNVector3(width, height, depth)
+        }
+        oval(body, soot, 0, 0.94, 0, 0.25, 0.4, 0.23)
+        oval(body, flannel, 0, 0.69, 0, 0.32, 0.26, 0.26)
+        oval(head, soot, 0, 0.04, 0, 0.43, 0.43, 0.36)
+        head.addChildNode(eyes)
+        head.addChildNode(mouth)
+        eyes.position = SCNVector3(0, 0.11, 0.34)
+        mouth.position = SCNVector3(0, -0.16, 0.33)
+        oval(mouth, soot, 0, 0, 0, 0.18, 0.102, 0.075)
+        oval(mouth, flannel, 0.04, -0.043, 0.06, 0.093, 0.034, 0.014)
+        for index in arms.indices {
+            let side: CGFloat = index == 0 ? -1 : 1
+            oval(head, soot, side * 0.37, 0.43, -0.04, 0.255, 0.26, 0.115)
+            oval(head, paper, side * 0.14, 0.09, 0.24, 0.171, 0.236, 0.11)
+            oval(eyes, soot, side * 0.104, 0, 0.016, 0.043, 0.103, 0.026)
+            oval(head, paper, side * 0.119, -0.074, 0.31, 0.192, 0.108, 0.14)
+            oval(body, paper, side * 0.096, 0.74, 0.25, 0.034, 0.052, 0.019)
+            oval(body, soot, side * 0.163, 0.4, 0, 0.062, 0.225, 0.066)
+            oval(body, flannel, side * 0.2, 0.135, 0.078, 0.169, 0.119, 0.235)
+            let arm = arms[index], hand = hands[index]
+            arm.position = SCNVector3(side * 0.19, 1.12, 0)
+            body.addChildNode(arm)
+            oval(arm, soot, side * 0.036, -0.178, 0.012, 0.063, 0.207, 0.062)
+            hand.position = SCNVector3(side * 0.033, -0.34, 0.016)
+            arm.addChildNode(hand)
+            oval(hand, paper, 0, -0.087, 0.03, 0.093, 0.117, 0.068)
+            for digit in -1...1 {
+                oval(hand, paper, CGFloat(digit) * 0.055, digit == 0 ? -0.21 : -0.178,
+                     0.04, 0.034, digit == 0 ? 0.094 : 0.068, 0.04)
+            }
+            oval(hand, paper, -side * 0.089, -0.075, 0.04, 0.043, 0.084, 0.048)
+        }
+        oval(head, soot, 0, -0.013, 0.453, 0.107, 0.07, 0.077)
+        // The tail curls behind the trousers, clearing the outline of both shoes.
+        for i in 0..<16 {
+            let t = CGFloat(i) / 15
+            oval(body, soot, -0.67 * t, 0.58 - 0.28 * sin(.pi * t),
+                 -0.18 - t * 0.11, 0.042, 0.034, 0.033)
+        }
+        for pivot in hands + arms + [body, head, eyes, mouth] {
+            let inkLayer = SCNNode()
+            for child in pivot.childNodes where child.geometry != nil {
+                inkLayer.addChildNode(child)
+            }
+            pivot.addChildNode(inkLayer.flattenedClone())
+        }
+    }
+
+    func pose(_ round: DockRound, time: Double, reduced: Bool) {
+        let welcome = round.phase == .reception
+        let finale = round.phase == .won
+        let beat = reduced ? 0 : sin(time * 5)
+        let west = round.incomingGate == "서쪽 봉투문"
+        let pointing = round.incomingGate != nil
+        root.position = welcome ? SCNVector3(-2.35, 0, 3.4) : SCNVector3(-4.3, 1.15, -6.1)
+        root.eulerAngles.y = atan2(round.position.x - root.position.x,
+                                   round.position.y - root.position.z)
+        let squash = CGFloat(beat) * (finale ? 0.045 : 0.015)
+        body.scale = SCNVector3(1 - squash, 1 + squash, 1)
+        head.eulerAngles.z = welcome || finale ? 0.10 + beat * 0.065 : 0
+        eyes.scale.y = !reduced && time.truncatingRemainder(dividingBy: 3.1) < 0.11 ? 0.13 : 1
+        mouth.scale.y = welcome || finale ? 1 : 0.49
+        for index in arms.indices {
+            let side: CGFloat = index == 0 ? -1 : 1
+            let greeting = (welcome && index == 1) || finale
+            let signals = pointing && ((index == 0) == west)
+            arms[index].eulerAngles.z = side * (greeting ? 2.55 + beat * 0.20 :
+                                                signals ? 1.72 : 0.31)
+            hands[index].eulerAngles.z = greeting ? side * beat * 0.48 : 0
+        }
     }
 }

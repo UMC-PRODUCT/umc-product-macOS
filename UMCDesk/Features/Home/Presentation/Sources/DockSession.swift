@@ -87,7 +87,7 @@ struct DockSessionView: View {
             if r.phase == .boss { return r.safeX > 0 ? "⚠ 동쪽 통로로 이동 →" : "⚠ ← 서쪽 통로로 이동" }
             return "⚠ 발밑의 고리 밖으로 이동"
         }
-        if let gate = r.incomingGate { return gate + " · 깃발이 펴집니다" }
+        if let gate = r.incomingGate { return "미키가 가리키는 " + gate }
         if r.phase == .boss { return "우편종지기 · 남은 면 \(r.faces)" }
         if let seal = r.seal { return "\(seal.rawValue) · \(seal.action) · Esc 일시 정지" }
         return "WASD 이동　← → 시점　F 소인　Esc 일시 정지"
@@ -105,7 +105,7 @@ struct DockSessionView: View {
             Button("홈으로") { session.confirmingExit = true }
         } else if !session.started {
             Text("소인이 찍겠습니다!").font(.largeTitle.bold())
-            Text("꾹이와 함께 접지부두의 마지막 우편물을 펼치세요.")
+            Text("미키마우스가 왼쪽 접수대에서 손을 흔들어요. 꾹이의 인장으로 빈 봉투를 찍어 배달을 시작하세요.")
             Text("WASD 이동 · 마우스 또는 ← → 회전\n클릭 또는 F 소인 · Esc 일시 정지")
             Slider(value: $session.sensitivity, in: 0.3...2) { Text("시점 감도") }
             Slider(value: $session.music, in: 0...1) { Text("음악") }
@@ -254,7 +254,7 @@ private final class DockViewport: SCNView {
             if !wasWarned && session.round.hasWarning { sound(bell) }
             if !session.running { capture(false) }
             elapsed += step
-        } else if !session.started { elapsed += step }
+        } else if !session.started || session.round.phase == .won { elapsed += step }
         SCNTransaction.begin()
         SCNTransaction.animationDuration = 0
         art.draw(session.round, time: elapsed, reduced: session.reduced)
