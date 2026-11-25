@@ -305,14 +305,10 @@ public struct HomeView: View {
                 .resizable().aspectRatio(contentMode: .fit)
                 .frame(maxWidth: narrowPage ? 110 : 215)
                 .clipShape(.rect(cornerRadius: 9))
-                .overlay(alignment: .bottomTrailing) {
-                    GameBoard(round: MiniGameRound(game: .jump), preview: true)
-                        .aspectRatio(100.0 / 60, contentMode: .fit)
-                        .frame(width: 48, height: 48)
-                        .background(paper.panel, in: .rect(cornerRadius: 7))
-                        .shadow(color: .black.opacity(0.15), radius: 2, y: 1)
-                        .padding(4)
-                }
+                .accessibilityHidden(true)
+            GameBoard(round: MiniGameRound(game: .jump), preview: true, surface: paper.panel)
+                .aspectRatio(100.0 / 60, contentMode: .fit)
+                .frame(width: 48, height: 48)
                 .accessibilityHidden(true)
             Text("잠깐, 한 판?").umcTypography(.title2Bold)
             Spacer(minLength: 0)

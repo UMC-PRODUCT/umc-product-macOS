@@ -47,12 +47,11 @@ struct DeskCardLayout: Layout {
             let sideHeights = others.map { height($0, side) }
             let gaps = CGFloat(others.count - 1) * 16
             let total = max(height(first, main), sideHeights.reduce(gaps, +))
-            let extra = (total - gaps - sideHeights.reduce(0, +)) / CGFloat(others.count)
             var frames = [CGRect(x: 0, y: 0, width: main, height: total)]
             var y: CGFloat = 0
             for h in sideHeights {
-                frames.append(CGRect(x: main + 20, y: y, width: side, height: h + extra))
-                y += h + extra + 16
+                frames.append(CGRect(x: main + 20, y: y, width: side, height: h))
+                y += h + 16
             }
             return frames
         case .rows:

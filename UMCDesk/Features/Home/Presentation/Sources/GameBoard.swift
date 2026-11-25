@@ -31,6 +31,7 @@ extension MiniGame {
 struct GameBoard: View {
     let round: MiniGameRound
     var preview = false
+    var surface = UMCColor.Custom.backgroundSurface
 
     var body: some View {
         Canvas { context, size in
@@ -81,7 +82,7 @@ struct GameBoard: View {
                 }
             }
         }
-        .background(UMCColor.Custom.backgroundSurface)
+        .background(surface)
         .accessibilityHidden(true)
     }
 }

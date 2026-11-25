@@ -43,12 +43,19 @@ struct DeskPaperSurface: View {
                 if showsCalendar {
                     Image("desk-calendar", bundle: .module)
                         .resizable().scaledToFit()
-                        .frame(maxWidth: 245, maxHeight: 272, alignment: .bottomTrailing)
                         .mask {
+                            // Fade the actual image bounds before aligning it inside the card.
                             LinearGradient(stops: [.init(color: .clear, location: 0),
-                                                   .init(color: .black, location: 0.23)],
+                                                   .init(color: .black, location: 0.24)],
                                            startPoint: .leading, endPoint: .trailing)
                         }
+                        .mask {
+                            LinearGradient(stops: [.init(color: .clear, location: 0),
+                                                   .init(color: .black, location: 0.16)],
+                                           startPoint: .top, endPoint: .bottom)
+                        }
+                        .frame(maxWidth: paper.dark ? 320 : 245, maxHeight: 272,
+                               alignment: .bottomTrailing)
                 }
             }
             .clipShape(shape)
