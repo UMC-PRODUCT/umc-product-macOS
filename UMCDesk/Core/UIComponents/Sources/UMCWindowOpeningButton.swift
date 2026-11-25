@@ -49,6 +49,7 @@ public struct UMCFocusableButton<Label: View>: View {
     @Environment(\.isEnabled) private var isEnabled
     @State private var isHovered = false
     private let title: String
+    private let accessibilityValue: String?
     private let identifier: String?
     private let cornerRadius: CGFloat
     private let focusTarget: UMCWindowButtonFocus?
@@ -58,10 +59,12 @@ public struct UMCFocusableButton<Label: View>: View {
 
     public init(
         _ title: String, identifier: String? = nil, cornerRadius: CGFloat = 4,
-        focusTarget: UMCWindowButtonFocus? = nil, restoresFocusOnReturn: Bool = false,
+        accessibilityValue: String? = nil, focusTarget: UMCWindowButtonFocus? = nil,
+        restoresFocusOnReturn: Bool = false,
         action: @escaping () -> Void,
         @ViewBuilder label: @escaping (Bool) -> Label
     ) {
+        self.accessibilityValue = accessibilityValue
         self.title = title
         self.identifier = identifier
         self.cornerRadius = cornerRadius
@@ -76,7 +79,8 @@ public struct UMCFocusableButton<Label: View>: View {
             .accessibilityHidden(true)
             .allowsHitTesting(false)
             .overlay {
-                WindowButton(title: title, identifier: identifier, cornerRadius: cornerRadius,
+                WindowButton(title: title, accessibilityValue: accessibilityValue,
+                             identifier: identifier, cornerRadius: cornerRadius,
                              isEnabled: isEnabled, focusTarget: focusTarget,
                              restoresFocusOnReturn: restoresFocusOnReturn, action: action)
             }
@@ -86,6 +90,7 @@ public struct UMCFocusableButton<Label: View>: View {
 
 private struct WindowButton: NSViewRepresentable {
     let title: String
+    let accessibilityValue: String?
     let identifier: String?
     let cornerRadius: CGFloat
     let isEnabled: Bool
@@ -110,6 +115,7 @@ private struct WindowButton: NSViewRepresentable {
         button.cornerRadius = cornerRadius
         button.isEnabled = isEnabled
         button.setAccessibilityLabel(title)
+        button.setAccessibilityValue(accessibilityValue)
         if let identifier { button.setAccessibilityIdentifier(identifier) }
     }
 
@@ -150,10 +156,16 @@ private struct WindowButton: NSViewRepresentable {
             if canBecomeKeyView { window?.makeFirstResponder(self) }
         }
 
+        override func accessibilityPerformPress() -> Bool {
+            guard canBecomeKeyView, window != nil else { return false }
+            performClick(nil)
+            return true
+        }
+
         override func keyDown(with event: NSEvent) {
             if event.charactersIgnoringModifiers == "\r",
                event.modifierFlags.intersection([.command, .control, .option, .shift]).isEmpty {
-                performClick(nil)
+                if !event.isARepeat { performClick(nil) }
             } else {
                 super.keyDown(with: event)
             }

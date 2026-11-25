@@ -75,8 +75,8 @@ struct NoticeLetterRunner: View {
         let title = AppLocalization.string("편지 배달")
         let score = AppLocalization.string("\(run.score)점")
         UMCFocusableButton(
-            title + ", " + score + ", " + instruction,
-            identifier: "notice.connection.runner", cornerRadius: 12, action: { run.jump() }
+            title, identifier: "notice.connection.runner", cornerRadius: 12,
+            accessibilityValue: score + ", " + instruction, action: { run.jump() }
         ) { _ in
             VStack(alignment: .leading, spacing: 6) {
                 HStack {

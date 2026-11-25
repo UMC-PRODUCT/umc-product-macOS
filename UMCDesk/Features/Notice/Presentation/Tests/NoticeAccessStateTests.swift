@@ -3,7 +3,8 @@
 //
 //  Created by euijjang97 on 11/23/26.
 
-import Foundation
+import CoreUIComponents
+import SwiftUI
 import NoticeDomain
 import Testing
 import UMCFoundation
@@ -66,5 +67,41 @@ struct NoticeLetterRunnerTests {
         #expect(round.phase == .finished)
         round.jump()
         #expect(round.phase == .running && round.score == 0)
+    }
+}
+
+@MainActor
+struct NoticeRunnerFocusTests {
+    @Test func nativeActionAndReturnRepeat() throws {
+        var activations = 0
+        let host = NSHostingView(rootView: UMCFocusableButton(
+            "편지 배달", accessibilityValue: "1점", action: { activations += 1 }
+        ) { _ in Text("편지 배달") })
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 320, height: 80),
+            styleMask: [.titled], backing: .buffered, defer: false)
+        window.contentView = host
+        defer { window.contentView = nil }
+        host.layoutSubtreeIfNeeded()
+        let button = try #require(nativeButton(in: host))
+        #expect(button.canBecomeKeyView)
+        #expect(button.accessibilityLabel() == "편지 배달")
+        #expect(button.accessibilityValue() as? String == "1점")
+        #expect(button.accessibilityPerformPress())
+        #expect(activations == 1)
+        #expect(window.firstResponder === button)
+        for repeated in [false, true, true] {
+            let event = try #require(NSEvent.keyEvent(
+                with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0,
+                windowNumber: window.windowNumber, context: nil, characters: "\r",
+                charactersIgnoringModifiers: "\r", isARepeat: repeated, keyCode: 36))
+            button.keyDown(with: event)
+        }
+        #expect(activations == 2)
+    }
+
+    private func nativeButton(in view: NSView) -> NSButton? {
+        if let button = view as? NSButton { return button }
+        return view.subviews.lazy.compactMap { self.nativeButton(in: $0) }.first
     }
 }
