@@ -94,9 +94,9 @@ public struct AuthView: View {
         )) { Button("확인", role: .cancel) {} } message: { Text(viewModel.notice ?? "") }
         .onDisappear { viewModel.cancelLogin() }
         #if DEBUG || UMC_PRERELEASE
-        .focusedSceneValue(\.authPreviewModel, viewModel.login == nil ? $viewModel : nil)
         .task(id: viewModel.navigationID) { await viewModel.runPreviewFlow() }
         .onAppear {
+            guard viewModel.login != nil else { return }
             let arguments = ProcessInfo.processInfo.arguments
             if let index = arguments.firstIndex(of: "--auth-preview"),
                arguments.indices.contains(index + 1),

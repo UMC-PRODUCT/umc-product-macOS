@@ -28,6 +28,7 @@ struct UMCDeskApp: App {
     @NSApplicationDelegateAdaptor(AppLifecycleDelegate.self) private var lifecycle
     private let dependencies = AppDependencies()
     #if DEBUG || UMC_PRERELEASE
+    @State private var authPreview = AuthPreviewSession()
     @State private var typographyPreview = UMCTypographyPreview()
     #endif
 
@@ -68,7 +69,7 @@ struct UMCDeskApp: App {
         .commands {
             AppSettingsCommands(dependencies: dependencies)
             #if DEBUG || UMC_PRERELEASE
-            AuthPreviewCommands()
+            AuthPreviewCommands(session: authPreview)
             #endif
         }
 
@@ -126,6 +127,20 @@ struct UMCDeskApp: App {
         .windowToolbarStyle(.unifiedCompact(showsTitle: false))
 
         #if DEBUG || UMC_PRERELEASE
+        Window(AppLocalization.string("디자인 미리보기"), id: AuthPreviewSession.windowID) {
+            authPreview.content
+                .toggleStyle(UMCCheckboxStyle())
+                .environment(\.locale, AppLocalization.shared.language.locale)
+                .preferredColorScheme(preferences.theme.colorScheme)
+                .environment(\.umcBodyTextScale, preferences.bodyTextSize.scale)
+                .environment(\.umcFontDesign, preferences.font.design)
+                .environment(\.umcFontFamily, preferences.availableFontFamily)
+                .environment(\.umcTypographyPreview, typographyPreview)
+                .frame(minWidth: 1040, minHeight: 720)
+        }
+        .defaultSize(width: 1440, height: 960)
+        .windowToolbarStyle(.unifiedCompact(showsTitle: false))
+
         Window(AppLocalization.string("마이페이지·설정 프리뷰"), id: "settings-design-preview") {
             SettingsView(viewModel: dependencies.previewSettingsViewModel)
                 .toggleStyle(UMCCheckboxStyle())

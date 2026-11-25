@@ -336,7 +336,7 @@ struct AuthDesignPreview: Identifiable {
 }
 
 struct AuthPreviewMenu: View {
-    @Binding var viewModel: AuthViewModel
+    let select: (AuthDesignPreview) -> Void
     private let sections: [String.LocalizationValue] = [
         "로그인", "회원가입", "챌린저 인증", "비밀번호 변경", "시스템", "계정 관리",
     ]
@@ -346,9 +346,7 @@ struct AuthPreviewMenu: View {
             ForEach(1...6, id: \.self) { section in
                 Menu(AppLocalization.string(sections[section - 1])) {
                     ForEach(AuthDesignPreview.all.filter { $0.section == section }) { preview in
-                            Button(AppLocalization.string(preview.title)) {
-                                viewModel = preview.makeViewModel()
-                            }
+                        Button(AppLocalization.string(preview.title)) { select(preview) }
                     }
                 }
             }
