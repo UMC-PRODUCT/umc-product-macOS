@@ -61,6 +61,8 @@ private struct TabTools<Actions: View>: ViewModifier {
                         if presented { dismiss() } else { presented = true }
                     }
                     .frame(width: 32, height: 28)
+                    .accessibilityLabel(title)
+                    .accessibilityValue(presented ? "열림" : "닫힘")
                     .accessibilityFocused($accessibleFocus, equals: .trigger)
                 }
             }
@@ -157,7 +159,7 @@ private struct ToolsTrigger: NSViewRepresentable {
         button.activate = activate
         let symbol = presented ? "sidebar.right.fill" : "sidebar.right"
         button.toolTitle = title
-        button.image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)
+        button.image = NSImage(systemSymbolName: symbol, accessibilityDescription: title)
         button.imagePosition = .imageOnly
         button.contentTintColor = .white
         button.toolTip = title
