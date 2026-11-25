@@ -9,6 +9,11 @@ import HomeDomain
 import SwiftUI
 import UMCFoundation
 
+fileprivate enum Constants {
+    static let contentInset = UMCSpacing.value24
+    static let maximumContentWidth: CGFloat = 1040
+}
+
 public enum HomeDestination {
     case activity, notice, project
 }
@@ -16,7 +21,7 @@ public enum HomeDestination {
 @MainActor @Observable
 private final class HomeViewModel {
     var profile: HomeProfile?
-    var schedule: Loadable<String?> = .idle
+    var schedule: Loadable<HomeSchedule?> = .idle
     var notice: Loadable<String?> = .idle
     var project: Loadable<String?> = .idle
     let repository: any HomeRepository
@@ -39,11 +44,11 @@ private final class HomeViewModel {
         project = state(values.3)
     }
 
-    private func result(_ read: () async throws -> String?) async -> Result<String?, Error> {
+    private func result<Value>(_ read: () async throws -> Value) async -> Result<Value, Error> {
         do { return .success(try await read()) } catch { return .failure(error) }
     }
 
-    private func state(_ result: Result<String?, Error>) -> Loadable<String?> {
+    private func state<Value>(_ result: Result<Value, Error>) -> Loadable<Value> {
         switch result {
         case .success(let value): .loaded(value)
         case .failure(let error): .failed(error)
@@ -84,30 +89,21 @@ public struct HomeView: View {
                     close: { self.selectedGame = nil })
             } else {
                 ScrollView {
-                    VStack(alignment: .leading, spacing: 28) {
-                        HStack {
-                            VStack(alignment: .leading, spacing: 6) {
-                                Text(model.profile.map { "안녕, " + $0.nickname + "." } ?? "나만의 공간")
-                                    .umcTypography(.largeTitle3Bold)
-                                Text(Date.now, format: .dateTime.month().day().weekday(.wide))
-                                    .foregroundStyle(.secondary)
-                            }
-                            Spacer()
-                            Button("새로고침", systemImage: "arrow.clockwise") { reload = UUID() }
-                                .labelStyle(.iconOnly)
+                    VStack(alignment: .leading, spacing: UMCSpacing.value24) {
+                        VStack(alignment: .leading, spacing: UMCSpacing.value24) {
+                            homeHeader
+                            workSummary
+                            arcadeHeader.padding(.top, UMCSpacing.value8)
                         }
-                        workSummary
-                        Divider()
-                        HStack {
-                            Text("잠깐, 한 판?").umcTypography(.title2Bold)
-                            Spacer()
-                            Button(showsArcade ? "게임 접기" : "게임 선택") {
-                                showsArcade.toggle()
-                            }
+                        .padding(.horizontal, Constants.contentInset)
+                        .transformEnvironment(\.umcFontDesign) { design in
+                            if design == nil { design = .default }
                         }
                         if showsArcade { arcade }
                     }
+                    .frame(maxWidth: Constants.maximumContentWidth)
                     .padding(UMCSpacing.value32)
+                    .frame(maxWidth: .infinity)
                 }
             }
         }
@@ -120,86 +116,166 @@ public struct HomeView: View {
         }
     }
 
+    private var homeHeader: some View {
+        HStack {
+            Text(model.profile.map { "안녕, " + $0.nickname + "." } ?? "나만의 공간")
+                .umcTypography(.title3Bold)
+            Spacer()
+            Button("새로고침", systemImage: "arrow.clockwise") { reload = UUID() }
+                .labelStyle(.iconOnly)
+                .buttonStyle(.borderless)
+                .help("새로고침")
+        }
+    }
+
     private var workSummary: some View {
         VStack(alignment: .leading, spacing: UMCSpacing.value16) {
             if case .loaded(nil) = model.schedule {
-                HStack {
-                    Text("오늘 남은 일정이 없어요").foregroundStyle(.secondary)
+                HStack(spacing: UMCSpacing.value12) {
+                    Text(Date.now, format: .dateTime.month().day().weekday(.wide))
+                    Text("오늘 남은 일정이 없어요")
                     Spacer()
-                    navigationButton("일정 보기", destination: .activity)
+                    navigationLink("일정 보기", destination: .activity)
                 }
+                .umcTypography(.headlineRegular)
+                .foregroundStyle(UMCColor.Semantic.textNeutralMedium600)
+
                 if case .loaded(.some) = model.project {
-                    projectEntry(primary: true)
-                    noticeEntry(primary: false)
+                    featured("이어서 작업", symbol: "folder", action: "프로젝트 보기",
+                             destination: .project) {
+                        summary(model.project, title: "이어서 작업",
+                                empty: "관리하는 프로젝트가 없어요", style: .largeTitle3Bold)
+                    }
+                    noticeRow
                 } else {
-                    noticeEntry(primary: true)
-                    projectEntry(primary: false)
+                    featured("공지", symbol: "megaphone", action: "공지 보기", destination: .notice) {
+                        summary(model.notice, title: "공지",
+                                empty: "확인할 새 소식이 없어요", style: .largeTitle3Bold)
+                    }
+                    projectRow
                 }
             } else {
-                entry(
-                    "오늘 일정", symbol: "calendar", state: model.schedule,
-                    empty: "오늘 남은 일정이 없어요", action: "일정 보기",
-                    destination: .activity, primary: true)
-                noticeEntry(primary: false)
-                projectEntry(primary: false)
+                featured("오늘 일정", symbol: "calendar", action: "일정 보기", destination: .activity) {
+                    switch model.schedule {
+                    case .loaded(let schedule?):
+                        Text(schedule.name)
+                            .umcTypography(.largeTitle3Bold)
+                            .fixedSize(horizontal: false, vertical: true)
+                        Text(schedule.startsAt,
+                             format: .dateTime.month().day().weekday().hour().minute())
+                            .umcTypography(.headlineRegular)
+                            .foregroundStyle(UMCColor.Semantic.textNeutralMedium600)
+                    case .failed: Text("불러오지 못했어요")
+                    case .idle, .loading:
+                        ProgressView().controlSize(.small)
+                            .accessibilityLabel("오늘 일정 불러오는 중")
+                    case .loaded(nil): EmptyView()
+                    }
+                }
+                noticeRow
+                projectRow
             }
         }
     }
 
-    private func projectEntry(primary: Bool) -> some View {
-        entry(
-            "이어서 작업", symbol: "folder", state: model.project,
-            empty: "관리하는 프로젝트가 없어요", action: "프로젝트 보기",
-            destination: .project, primary: primary)
-    }
-
-    private func noticeEntry(primary: Bool) -> some View {
-        entry(
-            "공지", symbol: "megaphone", state: model.notice,
-            empty: "확인할 새 소식이 없어요", action: "공지 보기",
-            destination: .notice, primary: primary)
-    }
-
-    private func entry(
-        _ title: String, symbol: String, state: Loadable<String?>, empty: String,
-        action: String, destination: HomeDestination, primary: Bool
+    private func featured<Content: View>(
+        _ title: String, symbol: String, action: String, destination: HomeDestination,
+        @ViewBuilder content: () -> Content
     ) -> some View {
-        HStack(alignment: .center, spacing: UMCSpacing.value16) {
-            VStack(alignment: .leading, spacing: UMCSpacing.value4) {
+        HStack(alignment: .top, spacing: UMCSpacing.value16) {
+            VStack(alignment: .leading, spacing: UMCSpacing.value8) {
                 Label(title, systemImage: symbol)
                     .umcTypography(.headlineBold)
-                    .foregroundStyle(primary ? UMCColor.Semantic.textBrandDefault : .secondary)
-                switch state {
-                case .idle, .loading:
-                    ProgressView().controlSize(.small).accessibilityLabel(title + " 불러오는 중")
-                case .loaded(let value):
-                    Text(value ?? empty)
-                        .umcTypography(primary && value != nil ? .title1Bold : .headlineRegular)
-                        .fixedSize(horizontal: false, vertical: true)
-                case .failed:
-                    Text("불러오지 못했어요").foregroundStyle(.secondary)
-                }
+                    .foregroundStyle(UMCColor.Semantic.textBrandDefault)
+                content()
             }
-            Spacer(minLength: UMCSpacing.value8)
-            navigationButton(action, destination: destination)
+            .accessibilityElement(children: .contain)
+            .accessibilitySortPriority(1)
+            Spacer(minLength: 0)
+            if let onOpen {
+                Button(action) { onOpen(destination) }
+                    .fixedSize()
+                    .buttonStyle(.bordered)
+            }
         }
-        .padding(.horizontal, UMCSpacing.value20)
-        .padding(.vertical, primary ? UMCSpacing.value20 : UMCSpacing.value8)
+        .padding(.vertical, UMCSpacing.value24)
         .background {
-            if primary {
-                RoundedRectangle(cornerRadius: UMCRadius.value12)
-                    .fill(UMCColor.Custom.backgroundSurfaceGreyWeaker)
-            }
+            // 카드 표면만 넓혀 모든 행의 버튼이 같은 열에 남도록 한다.
+            RoundedRectangle(cornerRadius: UMCRadius.value16)
+                .fill(UMCColor.Custom.backgroundSurfaceGreyWeak)
+                .padding(.horizontal, -Constants.contentInset)
         }
         .accessibilityElement(children: .contain)
     }
 
+    private var noticeRow: some View {
+        workRow("공지", symbol: "megaphone", state: model.notice,
+                empty: "확인할 새 소식이 없어요", action: "공지 보기", destination: .notice)
+    }
+
+    private var projectRow: some View {
+        workRow("이어서 작업", symbol: "folder", state: model.project,
+                empty: "관리하는 프로젝트가 없어요", action: "프로젝트 보기", destination: .project)
+    }
+
+    private func workRow(
+        _ title: String, symbol: String, state: Loadable<String?>,
+        empty: String, action: String, destination: HomeDestination
+    ) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: UMCSpacing.value16) {
+            Label(title, systemImage: symbol)
+                .umcTypography(.headlineRegular)
+                .foregroundStyle(UMCColor.Semantic.textNeutralMedium600)
+                .frame(minWidth: 100, alignment: .leading)
+            summary(state, title: title, empty: empty, style: .title4Bold)
+            Spacer(minLength: 0)
+            navigationLink(action, destination: destination)
+        }
+        .padding(.vertical, UMCSpacing.value8)
+        .accessibilityElement(children: .contain)
+    }
+
     @ViewBuilder
-    private func navigationButton(_ title: String, destination: HomeDestination) -> some View {
+    private func summary(
+        _ state: Loadable<String?>, title: String, empty: String, style: UMCTypography
+    ) -> some View {
+        switch state {
+        case .loaded(let value):
+            Text(value ?? empty)
+                .umcTypography(value == nil ? .headlineRegular : style)
+                .fixedSize(horizontal: false, vertical: true)
+        case .idle, .loading:
+            ProgressView().controlSize(.small).accessibilityLabel(title + " 불러오는 중")
+        case .failed: Text("불러오지 못했어요")
+        }
+    }
+
+    @ViewBuilder
+    private func navigationLink(_ title: String, destination: HomeDestination) -> some View {
         if let onOpen {
             Button(title) { onOpen(destination) }
+                .buttonStyle(.borderless)
                 .fixedSize()
         }
+    }
+
+    private var arcadeHeader: some View {
+        HStack {
+            Label("잠깐, 한 판?", systemImage: "gamecontroller")
+                .umcTypography(.headlineRegular)
+            Spacer()
+            Button {
+                showsArcade.toggle()
+            } label: {
+                HStack(spacing: UMCSpacing.value4) {
+                    Text(showsArcade ? "게임 접기" : "게임 선택")
+                    Image(systemName: showsArcade ? "chevron.up" : "chevron.down")
+                        .imageScale(.small).accessibilityHidden(true)
+                }
+            }
+            .buttonStyle(.borderless)
+        }
+        .foregroundStyle(UMCColor.Semantic.textNeutralMedium600)
     }
 
     private var arcade: some View {

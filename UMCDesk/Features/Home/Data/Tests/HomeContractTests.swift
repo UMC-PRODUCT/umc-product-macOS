@@ -59,7 +59,7 @@ private final class HomeContractTransport: URLProtocol, @unchecked Sendable {
             }
             result =
                 query.contains(URLQueryItem(name: "isAttendanceRequired", value: "true"))
-                ? #"[{"name":"합성 발표","startsAt":"2026-11-01T08:00:00Z"}]"# : "[]"
+                ? #"[{"name":"합성 발표","startsAt":"2026-11-01T08:00:00.250Z"}]"# : #"[{"name":"다음 일정","startsAt":"2026-11-01T08:01:00Z"}]"#
         case "/api/v1/notices"
         where query.contains(URLQueryItem(name: "noticeTab", value: "CHALLENGER"))
             && query.contains(URLQueryItem(name: "gisuId", value: "10")):
@@ -90,7 +90,9 @@ private final class HomeContractTransport: URLProtocol, @unchecked Sendable {
         session: URLSession(configuration: configuration))
     let home = LiveHomeRepository(client: client, baseURL: baseURL)
     #expect(try await home.profile().nickname == "합성 회원")
-    #expect(try await home.schedule() == "합성 발표")
+    let schedule = try #require(try await home.schedule())
+    #expect(schedule.name == "합성 발표")
+    #expect(schedule.startsAt == (try Date.ISO8601FormatStyle().parse("2026-11-01T08:00:00.250Z")))
     #expect(try await home.notice() == "합성 공지")
     #expect(try await home.project() == "합성 프로젝트")
 }

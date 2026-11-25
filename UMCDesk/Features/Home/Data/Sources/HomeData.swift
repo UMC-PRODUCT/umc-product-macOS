@@ -23,7 +23,7 @@ public struct LiveHomeRepository: HomeRepository {
         return HomeProfile(id: profile.id, nickname: profile.nickname)
     }
 
-    public func schedule() async throws -> String? {
+    public func schedule() async throws -> HomeSchedule? {
         let now = Date.now
         let today = Calendar.current.startOfDay(for: now)
         guard let tomorrow = Calendar.current.date(byAdding: .day, value: 1, to: today) else {
@@ -39,7 +39,10 @@ public struct LiveHomeRepository: HomeRepository {
         }
         async let tracked = list(requiresAttendance: true)
         async let other = list(requiresAttendance: false)
-        return try await (tracked + other).min { $0.startsAt < $1.startsAt }?.name
+        return try await (tracked + other).map { item in
+            let start = try Date.ISO8601FormatStyle().parse(item.startsAt)
+            return HomeSchedule(name: item.name, startsAt: start)
+        }.min { $0.startsAt < $1.startsAt }
     }
 
     public func notice() async throws -> String? {

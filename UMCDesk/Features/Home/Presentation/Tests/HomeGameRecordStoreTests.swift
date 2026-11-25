@@ -49,7 +49,7 @@ import Testing
 
 private struct OfflineHome: HomeRepository {
     func profile() async throws -> HomeProfile { throw URLError(.notConnectedToInternet) }
-    func schedule() async throws -> String? { nil }
+    func schedule() async throws -> HomeSchedule? { nil }
     func notice() async throws -> String? { nil }
     func project() async throws -> String? { nil }
 }

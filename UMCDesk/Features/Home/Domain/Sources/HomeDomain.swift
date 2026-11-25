@@ -20,9 +20,19 @@ public struct HomeProfile: Sendable {
     }
 }
 
+public struct HomeSchedule: Sendable {
+    public let name: String
+    public let startsAt: Date
+
+    public init(name: String, startsAt: Date) {
+        self.name = name
+        self.startsAt = startsAt
+    }
+}
+
 public protocol HomeRepository: Sendable {
     func profile() async throws -> HomeProfile
-    func schedule() async throws -> String?
+    func schedule() async throws -> HomeSchedule?
     func notice() async throws -> String?
     func project() async throws -> String?
 }
