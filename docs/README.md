@@ -17,6 +17,7 @@
 | [디자인 시스템](Codex/design-system.md) | Figma 기준, Light/Dark 토큰, 공통 UI |
 | [macOS 탭 공통 버튼 가이드](Codex/tab-button-guide.md) | 목록·상세·작성 버튼 배치, 상태별 예외와 키보드·VoiceOver 검수 |
 | [홈 아케이드 · 먹물 우체부의 접지부두](Codex/dock-action-game.md) | 첫 부두의 공간·플레이 설계, 세 게임의 공통 품질 기준과 Mac 실측 기록표 |
+| [홈 아케이드 원화와 키포즈 제작](Codex/arcade-art-production.md) | 부두의 손짓·위험 예고·날인 원화, 실제 크기와 첫 10초 판독 기준 |
 | [코딩 스타일](Codex/coding-style.md) | 네이밍·접근 제어·파일 규약 |
 | [Network Router](Codex/network-router.md) | API·Query·Body 구성 |
 | [Response DTO](Codex/response-dto-decoding.md) | 호환 디코딩과 응답 타입 규약 |
