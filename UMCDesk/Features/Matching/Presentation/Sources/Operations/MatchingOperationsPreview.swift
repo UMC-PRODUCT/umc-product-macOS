@@ -5,7 +5,6 @@
 //  Created by euijjang97 on 11/22/26.
 //
 
-#if DEBUG
 import Foundation
 import MatchingDomain
 
@@ -116,4 +115,3 @@ extension MatchingPreviewRepository {
         throw URLError(.resourceUnavailable)
     }
 }
-#endif

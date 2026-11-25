@@ -19,6 +19,11 @@ public struct ThreadWindowKey: Codable, Hashable, Sendable {
     }
 }
 
+extension EnvironmentValues {
+    @Entry public var allowsDetachedThreads = true
+    @Entry public var threadNotificationCenter = NotificationCenter.default
+}
+
 extension Notification.Name {
     static let threadBrowserChanged = Notification.Name("CommunityPresentation.threadBrowserChanged")
 }
@@ -55,6 +60,7 @@ private struct DetachedThread: View {
     let management: any ThreadManagementRepository
     let defaults: UserDefaults
 
+    @Environment(\.threadNotificationCenter) private var notifications
     @Environment(\.dismissWindow) private var dismissWindow
     @State private var thread: CommunityThread?
     @State private var failure: String?
@@ -104,7 +110,7 @@ private struct DetachedThread: View {
                 }
             }
         }
-        .onReceive(NotificationCenter.default.publisher(for: .threadBrowserChanged)) { notice in
+        .onReceive(notifications.publisher(for: .threadBrowserChanged)) { notice in
             guard notice.object as? ThreadWindowKey == key else { return }
             if notice.userInfo?["exit"] as? Bool == true {
                 thread = nil
@@ -123,6 +129,8 @@ struct ThreadDestination: View {
     let management: any ThreadManagementRepository
     let defaults: UserDefaults
 
+    @Environment(\.threadNotificationCenter) private var notifications
+    @Environment(\.allowsDetachedThreads) private var allowsDetachedThreads
     @Environment(\.openWindow) private var openWindow
     @State private var destination: ThreadManagementDestination?
     @State private var updated: CommunityThread?
@@ -247,9 +255,9 @@ struct ThreadDestination: View {
     }
 
     @ViewBuilder private var headerActions: some View {
-        if !detached || canShowOptions {
+        if (!detached && allowsDetachedThreads) || canShowOptions {
             HStack(spacing: 2) {
-                if !detached {
+                if !detached && allowsDetachedThreads {
                     Button {
                         openWindow(value: key)
                     } label: {
@@ -318,7 +326,7 @@ struct ThreadDestination: View {
 
     private func broadcast(exit: Bool) {
         if !exit { refresh += 1 }
-        NotificationCenter.default.post(name: .threadBrowserChanged, object: key,
+        notifications.post(name: .threadBrowserChanged, object: key,
                                         userInfo: ["exit": exit])
     }
 }

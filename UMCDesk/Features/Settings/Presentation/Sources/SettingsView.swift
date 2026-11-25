@@ -16,7 +16,7 @@ import SwiftUI
 public struct SettingsView: View {
     // MARK: - Property
 
-    @Environment(\.openWindow) private var openWindow
+    @Environment(\.settingsOpenWindow) private var openWindow
     @State private var viewModel: SettingsViewModel
     private let onSelectSection: ((DeskSection?) -> Void)?
     private let section: DeskSection?
@@ -246,7 +246,7 @@ public struct SettingsView: View {
                                action: onOpenMatching)
                 }
                 SettingsHelpButton(foreground: sidebarChromeForeground, focusTarget: railHelpFocus) {
-                    openWindow(id: DeskWindow.support)
+                    openWindow(DeskWindow.support)
                 }
                 .onKeyPress(keys: [.tab, Constants.backTab]) { press in
                     guard featureContent == nil, viewModel.page != .myPage else { return .ignored }

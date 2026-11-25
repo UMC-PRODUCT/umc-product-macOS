@@ -46,6 +46,7 @@ public enum SettingsWindowCloseBehavior: String, CaseIterable, Identifiable, Sen
 public final class SettingsPreferences {
     @ObservationIgnored private let defaults: UserDefaults
     @ObservationIgnored private let languagePreferences: SettingsPreferences?
+    @ObservationIgnored private let updatesAppLanguage: Bool
     private var storedLanguage: AppLanguage
 
     public var language: AppLanguage {
@@ -56,7 +57,7 @@ public final class SettingsPreferences {
             } else {
                 storedLanguage = newValue
                 save(newValue.rawValue, key: "language")
-                AppLocalization.shared.language = newValue
+                if updatesAppLanguage { AppLocalization.shared.language = newValue }
             }
         }
     }
@@ -93,9 +94,11 @@ public final class SettingsPreferences {
     public init(
         defaults: UserDefaults = .standard,
         languagePreferences: SettingsPreferences? = nil,
-        initialTheme: SettingsTheme? = nil
+        initialTheme: SettingsTheme? = nil,
+        updatesAppLanguage: Bool = true
     ) {
         self.defaults = defaults
+        self.updatesAppLanguage = updatesAppLanguage
         self.languagePreferences = languagePreferences
         storedLanguage = defaults.string(forKey: "settings.language")
             .flatMap(AppLanguage.init) ?? .korean

@@ -13,10 +13,8 @@ struct SupportArticle: Identifiable, Equatable {
     var question: String
     var answer: String
     var category: String = ""
-    #if DEBUG
     var dayReaders: Int?
     var weekReaders: Int?
-    #endif
 
     func matches(_ query: String) -> Bool {
         let term = query.trimmingCharacters(in: .whitespacesAndNewlines)

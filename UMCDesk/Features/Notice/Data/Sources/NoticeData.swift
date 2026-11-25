@@ -13,21 +13,23 @@ import UniformTypeIdentifiers
 public struct LiveNoticeRepository: NoticeRepository {
     private let adapter: MoyaNetworkAdapter
     private let environment: NetworkEnvironment
+    private let journalDirectory: URL?
     private let noticesPath = "/api/v1/notices"
 
     private let validateAccount: @Sendable () async throws -> Void
 
     public init(
         adapter: MoyaNetworkAdapter, environment: NetworkEnvironment,
-        validateAccount: @escaping @Sendable () async throws -> Void
+        journalDirectory: URL? = nil, validateAccount: @escaping @Sendable () async throws -> Void
     ) {
+        self.journalDirectory = journalDirectory
         self.validateAccount = validateAccount
         self.adapter = adapter
         self.environment = environment
     }
 
     public func openPublicationJournal() async throws -> NoticePublicationJournal {
-        try await openPublicationJournal(root: nil)
+        try await openPublicationJournal(root: journalDirectory)
     }
 
     func openPublicationJournal(root: URL?) async throws -> NoticePublicationJournal {

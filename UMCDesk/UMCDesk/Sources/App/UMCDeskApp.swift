@@ -27,6 +27,7 @@ import SettingsPresentation
 struct UMCDeskApp: App {
     @NSApplicationDelegateAdaptor(AppLifecycleDelegate.self) private var lifecycle
     private let dependencies = AppDependencies()
+    @State private var dataPreview: DataPreviewSession?
     #if DEBUG || UMC_PRERELEASE
     @State private var authPreview = AuthPreviewSession()
     @State private var typographyPreview = UMCTypographyPreview()
@@ -46,6 +47,9 @@ struct UMCDeskApp: App {
         #endif
 
         Window("UMC Desk", id: "main") {
+            if let dataPreview {
+                DataPreviewWindow(session: dataPreview)
+            } else {
             AppRootView(dependencies: dependencies)
                 .environment(\.settingsPublishedDocument, publishedDocument)
                 .toggleStyle(UMCCheckboxStyle())
@@ -62,12 +66,18 @@ struct UMCDeskApp: App {
                 .environment(\.umcTypographyPreview, typographyPreview)
                 #endif
                 .onAppear { lifecycle.preferences = preferences }
+            }
         }
         .defaultSize(width: 1440, height: 960)
         .windowStyle(.titleBar)
         .windowToolbarStyle(.unifiedCompact(showsTitle: false))
         .commands {
-            AppSettingsCommands(dependencies: dependencies)
+            AppSettingsCommands(dependencies: dependencies, preview: dataPreview)
+            DataPreviewCommands(active: dataPreview != nil, end: { dataPreview = nil }) { destination in
+                let session = dataPreview ?? DataPreviewSession()
+                session.select(destination)
+                dataPreview = session
+            }
             #if DEBUG || UMC_PRERELEASE
             AuthPreviewCommands(session: authPreview)
             #endif
@@ -456,14 +466,16 @@ private struct AppMenuBarContent: View {
 
 private struct AppSettingsCommands: Commands {
     let dependencies: AppDependencies
+    let preview: DataPreviewSession?
     @Environment(\.openSettings) private var openSettings
     @Environment(\.openWindow) private var openWindow
 
     var body: some Commands {
-        @Bindable var preferences = dependencies.settingsPreferences
+        @Bindable var preferences = preview?.settings.preferences ?? dependencies.settingsPreferences
 
         CommandGroup(replacing: .appSettings) {
             Button(AppLocalization.string("설정…")) {
+                if let preview { preview.select(.settings); activateMainWindow(); return }
                 dependencies.windowSettingsViewModel.showSettings()
                 openSettings()
             }
@@ -473,17 +485,19 @@ private struct AppSettingsCommands: Commands {
             Menu(AppLocalization.string("탭 이동")) {
                 ForEach(DeskSection.allCases, id: \.self) { section in
                     Button(AppLocalization.string(.init(section.title))) {
-                        dependencies.selectSection(section)
+                        if let preview { preview.select(.feature(section)) }
+                        else { dependencies.selectSection(section) }
                         activateMainWindow()
                     }
                 }
                 Button(AppLocalization.string("프로젝트 매칭")) {
-                    dependencies.openMatching()
+                    if let preview { preview.select(.matching) } else { dependencies.openMatching() }
                     activateMainWindow()
                 }
                 Divider()
                 Button(AppLocalization.string("마이페이지")) { openProfile() }
                 Button(AppLocalization.string("설정")) {
+                    if let preview { preview.select(.settings); activateMainWindow(); return }
                     dependencies.selectSection(nil)
                     dependencies.settingsViewModel.showSettings()
                     activateMainWindow()
@@ -493,9 +507,9 @@ private struct AppSettingsCommands: Commands {
         CommandMenu("계정") {
             Button(AppLocalization.string("마이페이지")) { openProfile() }
             Button("챌린저 연결…") { openAccount(.challenger) }
-                .disabled(dependencies.navigation.account == nil)
+                .disabled(preview != nil || dependencies.navigation.account == nil)
             Button("회원 탈퇴…") { openAccount(.withdrawal) }
-                .disabled(dependencies.navigation.account == nil)
+                .disabled(preview != nil || dependencies.navigation.account == nil)
         }
         #if DEBUG || UMC_PRERELEASE
         CommandGroup(after: .sidebar) {
@@ -523,6 +537,7 @@ private struct AppSettingsCommands: Commands {
     }
 
     private func openProfile() {
+        if let preview { preview.select(.profile); activateMainWindow(); return }
         dependencies.selectSection(nil)
         dependencies.settingsViewModel.showProfile()
         activateMainWindow()
@@ -550,7 +565,7 @@ final class AppLifecycleDelegate: NSObject, NSApplicationDelegate {
     }
 }
 
-private extension SettingsTheme {
+extension SettingsTheme {
     var colorScheme: ColorScheme? {
         switch self {
         case .system: nil

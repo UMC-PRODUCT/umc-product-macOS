@@ -5,13 +5,17 @@
 //  Created by euijjang97 on 11/22/26.
 //
 
-#if DEBUG
 import Foundation
 import MatchingDomain
 import SwiftUI
 
 @MainActor
 public enum MatchingDesignPreview {
+    public static func makeUseCase() -> any MatchingUseCase {
+        DefaultMatchingUseCase(repository: MatchingPreviewRepository())
+    }
+
+    #if DEBUG
     @ViewBuilder public static func view(
         destination: MatchingDestination = .explore, showsDetail: Bool = false
     ) -> some View {
@@ -25,6 +29,7 @@ public enum MatchingDesignPreview {
             MatchingView(repository: useCase, gisuId: "10", initialDestination: destination, applicantParts: ["WEB"])
         }
     }
+    #endif
 }
 
 actor MatchingPreviewRepository: MatchingRepository {
@@ -33,13 +38,13 @@ actor MatchingPreviewRepository: MatchingRepository {
     private let roundId = "101"
     private var savedAnswers: [String: [MatchingAnswer]] = [:]
     private var drafts: Set<String> = ["2"]
-    private var submitted: Set<String> = ["1"]
+    private var submitted: Set<String> = ["1", "3"]
 
     private var projects: [MatchingProject] {
         let entries = [
             ("1", "모아", "취향을 모으고, 나다운 선택을 발견하는 쇼핑."),
             ("2", "바로", "우리 동네의 작은 소식을 더 가깝게."),
-            ("3", "장바구니", "함께 고르는 즐거움, 함께하는 소비.")
+            ("3", "사이", "함께 고르는 즐거움, 함께하는 소비.")
         ]
         return entries.map { id, name, description in
             let quotas = ["MOBILE_PRODUCT_ENGINEER", "WEB_PRODUCT_ENGINEER", "DESIGN"]
@@ -98,11 +103,11 @@ actor MatchingPreviewRepository: MatchingRepository {
     func myApplications(gisuId: String, drafts: Bool) async throws -> [MatchingApplication] {
         let ids = drafts ? self.drafts : submitted
         return projects.filter { ids.contains($0.id) }.map { project in
-            .init(applicationId: project.id, projectId: project.id,
+            .init(applicationId: project.id == "3" ? nil : project.id, projectId: project.id,
                   project: .init(name: project.name, thumbnailImageUrl: nil,
                                  productOwner: owner, partQuotas: project.partQuotas),
                   matchingRound: .init(id: roundId, type: "PLAN_DEVELOPER", phase: "FIRST"),
-                  status: drafts ? "DRAFT" : nil)
+                  status: drafts ? "DRAFT" : (project.id == "3" ? "APPROVED" : nil))
         }
     }
 
@@ -127,7 +132,7 @@ actor MatchingPreviewRepository: MatchingRepository {
     func application(projectId: String, applicationId: String) async throws -> MatchingApplicationDetail {
         let stamp = Calendar.current.startOfDay(for: .now).addingTimeInterval(-3600).ISO8601Format()
         let draft = drafts.contains(projectId)
-        return .init(applicationId: applicationId, status: draft ? "DRAFT" : nil,
+        return .init(applicationId: applicationId, status: draft ? "DRAFT" : (projectId == "3" ? "APPROVED" : nil),
                      formResponse: .init(sections: sections(for: projectId), lastSavedAt: stamp),
                      submittedAt: draft ? nil : stamp)
     }
@@ -168,6 +173,7 @@ actor MatchingPreviewRepository: MatchingRepository {
 
 }
 
+#if DEBUG
 #Preview("Light") { MatchingDesignPreview.view().preferredColorScheme(.light) }
 #Preview("Dark") { MatchingDesignPreview.view().preferredColorScheme(.dark) }
 #endif
