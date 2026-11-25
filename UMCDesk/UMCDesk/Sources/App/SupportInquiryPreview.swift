@@ -81,7 +81,7 @@ struct SupportInquiryPreview: View {
                 if isOperator {
                     Button("FAQ 관리") { managingFAQ = true }
                 } else if !fixture.myTickets.isEmpty {
-                    Button("새 문의 작성") { composing = true }.buttonStyle(.borderedProminent)
+                    Button("새 문의 작성") { composing = true }.modifier(SupportPrimaryAction())
                 }
             }
             Group {
@@ -93,7 +93,7 @@ struct SupportInquiryPreview: View {
                     } actions: {
                         HStack {
                             Button("답변 찾아보기", action: showAnswers)
-                            Button("문의하기") { composing = true }.buttonStyle(.borderedProminent)
+                            Button("문의하기") { composing = true }.modifier(SupportPrimaryAction())
                         }
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -108,6 +108,20 @@ struct SupportInquiryPreview: View {
                     }
 
                     ticketTable
+                        .overlay {
+                            if isOperator && tickets.isEmpty {
+                                ContentUnavailableView {
+                                    Label("조건에 맞는 문의가 없습니다", systemImage: "line.3.horizontal.decrease")
+                                } actions: {
+                                    Button("필터 초기화") {
+                                        assignment = .all
+                                        status = nil
+                                        category = nil
+                                        label = nil
+                                    }
+                                }
+                            }
+                        }
                     if isOperator, let suggestion = tickets.first(where: needsDraft) {
                         HStack {
                             VStack(alignment: .leading, spacing: UMCSpacing.value4) {

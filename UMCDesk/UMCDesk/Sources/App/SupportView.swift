@@ -10,7 +10,6 @@ import SwiftUI
 import UMCFoundation
 
 struct SupportView: View {
-    @Environment(\.colorScheme) private var colorScheme
     private enum Page {
         case answers, inquiries
         #if DEBUG
@@ -58,7 +57,7 @@ struct SupportView: View {
                 #if DEBUG
                 if fixture != nil && page == .answers {
                     Button("문의하기") { composing = true }
-                        .buttonStyle(.borderedProminent)
+                        .modifier(SupportPrimaryAction())
                 }
                 #endif
             }
@@ -89,7 +88,7 @@ struct SupportView: View {
         .frame(minWidth: 560, maxWidth: .infinity, minHeight: 420, maxHeight: .infinity,
                alignment: .topLeading)
         .background(UMCColor.Custom.backgroundDefault)
-        .tint(colorScheme == .dark ? UMCColor.Semantic.fillPrimaryStrong200 : UMCColor.Semantic.textBrandDefault)
+        .tint(UMCColor.Semantic.textBrandDefault)
         #if DEBUG
         .safeAreaInset(edge: .bottom, alignment: .leading, spacing: 0) {
             if fixture != nil {
@@ -341,3 +340,17 @@ private struct SupportAnswersView: View {
         detail = article
     }
 }
+
+
+#if DEBUG
+/// Keep the darker fill local to controls whose native prominent label is white.
+struct SupportPrimaryAction: ViewModifier {
+    @Environment(\.colorScheme) private var colorScheme
+
+    func body(content: Content) -> some View {
+        content.buttonStyle(.borderedProminent)
+            .tint(colorScheme == .dark
+                  ? UMCColor.Semantic.fillPrimaryStrong200 : UMCColor.Semantic.textBrandDefault)
+    }
+}
+#endif
