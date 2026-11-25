@@ -144,6 +144,7 @@ final class ActivityViewModel {
 }
 
 public struct ActivityView: View {
+    @Environment(\.colorScheme) private var colorScheme
     @State private var model: ActivityViewModel
     @State private var selectedGroup: String?
     @State private var selectedSchedule: String?
@@ -326,7 +327,7 @@ public struct ActivityView: View {
         let minutes = max(0, Int(ceil((deadline?.timeIntervalSince(now) ?? 0) / 60)))
         return HStack(spacing: 24) {
             ZStack {
-                Circle().stroke(UMCColor.Semantic.backgroundNeutralMedium, lineWidth: 6)
+                Circle().stroke(UMCColor.Semantic.backgroundNeutralMedium, lineWidth: 4)
                 if let start = schedule.opens, let deadline, deadline > start {
                     let fraction = min(
                         1,
@@ -337,11 +338,17 @@ public struct ActivityView: View {
                         .rotationEffect(.degrees(-90))
                 }
                 VStack {
-                    Text(open && minutes > 0 ? String(minutes) : "–").font(
-                        .system(size: 42, weight: .bold))
-                    Text("분 남음").umcTypography(.calloutRegular)
+                    if open && minutes > 0 {
+                        Text(String(minutes)).umcTypography(.largeTitle3Bold).monospacedDigit()
+                        Text("분 남음").umcTypography(.calloutRegular)
+                    } else {
+                        Text(schedule.startsAt, format: .dateTime.month())
+                            .umcTypography(.calloutRegular)
+                        Text(schedule.startsAt, format: .dateTime.day())
+                            .umcTypography(.largeTitle3Bold).monospacedDigit()
+                    }
                 }
-            }.frame(width: 135, height: 135)
+            }.frame(width: 100, height: 100)
             VStack(alignment: .leading, spacing: 12) {
                 Text(status(schedule.status, fallback: phase))
                     .foregroundStyle(UMCColor.Semantic.textBrandDefault)
@@ -371,6 +378,7 @@ public struct ActivityView: View {
                                 presented = .location(schedule)
                             }
                         }.buttonStyle(.borderedProminent)
+                        .tint(colorScheme == .dark ? UMCColor.Semantic.fillPrimaryStrong200 : UMCColor.Semantic.textBrandDefault)
                     }
                     if schedule.isParticipant, [nil, "LATE", "ABSENT"].contains(schedule.status) {
                         Button("사유 제출") { presented = .excuse(schedule.id) }
@@ -379,7 +387,9 @@ public struct ActivityView: View {
                 }.disabled(model.submitting)
             }
             Spacer()
-        }.padding(12).activityPanel()
+        }
+        .padding(UMCSpacing.value24)
+        .background(UMCColor.Semantic.surfaceBrandWeak, in: .rect(cornerRadius: UMCRadius.value16))
     }
 
     private func submitAttendance(_ schedule: ActivitySchedule) {

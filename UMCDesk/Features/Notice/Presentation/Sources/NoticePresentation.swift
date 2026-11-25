@@ -139,7 +139,7 @@ public struct NoticeBoardView: View {
     private var toolbar: some View {
         HStack {
             if model.selection == nil {
-                Text("공지").umcTypography(.title2Bold)
+                Text("공지").umcTypography(.title1Bold).accessibilityAddTraits(.isHeader)
             } else {
                 Button("공지 목록", systemImage: "chevron.left") { model.selection = nil }
                 Button(
@@ -251,13 +251,20 @@ public struct NoticeBoardView: View {
             model.selection = entry.id
         } label: {
             VStack(alignment: .leading, spacing: UMCSpacing.value4) {
+                Text(entry.title)
+                    .umcTypography(model.readIDs.contains(entry.id) ? .headlineRegular : .title3Bold)
                 HStack {
                     Text(entry.audienceLabel).umcTypography(.footnoteRegular)
                     if entry.mustRead { Label("고정", systemImage: "pin.fill") }
                 }
                 .foregroundStyle(UMCColor.Semantic.textBrandDefault)
-                Text(entry.title).umcTypography(.title3Bold)
-                Text(entry.content).lineLimit(2).foregroundStyle(.secondary)
+                if let deadline = entry.vote?.endsAtExclusive, !deadline.isEmpty {
+                    Label("투표 마감 " + String(deadline.prefix(10)), systemImage: "calendar.badge.clock")
+                        .umcTypography(.calloutRegular)
+                }
+                if model.selection == nil {
+                    Text(entry.content).lineLimit(2).foregroundStyle(.secondary)
+                }
                 HStack {
                     Text(entry.metadata).umcTypography(.captionRegular)
                     Spacer()
@@ -281,7 +288,7 @@ public struct NoticeBoardView: View {
                 model.selection == entry.id
                     ? UMCColor.Semantic.fillPrimaryStrong200
                     : (entry.mustRead
-                        ? UMCColor.Custom.backgroundSurfaceGreyWeaker
+                        ? UMCColor.Semantic.surfaceBrandWeak
                         : UMCColor.Custom.backgroundSurface)
             )
             .overlay(alignment: .leading) {

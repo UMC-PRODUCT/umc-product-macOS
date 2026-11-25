@@ -132,7 +132,7 @@ public struct MatchingView: View {
     public var body: some View {
         VStack(spacing: 0) {
             ScrollView {
-                VStack(alignment: .leading, spacing: UMCSpacing.value24) {
+                VStack(alignment: .leading, spacing: UMCSpacing.value16) {
                     if selectedProject == nil {
                         HStack {
                             Text(destination.heading)
@@ -146,7 +146,7 @@ public struct MatchingView: View {
                     }
                     bodyContent
                 }
-                .padding(.horizontal, UMCSpacing.value40)
+                .padding(.horizontal, UMCSpacing.value24)
                 .padding(.vertical, UMCSpacing.value24)
             }
             .scrollPosition($position)
@@ -242,11 +242,12 @@ public struct MatchingView: View {
         } else {
             switch destination {
             case .explore:
-                scheduleSummary
+                chapterPicker
                 MatchingExplorer(repository: repository, gisuId: gisuId, chapterId: chapterId,
                                  schools: schools, select: {
                                      go(.init(destination: .explore, project: $0))
                                  }, state: explorer)
+                scheduleSummary
             case .applications:
                 MatchingApplications(repository: repository, gisuId: gisuId, memberId: memberId, rounds: loadedRounds,
                                      onOpenProject: onOpenProject, explore: { navigate(.explore) })
@@ -311,7 +312,6 @@ public struct MatchingView: View {
     }
 
     @ViewBuilder private var scheduleSummary: some View {
-        chapterPicker
         if chapterId != nil {
             MatchingRequestView(request: rounds, retry: { roundAttempt += 1 }) { _ in
                 let active = loadedRounds.first { $0.isOpen(at: .now) }

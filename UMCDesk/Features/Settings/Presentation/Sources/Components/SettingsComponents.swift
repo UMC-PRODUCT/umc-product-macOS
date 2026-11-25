@@ -67,7 +67,7 @@ struct SettingsSection<Content: View>: View {
     var body: some View {
         VStack(alignment: .leading, spacing: UMCSpacing.value12) {
             Text(title)
-                .umcTypography(.headlineBold)
+                .umcTypography(.title4Bold)
                 .foregroundStyle(palette.textNeutralStrong800)
                 .accessibilityAddTraits(.isHeader)
             content

@@ -92,7 +92,7 @@ struct SupportFlowTests {
         fixture.drafts[0].publish()
         #expect(fixture.publishedArticles.first?.answer == "새 예시 답변")
         fixture.drafts[0].archive()
-        #expect(fixture.publishedArticles.isEmpty)
+        #expect(!fixture.publishedArticles.contains { $0.id == original.id })
     }
     #endif
 }

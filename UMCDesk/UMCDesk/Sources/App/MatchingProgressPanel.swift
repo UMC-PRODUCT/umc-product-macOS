@@ -86,40 +86,6 @@ struct MatchingProgressPanel: View {
     }
 }
 
-struct MatchingProgressWing: View {
-    let controller: MatchingProgressController
-    let leading: Bool
-
-    var body: some View {
-        TimelineView(.periodic(from: .now, by: 30)) { context in
-            let stage = MatchingProgressStage(controller: controller, now: context.date)
-            Button(action: controller.showExpanded) {
-                HStack(spacing: 4) {
-                    if leading {
-                        Image(systemName: "doc.text")
-                        Image(systemName: "minus")
-                        Image(systemName: "person.text.rectangle")
-                        Image(systemName: "minus")
-                        Image(systemName: "clock")
-                        Text(stage.title).lineLimit(1)
-                    } else if let next = stage.next {
-                        Text(next.formatted(date: .omitted, time: .shortened) + " 예정")
-                    } else {
-                        Text("매칭 현황")
-                    }
-                }
-                .font(.caption)
-                .foregroundStyle(leading ? UMCColor.Semantic.textBrandDefault : UMCColor.Semantic.textNeutralDefault)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(UMCColor.Custom.backgroundDefault)
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("매칭 진행 현황 펼치기")
-            .environment(\.colorScheme, .dark)
-        }
-    }
-}
-
 struct MatchingProgressStage {
     let title: String
     let index: Int?

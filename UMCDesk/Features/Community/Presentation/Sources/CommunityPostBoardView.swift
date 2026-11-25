@@ -26,6 +26,7 @@ public struct CommunityPostBoardView: View {
 private struct Board: View {
     let accountID: String
     let repository: any CommunityPostRepository
+    @Environment(\.colorScheme) private var colorScheme
     @State private var query = ""
     @State private var scope = CommunityPostScope.all
     @State private var category: CommunityPostCategory?
@@ -48,10 +49,15 @@ private struct Board: View {
         HSplitView {
             VStack(alignment: .leading, spacing: UMCSpacing.value12) {
                 HStack {
-                    Text("커뮤니티").umcTypography(.title1Bold)
+                    Text("커뮤니티").umcTypography(.title2Bold).accessibilityAddTraits(.isHeader)
                     Spacer()
                     Button("새 글", systemImage: "square.and.pencil") { creating = true }
+                        .buttonStyle(.borderedProminent)
+                        .tint(colorScheme == .dark ? UMCColor.Semantic.fillPrimaryStrong200 : UMCColor.Semantic.textBrandDefault)
                 }
+                .padding(UMCSpacing.value12)
+                .background(UMCColor.Semantic.surfaceBrandWeak,
+                            in: .rect(cornerRadius: UMCRadius.value12))
                 TextField("제목·본문 검색", text: $query)
                     .accessibilityLabel("게시글 검색")
                     .onSubmit(selectResult)
