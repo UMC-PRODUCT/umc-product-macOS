@@ -6,6 +6,7 @@
 import Foundation
 import NoticeDomain
 import Testing
+import UMCFoundation
 
 @testable import NoticePresentation
 
@@ -38,5 +39,32 @@ struct NoticeAccessStateTests {
         #expect(throws: NoticeRequestFailure.accessDenied) { try state.applyPermissions([]) }
         #expect(state.entry == nil && state.photo == nil && state.permissions.isEmpty)
         #expect(state.selection.isEmpty)
+    }
+}
+
+struct NoticeLetterRunnerTests {
+    @Test func handlesOnlyTransportAndServerOutages() {
+        for error in [URLError(.cannotConnectToHost), URLError(.notConnectedToInternet)] {
+            #expect(NoticeConnectionFailure.matches(error))
+        }
+        #expect(NoticeConnectionFailure.matches(NetworkError.requestFailed(statusCode: 503, data: nil)))
+        #expect(!NoticeConnectionFailure.matches(NetworkError.unauthorized))
+        #expect(!NoticeConnectionFailure.matches(NoticeRequestFailure.accessDenied))
+        #expect(!NoticeConnectionFailure.matches(NoticeRequestFailure.rejected("validation")))
+        #expect(!NoticeConnectionFailure.matches(URLError(.cancelled)))
+    }
+
+    @Test func obstacleScoreCollisionAndReplay() {
+        var round = LetterRun()
+        round.jump()
+        for _ in 0..<120 {
+            if round.height == 0 && (80...100).contains(round.obstacle) { round.jump() }
+            round.step()
+        }
+        #expect(round.score == 1)
+        for _ in 0..<120 { round.step() }
+        #expect(round.phase == .finished)
+        round.jump()
+        #expect(round.phase == .running && round.score == 0)
     }
 }

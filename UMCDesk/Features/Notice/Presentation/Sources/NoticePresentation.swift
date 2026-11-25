@@ -4,8 +4,10 @@
 //  Created by euijjang97 on 11/23/26.
 
 import CoreDesignSystem
+import Network
 import NoticeDomain
 import SwiftUI
+import UMCFoundation
 
 @MainActor
 @Observable
@@ -19,7 +21,15 @@ final class NoticeBoardModel {
     var part: String?
     var nextPage: Int?
     var isLoading = false
-    var error: String?
+    var error: (any Error)?
+    private(set) var failedPage = 0
+    private var loadedFilter: Filter?
+
+    private struct Filter: Equatable {
+        let tab: String
+        let keyword: String
+        let part: String?
+    }
     var selection: String?
     var readIDs: Set<String> = []
     private var requestID = UUID()
@@ -34,7 +44,7 @@ final class NoticeBoardModel {
         entries.removeAll { $0.id == id }
         readIDs.remove(id)
         if selection == id { selection = nil }
-        error = NoticeRequestFailure.accessDenied.localizedDescription
+        error = NoticeRequestFailure.accessDenied
     }
 
     func load(page: Int = 0) async {
@@ -42,7 +52,8 @@ final class NoticeBoardModel {
         requestID = token
         error = nil
         isLoading = true
-        if page == 0 {
+        let filter = Filter(tab: tab, keyword: keyword, part: tab == "CHALLENGER" ? part : nil)
+        if filter != loadedFilter {
             entries.removeAll()
             nextPage = nil
         }
@@ -55,9 +66,11 @@ final class NoticeBoardModel {
             guard requestID == token, !Task.isCancelled else { return }
             canCompose = allowed
             let response = try await repository.notices(
-                gisu: generation, tab: tab,
-                keyword: keyword, part: tab == "CHALLENGER" ? part : nil, page: page)
+                gisu: generation, tab: filter.tab,
+                keyword: filter.keyword, part: filter.part, page: page)
             guard requestID == token, !Task.isCancelled else { return }
+            loadedFilter = filter
+            if page == 0 { entries.removeAll() }
             var known = Set(entries.map(\.id))
             entries += response.content.filter { known.insert($0.id).inserted }
             nextPage = response.hasNext ? page + 1 : nil
@@ -70,7 +83,8 @@ final class NoticeBoardModel {
                 readIDs = []
                 nextPage = nil
             }
-            self.error = error.localizedDescription
+            failedPage = page
+            self.error = error
         }
     }
 }
@@ -116,6 +130,19 @@ public struct NoticeBoardView: View {
         }
         .background(UMCColor.Custom.backgroundDefault)
         .task(id: model.tab) { await model.load() }
+        .task {
+            let monitor = NWPathMonitor()
+            defer { monitor.cancel() }
+            var wasDisconnected = false
+            for await path in monitor {
+                guard !Task.isCancelled else { return }
+                if wasDisconnected, path.status == .satisfied,
+                   let error = model.error, NoticeConnectionFailure.matches(error) {
+                    await model.load(page: model.failedPage)
+                }
+                wasDisconnected = path.status != .satisfied
+            }
+        }
         .onChange(of: model.part) { _, _ in Task { await model.load() } }
         .onChange(of: model.canCompose) { _, allowed in
             if !allowed { composing = false }
@@ -126,7 +153,7 @@ public struct NoticeBoardView: View {
                 onAccessDenied: {
                     composing = false
                     model.canCompose = false
-                    model.error = NoticeRequestFailure.accessDenied.localizedDescription
+                    model.error = NoticeRequestFailure.accessDenied
                 }
             ) { id in
                 composing = false
@@ -162,7 +189,7 @@ public struct NoticeBoardView: View {
                             composing = model.canCompose
                         } catch {
                             model.canCompose = false
-                            model.error = error.localizedDescription
+                            model.error = error
                         }
                     }
                 }.disabled(checkingWriter)
@@ -224,13 +251,19 @@ public struct NoticeBoardView: View {
                     let recent = model.entries.filter { !$0.mustRead }
                     if !recent.isEmpty { Text("최근 공지").umcTypography(.headlineBold) }
                     ForEach(recent, content: card)
-                } else if pinned.isEmpty && !model.isLoading {
+                } else if pinned.isEmpty && !model.isLoading && model.error == nil {
                     Text("고정된 공지가 없습니다.").foregroundStyle(.secondary)
                 }
                 if model.isLoading { ProgressView().frame(maxWidth: .infinity) }
                 if let error = model.error {
-                    Text(error).foregroundStyle(.secondary)
-                    Button("다시 시도") { Task { await model.load(page: model.nextPage ?? 0) } }
+                    Text((error as? UMCFoundation.NetworkError)?.userMessage ?? error.localizedDescription)
+                        .foregroundStyle(.secondary)
+                    Button(AppLocalization.string("다시 시도")) {
+                        Task { await model.load(page: model.failedPage) }
+                    }
+                    if model.entries.isEmpty, NoticeConnectionFailure.matches(error) {
+                        NoticeLetterRunner()
+                    }
                 } else if let next = model.nextPage, !model.isLoading {
                     Button("더 보기") { Task { await model.load(page: next) } }
                 } else if model.entries.isEmpty, !model.isLoading {

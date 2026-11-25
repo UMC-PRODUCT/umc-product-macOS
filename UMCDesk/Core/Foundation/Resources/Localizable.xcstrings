@@ -1,6 +1,91 @@
 {
   "sourceLanguage": "ko",
   "strings": {
+    "편지 배달": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "편지 배달"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mail Run"
+          }
+        }
+      }
+    },
+    "클릭 또는 스페이스로 시작": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "클릭 또는 스페이스로 시작"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Click or press Space to start"
+          }
+        }
+      }
+    },
+    "클릭 또는 스페이스로 점프": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "클릭 또는 스페이스로 점프"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Click or press Space to jump"
+          }
+        }
+      }
+    },
+    "부딪혔어요 · 다시 한 판": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "부딪혔어요 · 다시 한 판"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Collision · Play again"
+          }
+        }
+      }
+    },
+    "%lld점": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld점"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld points"
+          }
+        }
+      }
+    },
     "탭 이동": {
       "extractionState": "manual",
       "localizations": {
