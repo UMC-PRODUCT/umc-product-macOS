@@ -54,19 +54,25 @@ final class ThreadRestoration {
     }
 }
 
-private struct RestoredThreadPane<Content: View>: View {
+struct RestoredThreadPane<Content: View>: View {
     let id: String
+    let listed: CommunityThread?
     let repository: any CommunityThreadRepository
     let content: (CommunityThread) -> Content
     @State private var restoration = ThreadRestoration()
     @State private var attempt = 0
 
+    private var thread: CommunityThread? {
+        if let listed { return listed }
+        if case .loaded(let restored) = restoration.state { return restored }
+        return nil
+    }
+
     var body: some View {
         Group {
-            switch restoration.state {
-            case .idle, .loading: ProgressView("스레드를 불러오는 중")
-            case .loaded(let thread): content(thread)
-            case .failed(let error):
+            // Keep the editor at the same SwiftUI identity when pagination supplies this row.
+            if let thread { content(thread) }
+            else if case .failed(let error) = restoration.state {
                 ContentUnavailableView {
                     Label("스레드를 열지 못했어요", systemImage: "bubble.left")
                 } description: {
@@ -74,10 +80,14 @@ private struct RestoredThreadPane<Content: View>: View {
                 } actions: {
                     Button("다시 시도") { attempt += 1 }
                 }
+            } else {
+                ProgressView("스레드를 불러오는 중")
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .task(id: attempt) { await restoration.load(id: id, repository: repository) }
+        .task(id: listed == nil ? attempt : nil) {
+            if thread == nil { await restoration.load(id: id, repository: repository) }
+        }
     }
 }
 
@@ -159,10 +169,9 @@ private struct ThreadBrowser: View {
             .padding(UMCSpacing.value16)
             .frame(minWidth: 220, idealWidth: 344, maxWidth: 344,
                    minHeight: 0, maxHeight: .infinity, alignment: .topLeading)
-            if let item = threads.first(where: { $0.id == selection }) {
-                destination(for: item)
-            } else if let selection {
-                RestoredThreadPane(id: selection, repository: repository, content: destination)
+            if let selection {
+                RestoredThreadPane(id: selection, listed: threads.first { $0.id == selection },
+                                   repository: repository, content: destination)
                     .id(selection)
             } else {
                 ContentUnavailableView(threads.isEmpty && !loading && failure == nil

@@ -63,6 +63,32 @@ struct ThreadSearchFieldTests {
         #expect(await fixture.detailRequests == ["42", "42"])
     }
 
+    @Test func paginationPreservesUnsavedEditsInTheRestoredThread() async throws {
+        let fixture = ThreadSearchRepository()
+        let state = DraftProbeState()
+        let view = DraftProbeHost(repository: fixture, state: state)
+        let controller = NSHostingController(rootView: view)
+        let window = NSWindow(contentViewController: controller)
+        defer { window.contentView = nil }
+        func waitFor(_ condition: () -> Bool) async throws {
+            let deadline = ContinuousClock.now + .seconds(3)
+            while !condition(), ContinuousClock.now < deadline {
+                controller.view.layoutSubtreeIfNeeded()
+                try await Task.sleep(for: .milliseconds(20))
+            }
+            try #require(condition())
+        }
+        try await waitFor { state.edit != nil }
+        state.edit?("아직 보내지 않은 수정")
+        try await waitFor { state.rendered == "한글 결과:아직 보내지 않은 수정" }
+        state.listed = CommunityThread(id: "42", title: "추가 페이지 결과", description: nil,
+            icon: "💬", isPinned: false, isMuted: false, isJoined: false,
+            membershipState: nil, unread: "0")
+        try await waitFor { state.rendered.hasPrefix("추가 페이지 결과:") }
+        #expect(state.rendered == "추가 페이지 결과:아직 보내지 않은 수정")
+        #expect(await fixture.detailRequests == ["42"])
+    }
+
     @Test func filterMenuShowsOneNativeMarkPerGroupAfterReopening() throws {
         var category = ThreadListFilter.all
         var participation = ThreadParticipationFilter.all
@@ -185,6 +211,38 @@ struct ThreadSearchFieldTests {
         editor.doCommand(by: #selector(NSResponder.moveDown(_:)))
         editor.doCommand(by: #selector(NSResponder.insertNewline(_:)))
         #expect(selectedQueries == ["한", "한"])
+    }
+}
+
+@MainActor @Observable
+private final class DraftProbeState {
+    var listed: CommunityThread?
+    var edit: ((String) -> Void)?
+    var rendered = ""
+}
+
+private struct DraftProbeHost: View {
+    let repository: any CommunityThreadRepository
+    let state: DraftProbeState
+
+    var body: some View {
+        RestoredThreadPane(id: "42", listed: state.listed, repository: repository) { thread in
+            DraftProbe(title: thread.title, state: state)
+        }
+    }
+}
+
+private struct DraftProbe: View {
+    let title: String
+    let state: DraftProbeState
+    @State private var draft = ""
+
+    var body: some View {
+        TextField(title, text: $draft)
+            .onAppear { state.edit = { draft = $0 } }
+            .onChange(of: title + ":" + draft, initial: true) { _, value in
+                state.rendered = value
+            }
     }
 }
 
