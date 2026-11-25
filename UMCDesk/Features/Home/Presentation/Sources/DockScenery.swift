@@ -49,6 +49,14 @@ final class DockScenery {
         constructHarbor()
         constructTools()
         decorateWharf()
+        // Sorting counter and pigeonholes sit below the signalman's shoes.
+        box(1.8, 1.1, 1.4, crease, -3.25, 0.55, 0.85)
+        box(1.96, 0.08, 1.5, ink, -3.25, 1.11, 0.85)
+        for column in -1...1 {
+            let x = -3.25 + CGFloat(column) * 0.51
+            box(0.42, 0.52, 0.03, ink, x, 0.62, 1.56)
+            box(0.34, 0.13, 0.04, stock, x, 0.45, 1.58)
+        }
         // Static pier geometry shares materials. Batching removes hundreds of draw submissions.
         let live = [camera, right, left, boss, envelope, warning, bands, boat, barrier,
                     target, impactMark, echoMark]
@@ -57,8 +65,6 @@ final class DockScenery {
             staticProps.addChildNode(child)
         }
         scene.rootNode.addChildNode(staticProps.flattenedClone())
-        // A raised sorting platform behind the west gate keeps the guide off the route.
-        box(1.8, 1.15, 1.4, crease, -4.3, 0.575, -6.1)
         _ = mickey
     }
 
@@ -113,9 +119,10 @@ final class DockScenery {
             shape(hill, i.isMultiple(of: 3) ? ink : crease, 44 * sin(angle), 0, 44 * cos(angle))
         }
         box(17, 0.85, 24, ink, 0, -0.48, 0)
+        let plank = NSColor(srgbRed: 0.79, green: 0.71, blue: 0.56, alpha: 1)
         for row in -12..<12 {
             let z = CGFloat(row)
-            box(16.9, 0.15, 0.965, stock, 0, -0.07, z + 0.5)
+            box(16.9, 0.15, 0.965, plank, 0, -0.07, z + 0.5)
             for side in [-1.0, 1.0] {
                 let x = CGFloat(side) * 8.2
                 if row.isMultiple(of: 3) {
@@ -198,7 +205,8 @@ final class DockScenery {
         let (lo, hi) = node.boundingBox
         let scale = min((width - 0.25) / (hi.x - lo.x), 0.48 / (hi.y - lo.y))
         node.scale = SCNVector3(scale, scale, scale)
-        node.pivot = SCNMatrix4MakeTranslation((hi.x + lo.x)/2, (hi.y + lo.y)/2, 0)
+        node.position.x -= (hi.x + lo.x) * scale / 2
+        node.position.y -= (hi.y + lo.y) * scale / 2
     }
 
     private func decorateWharf() {
@@ -395,10 +403,18 @@ private final class DockMickey {
         }
         oval(head, soot, 0, -0.013, 0.453, 0.107, 0.07, 0.077)
         // The tail curls behind the trousers, clearing the outline of both shoes.
-        for i in 0..<16 {
-            let t = CGFloat(i) / 15
-            oval(body, soot, -0.67 * t, 0.58 - 0.28 * sin(.pi * t),
-                 -0.18 - t * 0.11, 0.042, 0.034, 0.033)
+        func tailPoint(_ t: Float) -> SIMD3<Float> {
+            SIMD3(-0.67 * t, 0.58 - 0.28 * sin(.pi * t), -0.18 - t * 0.11)
+        }
+        for i in 0..<12 {
+            let start = tailPoint(Float(i) / 12), end = tailPoint(Float(i + 1) / 12)
+            let radius = CGFloat(0.025 - 0.014 * Float(i) / 12)
+            let stroke = SCNCapsule(capRadius: radius,
+                                    height: CGFloat(simd_distance(start, end)) + radius * 2)
+            stroke.radialSegmentCount = 8
+            let segment = art.shape(stroke, soot, 0, 0, 0, parent: body)
+            segment.simdPosition = (start + end) / 2
+            segment.simdOrientation = simd_quatf(from: [0, 1, 0], to: simd_normalize(end - start))
         }
         for pivot in hands + arms + [body, head, eyes, mouth] {
             let inkLayer = SCNNode()
@@ -413,10 +429,11 @@ private final class DockMickey {
         let welcome = round.phase == .reception
         let finale = round.phase == .won
         let beat = reduced ? 0 : sin(time * 5)
-        let west = round.incomingGate == "서쪽 봉투문"
-        let pointing = round.incomingGate != nil
-        root.position = welcome ? SCNVector3(-2.35, 0, 3.4) : SCNVector3(-4.3, 1.15, -6.1)
-        root.eulerAngles.y = atan2(round.position.x - root.position.x,
+        let pointing = round.incomingSide != nil
+        root.position = welcome ? SCNVector3(-2.35, 0, 3.4) : SCNVector3(-3.25, 1.15, 0.85)
+        root.opacity = min(1, max(0, (hypot(round.position.x - root.position.x,
+                                            round.position.y - root.position.z) - 1.4) / 1.2))
+        root.eulerAngles.y = pointing ? 0 : atan2(round.position.x - root.position.x,
                                    round.position.y - root.position.z)
         let squash = CGFloat(beat) * (finale ? 0.045 : 0.015)
         body.scale = SCNVector3(1 - squash, 1 + squash, 1)
@@ -426,7 +443,7 @@ private final class DockMickey {
         for index in arms.indices {
             let side: CGFloat = index == 0 ? -1 : 1
             let greeting = (welcome && index == 1) || finale
-            let signals = pointing && ((index == 0) == west)
+            let signals = pointing && ((index == 0) == (round.incomingSide == .west))
             arms[index].eulerAngles.z = side * (greeting ? 2.55 + beat * 0.20 :
                                                 signals ? 1.72 : 0.31)
             hands[index].eulerAngles.z = greeting ? side * beat * 0.48 : 0

@@ -49,9 +49,13 @@ public struct DockRound {
     public func laneCenter(at z: Double) -> Double { (slope < 0 ? -3.0 : 3.0) + slope * z }
     public private(set) var attacker: Int?
     public private(set) var finalSweep = false
-    public var incomingGate: String? {
+    public enum GateSide: String {
+        case west = "서쪽 봉투문"
+        case east = "동쪽 우표문"
+    }
+    public var incomingSide: GateSide? {
         guard let next = queue.first else { return nil }
-        return next.0 < 0 ? "서쪽 봉투문" : "동쪽 우표문"
+        return next.0 < 0 ? .west : .east
     }
     public static let bossPosition = SIMD2<Double>(0, -10)
     private var group = 0
@@ -149,7 +153,10 @@ public struct DockRound {
                 let (x, z, kite) = queue.removeFirst()
                 serial += 1
                 var entry = SIMD2(x, z)
-                if simd_distance(entry, position) < 2.4 { entry.x = position.x < 0 ? 5 : -5 }
+                // Keep the signalled gate even when the player stands on the planned spawn.
+                if simd_distance(entry, position) < 2.4 {
+                    entry.y = position.y > -5 ? -8 : -2
+                }
                 spirits.append(.init(id: serial, position: entry, folds: kite ? 2 : 1,
                                      kite: kite))
                 nextSpawn = phase == .second ? 0.28 : 1.1

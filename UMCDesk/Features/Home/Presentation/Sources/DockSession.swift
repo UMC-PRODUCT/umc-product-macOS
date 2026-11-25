@@ -87,7 +87,7 @@ struct DockSessionView: View {
             if r.phase == .boss { return r.safeX > 0 ? "⚠ 동쪽 통로로 이동 →" : "⚠ ← 서쪽 통로로 이동" }
             return "⚠ 발밑의 고리 밖으로 이동"
         }
-        if let gate = r.incomingGate { return "미키가 가리키는 " + gate }
+        if let gate = r.incomingSide?.rawValue { return "미키가 가리키는 " + gate }
         if r.phase == .boss { return "우편종지기 · 남은 면 \(r.faces)" }
         if let seal = r.seal { return "\(seal.rawValue) · \(seal.action) · Esc 일시 정지" }
         return "WASD 이동　← → 시점　F 소인　Esc 일시 정지"
