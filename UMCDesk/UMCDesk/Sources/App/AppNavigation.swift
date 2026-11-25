@@ -31,6 +31,7 @@ final class AppNavigation {
         pendingSection = nil
         guard let memberId, !memberId.isEmpty else {
             pendingMatching = destination
+            authEntry = .login
             showsSettings = false
             return
         }
@@ -52,7 +53,15 @@ final class AppNavigation {
 
     func selectFeature(_ destination: DeskSection?) {
         workspaceProjectID = nil
+        pendingMatching = nil
         matchingDestination = nil
+        guard destination == nil || account != nil else {
+            pendingSection = destination
+            authEntry = .login
+            showsSettings = false
+            return
+        }
+        pendingSection = nil
         section = destination
         showsSettings = true
     }

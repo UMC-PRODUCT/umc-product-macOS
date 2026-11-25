@@ -469,12 +469,29 @@ private struct AppSettingsCommands: Commands {
             }
             .keyboardShortcut(",", modifiers: .command)
         }
-        CommandMenu("계정") {
-            Button("마이페이지") {
-                dependencies.selectSection(nil)
-                dependencies.settingsViewModel.showProfile()
-                openWindow(id: "main")
+        CommandGroup(after: .toolbar) {
+            Menu(AppLocalization.string("탭 이동")) {
+                ForEach(DeskSection.allCases, id: \.self) { section in
+                    Button(AppLocalization.string(.init(section.title))) {
+                        dependencies.selectSection(section)
+                        activateMainWindow()
+                    }
+                }
+                Button(AppLocalization.string("프로젝트 매칭")) {
+                    dependencies.openMatching()
+                    activateMainWindow()
+                }
+                Divider()
+                Button(AppLocalization.string("마이페이지")) { openProfile() }
+                Button(AppLocalization.string("설정")) {
+                    dependencies.selectSection(nil)
+                    dependencies.settingsViewModel.showSettings()
+                    activateMainWindow()
+                }
             }
+        }
+        CommandMenu("계정") {
+            Button(AppLocalization.string("마이페이지")) { openProfile() }
             Button("챌린저 연결…") { openAccount(.challenger) }
                 .disabled(dependencies.navigation.account == nil)
             Button("회원 탈퇴…") { openAccount(.withdrawal) }
@@ -505,9 +522,19 @@ private struct AppSettingsCommands: Commands {
         #endif
     }
 
+    private func openProfile() {
+        dependencies.selectSection(nil)
+        dependencies.settingsViewModel.showProfile()
+        activateMainWindow()
+    }
+
     private func openAccount(_ entry: AuthEntry) {
         dependencies.navigation.authEntry = entry
         dependencies.navigation.showsSettings = false
+        activateMainWindow()
+    }
+
+    private func activateMainWindow() {
         openWindow(id: "main")
         NSApplication.shared.activate()
     }

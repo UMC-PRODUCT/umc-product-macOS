@@ -18,6 +18,28 @@ import CoreNetwork
 @MainActor
 struct AppDependenciesTests {
     #if DEBUG
+    @Test("로그인 대기 중 탭을 바꾸면 마지막으로 선택한 목적지만 남는다")
+    func latestTabReplacesPendingDestination() {
+        let navigation = AppNavigation(launchPage: .login)
+        navigation.authEntry = .withdrawal
+        navigation.openMatching(.applications, memberId: nil)
+        #expect(navigation.authEntry == .login)
+
+        navigation.selectFeature(.activity)
+        #expect(navigation.pendingMatching == nil)
+        #expect(navigation.pendingSection == .activity)
+        #expect(!navigation.showsSettings)
+
+        navigation.openMatching(.explore, memberId: nil)
+        #expect(navigation.pendingSection == nil)
+        #expect(navigation.pendingMatching == .explore)
+
+        navigation.selectFeature(nil)
+        #expect(navigation.pendingMatching == nil)
+        #expect(navigation.pendingSection == nil)
+        #expect(navigation.showsSettings)
+    }
+
     @Test("로그인 창이 토큰 저장 후 닫혀도 두 프로필을 확인한 뒤 보호 화면으로 복귀한다")
     func loginCompletionSurvivesCallerCancellation() async throws {
         let barrier = ProfileResponseBarrier()
