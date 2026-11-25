@@ -41,6 +41,7 @@ public struct SettingsView: View {
         case result(String)
     }
 
+    @State private var tabToolsDismissalRequest = 0
     @State private var showsProfileMenu = false
     @State private var hoveredProfileMenuItem: ProfileMenuFocus?
     @State private var showsProfileKeyboardFocus = false
@@ -100,7 +101,10 @@ public struct SettingsView: View {
                 .frame(width: Constants.railWidth)
                 .environment(\.colorScheme, .light)
                 .zIndex(1)
-                .simultaneousGesture(TapGesture().onEnded { dismissSearchSuggestions() })
+                .simultaneousGesture(TapGesture().onEnded {
+                    tabToolsDismissalRequest += 1
+                    dismissSearchSuggestions()
+                })
             HStack(spacing: 0) {
                 if featureContent == nil, viewModel.page != .myPage {
                     settingsSidebar
@@ -142,7 +146,11 @@ public struct SettingsView: View {
         }
         .padding(.leading, UMCSpacing.value4)
         .padding([.bottom, .trailing], UMCSpacing.value12)
-        .background(UMCColor.Custom.backgroundAppShell)
+        .background {
+            UMCColor.Custom.backgroundAppShell
+                .onTapGesture { tabToolsDismissalRequest += 1 }
+        }
+        .environment(\.tabToolsDismissalRequest, tabToolsDismissalRequest)
         .disabled(showsProfileMenu)
         .accessibilityHidden(true, isEnabled: showsProfileMenu)
         .overlay(alignment: .bottomLeading) {

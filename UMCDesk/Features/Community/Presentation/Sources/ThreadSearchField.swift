@@ -25,6 +25,7 @@ struct ThreadSearchField: NSViewRepresentable {
     }
 
     func updateNSView(_ field: NSSearchField, context: Context) {
+        field.isEnabled = context.environment.isEnabled
         context.coordinator.parent = self
         if context.coordinator.focusRequest != focusRequest {
             context.coordinator.focusRequest = focusRequest
@@ -60,7 +61,7 @@ struct ThreadSearchField: NSViewRepresentable {
 
 private final class ConversationSearchControl: NSSearchField {
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
-        if event.modifierFlags.intersection([.command, .shift, .option, .control]) == .command,
+        if isEnabled, event.modifierFlags.intersection([.command, .shift, .option, .control]) == .command,
            event.charactersIgnoringModifiers?.lowercased() == "f", let window,
            window.makeFirstResponder(self) {
             selectText(nil)

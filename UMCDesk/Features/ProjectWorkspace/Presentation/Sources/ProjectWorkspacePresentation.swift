@@ -5,6 +5,7 @@
 //  Created by euijjang97 on 10/6/26.
 //
 
+import CoreUIComponents
 import CoreDesignSystem
 import Foundation
 import ProjectWorkspaceDomain
@@ -78,43 +79,16 @@ struct WorkspaceDirectory: View {
         let revision = directory.revision
         return Group {
             if let selected = directory.selected {
-                VStack(spacing: 0) {
-                    if directory.failed {
-                        HStack {
-                            Text("참여 상태를 다시 확인하지 못했어요.")
-                            Button("다시 시도", action: directory.requestRefresh)
-                        }
-                    }
-                    ProjectWorkspaceDetail(
-                        project: selected, accountID: accountID, sheet: $directory.sheet,
-                        loadGitHub: loadGitHub, openMatching: openMatching,
-                        refreshMembership: directory.requestRefresh, close: directory.close
-                    )
-                    .id(selected.id)
-                }
+                ProjectWorkspaceDetail(
+                    project: selected, accountID: accountID, sheet: $directory.sheet,
+                    loadGitHub: loadGitHub, openMatching: openMatching,
+                    membershipFailed: directory.failed,
+                    refreshMembership: directory.requestRefresh, close: directory.close
+                )
+                .id(selected.id)
             } else {
                 ScrollView {
                     VStack(alignment: .leading, spacing: UMCSpacing.value24) {
-                        HStack {
-                            Spacer()
-                            WorkspaceTools(description: "참여 중인 프로젝트와 작업을 빠르게 찾으세요.") { dismiss in
-                                Button("프로젝트 목록", action: dismiss)
-                                if let openMatching {
-                                    Button("매칭에서 찾기") {
-                                        dismiss()
-                                        openMatching()
-                                    }
-                                }
-                                if let recent = directory.projects?.first(where: {
-                                    $0.id == recentProjectID
-                                }) {
-                                    Button("이어서 작업 · \(recent.name)") {
-                                        dismiss()
-                                        directory.open(recent)
-                                    }
-                                }
-                            }
-                        }
                         ViewThatFits(in: .horizontal) {
                             HStack {
                                 heading
@@ -175,6 +149,23 @@ struct WorkspaceDirectory: View {
                     }
                     .padding(UMCSpacing.value32)
                     .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .umcTabTools("프로젝트 도구", description: "참여 중인 프로젝트와 작업을 빠르게 찾으세요.") { dismiss in
+                    Button("프로젝트 목록", action: dismiss)
+                    if let openMatching {
+                        Button("매칭에서 찾기") {
+                            dismiss()
+                            openMatching()
+                        }
+                    }
+                    if let recent = directory.projects?.first(where: {
+                        $0.id == recentProjectID
+                    }) {
+                        Button("이어서 작업 · \(recent.name)") {
+                            dismiss()
+                            directory.open(recent)
+                        }
+                    }
                 }
             }
         }

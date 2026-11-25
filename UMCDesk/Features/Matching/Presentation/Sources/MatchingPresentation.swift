@@ -5,6 +5,7 @@
 //  Created by euijjang97 on 11/22/26.
 //
 
+import CoreUIComponents
 import CoreDesignSystem
 import MatchingDomain
 import SwiftUI
@@ -134,13 +135,9 @@ public struct MatchingView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: UMCSpacing.value16) {
                     if selectedProject == nil {
-                        HStack {
-                            Text(destination.heading)
-                                .umcTypography(.largeTitle3Bold)
-                                .accessibilityAddTraits(.isHeader)
-                            Spacer()
-                            matchingTools
-                        }
+                        Text(destination.heading)
+                            .umcTypography(.largeTitle3Bold)
+                            .accessibilityAddTraits(.isHeader)
                         matchingTabs
                         Divider()
                     }
@@ -151,10 +148,12 @@ public struct MatchingView: View {
             }
             .scrollPosition($position)
         }
+        .umcTabTools("매칭 도구", description: "일정과 지원 현황, 내 프로젝트를 확인하세요.") { dismiss in
+            Button("전체 일정") { dismiss(); navigate(.schedule) }
+            Button("내 지원") { dismiss(); navigate(.applications) }
+            Button("내 프로젝트") { dismiss(); navigate(.management) }
+        }
         .toolbar {
-            if selectedProject != nil {
-                ToolbarItem(placement: .primaryAction) { matchingTools }
-            }
             ToolbarItemGroup(placement: .navigation) {
                 Button("뒤로", systemImage: "chevron.left") {
                     guard let target = previous.popLast() else { return }
@@ -267,17 +266,6 @@ public struct MatchingView: View {
                                        canReadAdjustment: chapterId != nil && authorizedChapter == chapterId)
             }
         }
-    }
-
-    private var matchingTools: some View {
-        Menu {
-            Button("전체 일정") { navigate(.schedule) }
-            Button("내 지원") { navigate(.applications) }
-            Button("내 프로젝트") { navigate(.management) }
-        } label: {
-            Label("매칭 도구", systemImage: "slider.horizontal.3")
-        }
-        .fixedSize()
     }
 
     private var schools: [MatchingFilterOption] {

@@ -45,6 +45,23 @@ struct ThreadSearchFieldTests {
         window.contentView = nil
     }
 
+    @Test func disabledBrowserSearchYieldsCommandFToTheToolsPanel() throws {
+        let host = NSHostingView(rootView: ThreadSearchField(query: .constant(""),
+                                                             selectResult: {}).disabled(true))
+        let window = NSWindow(contentRect: .init(x: 0, y: 0, width: 320, height: 60),
+                              styleMask: [.titled], backing: .buffered, defer: false)
+        window.contentView = host
+        defer { window.contentView = nil }
+        host.layoutSubtreeIfNeeded()
+        let field = try #require(find(NSSearchField.self, in: host))
+        let event = try #require(NSEvent.keyEvent(with: .keyDown, location: .zero,
+            modifierFlags: .command, timestamp: 0, windowNumber: window.windowNumber,
+            context: nil, characters: "f", charactersIgnoringModifiers: "f",
+            isARepeat: false, keyCode: 3))
+        #expect(!field.isEnabled)
+        #expect(!field.performKeyEquivalent(with: event))
+    }
+
     @Test func filterMenuShowsOneNativeMarkPerGroupAfterReopening() throws {
         var category = ThreadListFilter.all
         var participation = ThreadParticipationFilter.all
@@ -55,8 +72,7 @@ struct ThreadSearchFieldTests {
                 participation: .init(get: { participation }, set: { participation = $0 }),
                 focusSearch: {}, create: {}, showAll: {}
             )
-            let root = NSHostingMenu(rootView: tools.toggleStyle(UMCCheckboxStyle()))
-            let menu = try #require(root.item(withTitle: "도구")?.submenu)
+            let menu = NSHostingMenu(rootView: tools.toggleStyle(UMCCheckboxStyle()))
             return try #require(menu.item(withTitle: "분류 · 참여 상태 필터")?.submenu)
         }
 
@@ -93,15 +109,12 @@ struct ThreadSearchFieldTests {
             participation: .init(get: { participation }, set: { participation = $0 }),
             focusSearch: { activated.append("search") }, create: { activated.append("create") },
             showAll: { activated.append("all") })
-        let root = NSHostingMenu(rootView: tools)
-        let menu = try #require(root.item(withTitle: "도구")?.submenu)
+        let menu = NSHostingMenu(rootView: tools)
         for title in ["제목·소개 검색", "스레드 만들기", "전체 스레드"] {
             let action = try #require(menu.item(withTitle: title))
             menu.performActionForItem(at: menu.index(of: action))
         }
         #expect(activated == ["search", "create", "all"])
-        let search = try #require(menu.item(withTitle: "제목·소개 검색"))
-        #expect(search.keyEquivalent == "f" && search.keyEquivalentModifierMask.contains(.command))
         let filters = try #require(menu.item(withTitle: "분류 · 참여 상태 필터")?.submenu)
         for title in ["프로젝트", "미참여"] {
             let action = try #require(filters.item(withTitle: title))

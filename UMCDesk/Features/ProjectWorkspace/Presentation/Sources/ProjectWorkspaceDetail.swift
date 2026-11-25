@@ -5,6 +5,7 @@
 //  Created by euijjang97 on 11/23/26.
 //
 
+import CoreUIComponents
 import CoreDesignSystem
 import Foundation
 import ProjectWorkspaceDomain
@@ -35,6 +36,7 @@ struct ProjectWorkspaceDetail: View {
     let project: WorkspaceProject
     let loadGitHub: WorkspaceGitHubLoader?
     let openMatching: (() -> Void)?
+    let membershipFailed: Bool
     let refreshMembership: () -> Void
     let close: () -> Void
     @AppStorage private var data: Data
@@ -47,12 +49,13 @@ struct ProjectWorkspaceDetail: View {
 
     init(project: WorkspaceProject, accountID: String, sheet: Binding<WorkspaceSheet?>,
          loadGitHub: WorkspaceGitHubLoader?,
-         openMatching: (() -> Void)?, refreshMembership: @escaping () -> Void,
+         openMatching: (() -> Void)?, membershipFailed: Bool, refreshMembership: @escaping () -> Void,
          close: @escaping () -> Void) {
         _sheet = sheet
         self.project = project
         self.loadGitHub = loadGitHub
         self.openMatching = openMatching
+        self.membershipFailed = membershipFailed
         self.refreshMembership = refreshMembership
         self.close = close
         _data = AppStorage(wrappedValue: Data(), WorkspaceRecord.key(
@@ -71,45 +74,7 @@ struct ProjectWorkspaceDetail: View {
         let record = try? readRecord()
         ScrollView {
             VStack(alignment: .leading, spacing: UMCSpacing.value24) {
-                HStack {
-                    Button("프로젝트 목록", systemImage: "chevron.left", action: close)
-                    Spacer()
-                    WorkspaceTools(description: "\(project.name) · 작업과 연결 자료를 한곳에서.") { dismiss in
-                        Button("한 줄 할 일 추가", systemImage: "plus") {
-                            dismiss()
-                            sheet = .addTodo
-                        }
-                        .buttonStyle(.borderedProminent)
-                        Divider()
-                        Text("작업 보기").foregroundStyle(.secondary)
-                        ForEach(WorkFilter.allCases) { choice in
-                            Button(choice.rawValue) {
-                                dismiss()
-                                filter = choice
-                            }
-                        }
-                        Divider()
-                        Button("GitHub · Figma 연결 관리") {
-                            dismiss()
-                            sheet = .connections
-                        }
-                        if let openMatching {
-                            Button("매칭 팀 구성 보기") {
-                                dismiss()
-                                openMatching()
-                            }
-                        }
-                        Divider()
-                        Button("참여 상태 새로고침") {
-                            dismiss()
-                            refreshMembership()
-                        }
-                        Button("개인 기록 삭제", role: .destructive) {
-                            dismiss()
-                            showsDeleteConfirmation = true
-                        }
-                    }
-                }
+                Button("프로젝트 목록", systemImage: "chevron.left", action: close)
                 if let record {
                     ViewThatFits(in: .horizontal) {
                         HStack { title; Spacer(); actions }
@@ -133,6 +98,49 @@ struct ProjectWorkspaceDetail: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(UMCSpacing.value32)
+        }
+        .safeAreaInset(edge: .top, spacing: 0) {
+            if membershipFailed {
+                HStack {
+                    Text("참여 상태를 다시 확인하지 못했어요.")
+                    Button("다시 시도", action: refreshMembership)
+                }
+            }
+        }
+        .umcTabTools("프로젝트 도구", description: "\(project.name) · 작업과 연결 자료를 한곳에서.") { dismiss in
+            Button("한 줄 할 일 추가", systemImage: "plus") {
+                dismiss()
+                sheet = .addTodo
+            }
+            .buttonStyle(.borderedProminent)
+            Divider()
+            Text("작업 보기").foregroundStyle(.secondary)
+            ForEach(WorkFilter.allCases) { choice in
+                Button(choice.rawValue) {
+                    dismiss()
+                    filter = choice
+                }
+            }
+            Divider()
+            Button("GitHub · Figma 연결 관리") {
+                dismiss()
+                sheet = .connections
+            }
+            if let openMatching {
+                Button("매칭 팀 구성 보기") {
+                    dismiss()
+                    openMatching()
+                }
+            }
+            Divider()
+            Button("참여 상태 새로고침") {
+                dismiss()
+                refreshMembership()
+            }
+            Button("개인 기록 삭제", role: .destructive) {
+                dismiss()
+                showsDeleteConfirmation = true
+            }
         }
         .onAppear { _ = change { $0.lastOpened = Date() } }
         .sheet(item: $sheet) { destination in

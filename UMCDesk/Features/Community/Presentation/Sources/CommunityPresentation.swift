@@ -7,6 +7,7 @@
 
 import AppKit
 import CommunityDomain
+import CoreUIComponents
 import CoreDesignSystem
 import SwiftUI
 
@@ -63,19 +64,7 @@ private struct ThreadBrowser: View {
     var body: some View {
         HSplitView {
             VStack(alignment: .leading, spacing: UMCSpacing.value12) {
-                HStack {
-                    Text("스레드").umcTypography(.title1Bold)
-                    Spacer()
-                    ThreadBrowserTools(filter: $filter, participation: $participation,
-                                       focusSearch: { focusRequest += 1 },
-                                       create: { creating = true }, showAll: showAll)
-                        .menuStyle(.borderlessButton)
-                        .menuIndicator(.visible)
-                        .foregroundStyle(.primary)
-                        .fixedSize()
-                        .accessibilityLabel("스레드 도구")
-                        .help("스레드 도구")
-                }
+                Text("스레드").umcTypography(.title1Bold)
                 ThreadSearchField(query: $query, focusRequest: focusRequest, selectResult: selectFirst)
                     .frame(height: 28)
                 if filter != .all || participation != .all {
@@ -127,6 +116,12 @@ private struct ThreadBrowser: View {
             }
         }
         .communitySplitContent()
+        .umcTabTools("스레드 도구", description: "대화를 찾고 새로운 공간을 만드세요.") { dismiss in
+            ThreadBrowserTools(filter: $filter, participation: $participation,
+                               focusSearch: { dismiss(); focusRequest += 1 },
+                               create: { dismiss(); creating = true },
+                               showAll: { dismiss(); showAll() })
+        }
         .task(id: search + [String(reload)]) {
             if loadedSearch != search {
                 threads = []
@@ -270,13 +265,31 @@ struct ThreadBrowserTools: View {
     let showAll: () -> Void
 
     var body: some View {
-        Menu("도구") {
-            Button("제목·소개 검색", systemImage: "magnifyingglass") {
-                focusSearch()
-            }.keyboardShortcut("f")
-            Button("스레드 만들기", systemImage: "plus") { create() }
+        Group {
+            Button(action: focusSearch) {
+                HStack {
+                    Label("제목·소개 검색", systemImage: "magnifyingglass")
+                    Spacer()
+                    Text("⌘F").accessibilityHidden(true)
+                }
+                .padding(.horizontal, UMCSpacing.value12)
+                .frame(minHeight: UMCSpacing.value40)
+                .background(UMCColor.Custom.backgroundSurfaceGreyWeaker,
+                            in: .rect(cornerRadius: UMCRadius.value8))
+            }
+            .buttonStyle(.plain)
+            .keyboardShortcut("f")
+            Button(action: create) {
+                Text("스레드 만들기")
+                    .frame(maxWidth: .infinity, minHeight: UMCSpacing.value40)
+                    .foregroundStyle(UMCColor.Semantic.textInverse)
+                    .background(UMCColor.Semantic.textBrandDefault,
+                                in: .rect(cornerRadius: UMCRadius.value8))
+            }
+            .buttonStyle(.plain)
             Divider()
-            Menu("분류 · 참여 상태 필터") {
+            Text("목록 보기").umcTypography(.captionRegular).foregroundStyle(.secondary)
+            Menu {
                 Picker("분류", selection: $filter) {
                     ForEach(ThreadListFilter.allCases, id: \.self) { value in
                         Text(value.title).tag(value)
@@ -288,12 +301,26 @@ struct ThreadBrowserTools: View {
                         Text(value.rawValue).tag(value)
                     }
                 }.pickerStyle(.inline)
+            } label: {
+                row("분류 · 참여 상태 필터")
             }
+            .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
             .toggleStyle(.automatic)
-            Button("전체 스레드") {
-                showAll()
-            }
+            Button(action: showAll) { row("전체 스레드") }
+                .buttonStyle(.plain)
         }
+    }
+
+    private func row(_ title: String) -> some View {
+        HStack {
+            Text(title)
+            Spacer()
+            Image(systemName: "chevron.right").foregroundStyle(.secondary)
+        }
+        .padding(.horizontal, UMCSpacing.value12)
+        .frame(minHeight: UMCSpacing.value40)
+        .contentShape(.rect)
     }
 }
 

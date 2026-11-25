@@ -88,29 +88,3 @@ struct WorkspaceConnectionsForm: View {
         return input.isEmpty || resource.validatedURL(input) != nil
     }
 }
-
-/// A keyboard-accessible popover shared by the directory and the current project's tool menu.
-struct WorkspaceTools<Content: View>: View {
-    let description: String
-    @ViewBuilder let content: (@escaping () -> Void) -> Content
-    @State private var presented = false
-
-    var body: some View {
-        Button("프로젝트 도구", systemImage: "slider.horizontal.3") { presented.toggle() }
-            .popover(isPresented: $presented, arrowEdge: .bottom) {
-                VStack(alignment: .leading, spacing: UMCSpacing.value12) {
-                    HStack {
-                        Text("프로젝트 도구").umcTypography(.title4Bold)
-                        Spacer()
-                        Button("닫기", systemImage: "xmark") { presented = false }
-                            .labelStyle(.iconOnly)
-                            .keyboardShortcut(.cancelAction)
-                    }
-                    Text(description).umcTypography(.bodyRegular).foregroundStyle(.secondary)
-                    content { presented = false }
-                }
-                .padding(UMCSpacing.value20)
-                .frame(width: 300, alignment: .leading)
-            }
-    }
-}
