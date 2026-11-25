@@ -153,7 +153,9 @@ private struct ToolsTrigger: NSViewRepresentable {
         focus.control = button
         button.activate = activate
         let symbol = presented ? "sidebar.right.fill" : "sidebar.right"
-        button.image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)
+        button.title = title
+        button.image = NSImage(systemSymbolName: symbol, accessibilityDescription: title)
+        button.setAccessibilityTitle(title)
         button.toolTip = title
         button.setAccessibilityLabel(title)
         button.setAccessibilityValue(presented ? "열림" : "닫힘")

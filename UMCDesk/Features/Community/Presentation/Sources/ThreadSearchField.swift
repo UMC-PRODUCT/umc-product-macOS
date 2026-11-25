@@ -25,11 +25,19 @@ struct ThreadSearchField: NSViewRepresentable {
     }
 
     func updateNSView(_ field: NSSearchField, context: Context) {
-        field.isEnabled = context.environment.isEnabled
+        if field.isEnabled != context.environment.isEnabled {
+            field.isEnabled = context.environment.isEnabled
+        }
         context.coordinator.parent = self
         if context.coordinator.focusRequest != focusRequest {
             context.coordinator.focusRequest = focusRequest
-            field.selectText(nil)
+            // The panel relinquishes its first responder after SwiftUI removes the overlay.
+            Task { @MainActor [weak field] in
+                await Task.yield()
+                guard let field, field.isEnabled, let window = field.window,
+                      window.makeFirstResponder(field) else { return }
+                field.selectText(nil)
+            }
         }
         if let editor = field.currentEditor() as? NSTextView, editor.hasMarkedText() { return }
         if field.stringValue != query { field.stringValue = query }

@@ -116,6 +116,12 @@ private struct ThreadBrowser: View {
             }
         }
         .communitySplitContent()
+        .background {
+            Button("제목·소개 검색") { focusRequest += 1 }
+                .keyboardShortcut("f")
+                .hidden()
+                .accessibilityHidden(true)
+        }
         .umcTabTools("스레드 도구", description: "대화를 찾고 새로운 공간을 만드세요.") { dismiss in
             ThreadBrowserTools(filter: $filter, participation: $participation,
                                focusSearch: { dismiss(); focusRequest += 1 },
