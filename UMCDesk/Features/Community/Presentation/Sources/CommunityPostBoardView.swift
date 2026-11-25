@@ -48,10 +48,15 @@ private struct Board: View {
         HSplitView {
             VStack(alignment: .leading, spacing: UMCSpacing.value12) {
                 HStack {
-                    Text("커뮤니티").umcTypography(.title1Bold)
+                    Text("커뮤니티").umcTypography(.title2Bold).accessibilityAddTraits(.isHeader)
                     Spacer()
                     Button("새 글", systemImage: "square.and.pencil") { creating = true }
+                        .buttonStyle(.borderedProminent)
+                        .tint(UMCColor.Semantic.textBrandDefault)
                 }
+                .padding(UMCSpacing.value12)
+                .background(UMCColor.Semantic.surfaceBrandWeak,
+                            in: .rect(cornerRadius: UMCRadius.value12))
                 TextField("제목·본문 검색", text: $query)
                     .accessibilityLabel("게시글 검색")
                     .onSubmit(selectResult)

@@ -87,12 +87,12 @@ struct SettingsProfileView: View {
     private func profileSummary(_ profile: SettingsProfile) -> some View {
         SettingsCard(isSubtle: true) {
             HStack(spacing: UMCSpacing.value20) {
-                SettingsAvatar(url: profile.profileImageURL, size: 48,
+                SettingsAvatar(url: profile.profileImageURL, size: 56,
                     usesDesignImage: viewModel.isDesignPreview)
                 VStack(alignment: .leading, spacing: UMCSpacing.value4) {
                     HStack(spacing: UMCSpacing.value8) {
                         Text("\(profile.nickname) / \(profile.name)")
-                            .umcTypography(.title2Bold)
+                            .umcTypography(.title1Bold).accessibilityAddTraits(.isHeader)
                         if let activity = profile.activities.last {
                             SettingsPartTag(part: activity.part)
                         }

@@ -13,6 +13,24 @@ struct SupportInquiryPreview: View {
     @Bindable var fixture: SupportFixture
     var isOperator = false
     let showAnswers: () -> Void
+    @State private var status: SupportInquiryStatus?
+    @State private var onlyUnassigned = false
+
+    init(fixture: SupportFixture, isOperator: Bool = false, initialTicket: UUID? = nil,
+         showAnswers: @escaping () -> Void) {
+        self.fixture = fixture
+        self.isOperator = isOperator
+        self.showAnswers = showAnswers
+        _selectedID = State(initialValue: initialTicket)
+    }
+
+    private var tickets: [SupportTicket] {
+        guard isOperator else { return fixture.myTickets }
+        return fixture.tickets.filter { ticket in
+            (status == nil || status == ticket.status)
+                && (!onlyUnassigned || ticket.assignee == "미배정")
+        }
+    }
     @FocusState private var tableFocused: Bool
     @State private var highlightedID: UUID?
     @State private var selectedID: UUID?
@@ -37,12 +55,12 @@ struct SupportInquiryPreview: View {
             .id(ticket.wrappedValue.id)
         } else {
             HStack {
-                Text(isOperator ? "문의 관리" : "내 문의 현황")
+                Text(isOperator ? "접수된 문의" : "내 문의 현황")
                     .umcTypography(.title2Bold).accessibilityAddTraits(.isHeader)
                 Spacer()
                 if isOperator {
                     Button("FAQ 관리") { managingFAQ = true }
-                } else {
+                } else if !fixture.myTickets.isEmpty {
                     Button("새 문의 작성") { composing = true }.buttonStyle(.borderedProminent)
                 }
             }
@@ -65,12 +83,26 @@ struct SupportInquiryPreview: View {
                             .allowsHitTesting(false)
                     }
                 } else {
+                    if isOperator {
+                        HStack {
+                            Picker("상태", selection: $status) {
+                                Text("상태 전체").tag(SupportInquiryStatus?.none)
+                                ForEach(SupportInquiryStatus.allCases, id: \.self) {
+                                    Text($0.rawValue).tag(Optional($0))
+                                }
+                            }
+                            .fixedSize()
+                            Toggle("미배정", isOn: $onlyUnassigned)
+                            Spacer()
+                            Text("\(tickets.count)건").monospacedDigit()
+                        }
+                    }
                     ticketTable
                 }
             }
             .sheet(isPresented: $composing) {
-                SupportComposePreview { subject, content in
-                    selectedID = fixture.create(subject: subject, content: content, team: .product)
+                SupportComposePreview { subject, content, team in
+                    selectedID = fixture.create(subject: subject, content: content, team: team)
                     composing = false
                 }
             }
@@ -78,13 +110,20 @@ struct SupportInquiryPreview: View {
     }
 
     private var ticketTable: some View {
-        Table(isOperator ? fixture.tickets : fixture.myTickets, selection: $highlightedID) {
+        Table(tickets, selection: $highlightedID) {
             TableColumn("문의") { ticket in
                 Button(ticket.subject) { selectedID = ticket.id }
                     .buttonStyle(.link)
             }
-            if isOperator { TableColumn("받는 팀") { Text($0.team.rawValue) } }
+            if isOperator {
+                TableColumn("담당자") { Text($0.assignee) }
+                TableColumn("라벨") { Text($0.label) }
+                TableColumn("받는 팀") { Text($0.team.rawValue) }
+            }
             TableColumn("상태") { Text($0.status.rawValue) }
+            TableColumn("접수일") {
+                Text($0.createdAt, format: .dateTime.month().day()).monospacedDigit()
+            }
         }
         .focused($tableFocused)
         .onAppear { tableFocused = true }
@@ -99,11 +138,12 @@ struct SupportInquiryPreview: View {
     }
 }
 
-private struct SupportComposePreview: View {
+struct SupportComposePreview: View {
     @Environment(\.dismiss) private var dismiss
     @State private var subject = ""
     @State private var content = ""
-    let submit: (String, String) -> Void
+    @State private var team = SupportTeam.product
+    let submit: (String, String, SupportTeam) -> Void
 
     private var isValid: Bool {
         !subject.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -115,6 +155,9 @@ private struct SupportComposePreview: View {
             Text("문의 작성").umcTypography(.title2Bold).accessibilityAddTraits(.isHeader)
             Text("예시 문의는 이 창에만 저장돼요.").foregroundStyle(.secondary)
             Form {
+                Picker("받는 팀", selection: $team) {
+                    ForEach(SupportTeam.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+                }
                 TextField("제목", text: $subject)
                 TextField("문의 내용", text: $content, axis: .vertical)
                     .lineLimit(3...6)
@@ -123,7 +166,7 @@ private struct SupportComposePreview: View {
                 Spacer()
                 Button("취소") { dismiss() }.keyboardShortcut(.cancelAction)
                 Button("예시 문의 등록") {
-                    submit(subject, content)
+                    submit(subject, content, team)
                 }
                 .disabled(!isValid)
                 .keyboardShortcut(.defaultAction)

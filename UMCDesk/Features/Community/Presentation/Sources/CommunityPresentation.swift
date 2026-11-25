@@ -171,13 +171,14 @@ private struct ThreadBrowser: View {
                 Text(item.icon).accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 3) {
                     HStack(spacing: 5) {
-                        Text(item.title).font(.headline).lineLimit(1).foregroundStyle(title)
+                        Text(item.title)
+                            .umcTypography(item.unread == "0" ? .headlineRegular : .headlineBold)
+                            .lineLimit(2).foregroundStyle(title)
                             .layoutPriority(1)
                         if item.isPinned {
                             Image(systemName: "pin.fill").font(.caption2).accessibilityLabel("고정됨")
                         }
                         Spacer(minLength: 2)
-                        Text(status).font(.caption2).lineLimit(1).fixedSize()
                         if item.unread != "0" {
                             Text(item.unread).font(.caption2.bold())
                                 .foregroundStyle(UMCColor.Semantic.textBrandStrong)
@@ -186,7 +187,8 @@ private struct ThreadBrowser: View {
                                 .accessibilityLabel("안 읽은 메시지 " + item.unread)
                         }
                     }
-                    if !preview.isEmpty { Text(preview).font(.caption).lineLimit(1) }
+                    Text([status, preview].filter { !$0.isEmpty }.joined(separator: " · "))
+                        .umcTypography(.captionRegular).lineLimit(1)
                 }
             }
             .foregroundStyle(detail)

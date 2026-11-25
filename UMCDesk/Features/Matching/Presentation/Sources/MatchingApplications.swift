@@ -119,9 +119,14 @@ struct MatchingApplications: View {
                 .id(card.projectId)
             }
             HStack {
-                MatchingBadge(text: card.project?.name ?? "프로젝트")
-                if let round = card.matchingRound { Text(roundLabel(round)).umcTypography(.title3Bold) }
-                Text(MatchingLabel.status(card.status)).umcTypography(.bodyRegular)
+                VStack(alignment: .leading, spacing: UMCSpacing.value4) {
+                    Text(card.project?.name ?? "프로젝트").umcTypography(.title3Bold)
+                    if let round = card.matchingRound {
+                        Text(roundLabel(round)).umcTypography(.bodyRegular).foregroundStyle(.secondary)
+                    }
+                }
+                Spacer()
+                MatchingBadge(text: MatchingLabel.status(card.status))
             }
             if let applicationId = card.applicationId {
                 let item = MatchingApplicationRoute(id: applicationId, projectId: card.projectId,

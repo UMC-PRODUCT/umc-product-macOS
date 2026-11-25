@@ -147,19 +147,28 @@ struct WorkspaceDirectory: View {
                                     }
                                 }
                             } else {
+                                let recent = projects.first { $0.id == recentProjectID }
+                                if let recent {
+                                    Text("이어서 작업").umcTypography(.headlineBold)
+                                        .accessibilityAddTraits(.isHeader)
+                                    WorkspaceDirectoryRow(project: recent, accountID: accountID) {
+                                        directory.open(recent)
+                                    }
+                                    .background(UMCColor.Semantic.surfaceBrandWeak,
+                                                in: .rect(cornerRadius: UMCRadius.value12))
+                                }
+                                let remaining = projects.filter { $0.id != recent?.id }
                                 VStack(spacing: 0) {
-                                    ForEach(projects) { project in
+                                    ForEach(remaining) { project in
                                         WorkspaceDirectoryRow(
                                             project: project, accountID: accountID
                                         ) {
                                             directory.open(project)
                                         }
-                                        if project.id != projects.last?.id { Divider() }
+                                        if project.id != remaining.last?.id { Divider() }
                                     }
                                 }.workspaceCard()
                             }
-                            Text("매칭은 팀 구성과 지원을, 프로젝트는 내 작업과 자료를 관리합니다.")
-                                .umcTypography(.bodyRegular).foregroundStyle(.secondary)
                         } else {
                             ProgressView("참여 프로젝트 확인 중")
                         }
@@ -188,8 +197,7 @@ struct WorkspaceDirectory: View {
     private var heading: some View {
         VStack(alignment: .leading, spacing: UMCSpacing.value4) {
             Text("프로젝트").umcTypography(.largeTitle3Bold)
-            Text("지금 작업하는 프로젝트를 한곳에서 열어 보세요.")
-                .umcTypography(.headlineRegular).foregroundStyle(.secondary)
+                .accessibilityAddTraits(.isHeader)
         }
     }
 
@@ -221,11 +229,17 @@ private struct WorkspaceDirectoryRow: View {
         let resources = WorkspaceResource.allCases.filter { record?.link(for: $0) != nil }
         Button(action: select) {
             HStack(spacing: UMCSpacing.value16) {
-                Image(systemName: "square.grid.2x2")
+                Image(systemName: "folder")
                     .foregroundStyle(UMCColor.Semantic.textBrandDefault)
+                    .padding(UMCSpacing.value12)
+                    .background(UMCColor.Semantic.surfaceBrandWeak, in: .rect(cornerRadius: 8))
+                    .accessibilityHidden(true)
                 VStack(alignment: .leading) {
                     Text(project.name).umcTypography(.title4Bold)
-                    Text("매칭 연결").umcTypography(.bodyRegular).foregroundStyle(.secondary)
+                    if let next = record?.todos.first(where: { !$0.completed }) {
+                        Label(next.title, systemImage: "circle")
+                            .umcTypography(.bodyRegular).foregroundStyle(.secondary)
+                    }
                 }
                 Spacer()
                 VStack(alignment: .trailing) {
