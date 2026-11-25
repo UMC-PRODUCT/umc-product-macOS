@@ -181,7 +181,10 @@ private struct SupportAnswersView: View {
 
     var body: some View {
         if let detail {
-            Button { self.detail = nil } label: {
+            Button {
+                focus = nil
+                self.detail = nil
+            } label: {
                 Label(AppLocalization.string("목록으로"), systemImage: "chevron.left")
             }
             .focused($focus, equals: .back)
@@ -232,15 +235,12 @@ private struct SupportAnswersView: View {
             if matches.isEmpty {
                 ContentUnavailableView.search(text: search)
             } else {
-                ViewThatFits(in: .horizontal) {
-                    HStack(alignment: .top, spacing: UMCSpacing.value16) {
-                        results.frame(minWidth: 420)
-                        helpPanel.frame(width: 230)
-                    }
-                    VStack(alignment: .leading) {
-                        Menu(AppLocalization.string("카테고리별 답변")) { categoryButtons }
-                        results
-                    }
+                HStack(alignment: .top, spacing: UMCSpacing.value16) {
+                    results
+                    helpPanel
+                        .containerRelativeFrame(.horizontal) { width, _ in
+                            min(230, width * 0.24)
+                        }
                 }
 
             }
@@ -308,7 +308,13 @@ private struct SupportAnswersView: View {
             }
             .accessibilityIdentifier("support.faq.table")
             .focused($focus, equals: .table)
-            .onAppear { if selectedID != nil { focus = .table } }
+            .task {
+                guard selectedID != nil else { return }
+                // A returning table receives its AppKit responder after insertion.
+                await Task.yield()
+                guard !Task.isCancelled else { return }
+                focus = .table
+            }
             .contextMenu(forSelectionType: String.self) { _ in } primaryAction: { ids in
                 if let article = matches.first(where: { ids.contains($0.id) }) { open(article) }
             }
