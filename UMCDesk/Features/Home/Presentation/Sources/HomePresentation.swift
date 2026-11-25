@@ -170,7 +170,7 @@ public struct HomeView: View {
                         Text(schedule.startsAt,
                              format: .dateTime.month().day().weekday().hour().minute())
                             .umcTypography(.headlineRegular)
-                            .foregroundStyle(UMCColor.Semantic.textNeutralMedium600)
+                            .foregroundStyle(UMCColor.Semantic.textNeutralStrong800)
                     case .failed: Text("불러오지 못했어요")
                     case .idle, .loading:
                         ProgressView().controlSize(.small)
