@@ -7,6 +7,7 @@
 
 import AppKit
 import CommunityDomain
+import CoreUIComponents
 @testable import CommunityPresentation
 import SwiftUI
 import Testing
@@ -42,6 +43,46 @@ struct ThreadSearchFieldTests {
         #expect(window.firstResponder !== editor)
         #expect(find(NSTableView.self, in: host)?.selectedRow == 0)
         window.contentView = nil
+    }
+
+    @Test func filterMenuShowsOneNativeMarkPerGroupAfterReopening() throws {
+        var category = ThreadListFilter.all
+        var participation = ThreadParticipationFilter.all
+
+        func openFilters() throws -> NSMenu {
+            let tools = ThreadBrowserTools(
+                filter: .init(get: { category }, set: { category = $0 }),
+                participation: .init(get: { participation }, set: { participation = $0 }),
+                focusSearch: {}, create: {}, showAll: {}
+            )
+            let root = NSHostingMenu(rootView: tools.toggleStyle(UMCCheckboxStyle()))
+            let menu = try #require(root.item(withTitle: "도구")?.submenu)
+            return try #require(menu.item(withTitle: "분류 · 참여 상태 필터")?.submenu)
+        }
+
+        func verifyRows(in menu: NSMenu) throws {
+            let titles = ThreadListFilter.allCases.map(\.title)
+                + ThreadParticipationFilter.allCases.map(\.rawValue)
+            for title in titles {
+                let item = try #require(menu.item(withTitle: title))
+                let selected = title == category.title || title == participation.rawValue
+                #expect(item.state == (selected ? .on : .off))
+                #expect(item.image == nil)
+                #expect(item.view == nil)
+            }
+        }
+
+        let initial = try openFilters()
+        try verifyRows(in: initial)
+        let project = try #require(initial.item(withTitle: "프로젝트"))
+        initial.performActionForItem(at: initial.index(of: project))
+        #expect(category == .project && participation == .all)
+        let afterCategory = try openFilters()
+        try verifyRows(in: afterCategory)
+        let unjoined = try #require(afterCategory.item(withTitle: "미참여"))
+        afterCategory.performActionForItem(at: afterCategory.index(of: unjoined))
+        #expect(category == .project && participation == .unjoined)
+        try verifyRows(in: openFilters())
     }
 
     @Test func toolsAndSharingUseNativeMenuActionsAndServerPayload() throws {
