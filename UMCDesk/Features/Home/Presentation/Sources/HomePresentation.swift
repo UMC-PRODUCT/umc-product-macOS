@@ -73,6 +73,8 @@ final class HomeViewModel {
 public struct HomeView: View {
     @State private var model: HomeViewModel
     @State private var showsArcade = false
+    @State private var dockOwner: HomeGameRecordStore?
+    @FocusState private var dockFocused: Bool
     @State private var selectedGame: MiniGame?
     @State private var reload = UUID()
     @State private var records = GameRecords()
@@ -102,7 +104,15 @@ public struct HomeView: View {
 
     public var body: some View {
         Group {
-            if let selectedGame {
+            if let dockOwner {
+                DockSessionView(record: { score in
+                    guard dockOwner == recordStore else { return }
+                    save(id: "postmarkDock", title: "소인이 찍겠습니다!", score: score)
+                }, close: {
+                    self.dockOwner = nil
+                    Task { @MainActor in dockFocused = true }
+                })
+            } else if let selectedGame {
                 GameSessionView(
                     game: selectedGame, records: records, record: save,
                     close: { self.selectedGame = nil })
@@ -131,6 +141,7 @@ public struct HomeView: View {
         .tint(UMCColor.Semantic.textBrandDefault)
         .task(id: reload) { await model.load() }
         .onChange(of: recordStore, initial: true) { _, store in
+            if dockOwner != store { dockOwner = nil }
             records = store.load()
         }
     }
@@ -338,8 +349,11 @@ public struct HomeView: View {
     private var arcade: some View {
         VStack(alignment: .leading, spacing: UMCSpacing.value16) {
             HStack(alignment: .top, spacing: UMCSpacing.value16) {
-                ForEach(MiniGame.allCases) { game in gameCard(game) }
+                dockCard
+                ForEach([MiniGame.bricks, .tower]) { game in gameCard(game) }
             }
+            Button("블록 점프 한 판 하기") { selectedGame = .jump }
+            Text("소인이 찍겠습니다! · 누적 \(records.totals["postmarkDock", default: 0])점")
             Text("나의 기록").umcTypography(.headlineBold)
             HStack(alignment: .top, spacing: 20) {
                 ForEach(MiniGame.allCases) { game in
@@ -368,6 +382,27 @@ public struct HomeView: View {
         }
     }
 
+    private var dockCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("소인이 찍겠습니다!").umcTypography(.headlineBold)
+            Text("꾹이의 접지부두 · 소인기 세 면 펼치기").umcTypography(.calloutRegular)
+            HStack {
+                Image(systemName: "water.waves")
+                Image(systemName: "ferry.fill")
+                Image(systemName: "envelope.fill")
+            }.font(.title).frame(maxWidth: .infinity, minHeight: 64)
+                .background(paper.panel, in: .rect(cornerRadius: 8)).accessibilityHidden(true)
+            Text("WASD / F · 최고 \(records.best["postmarkDock", default: 0])점")
+                .umcTypography(.calloutRegular)
+            Button { dockOwner = recordStore } label: {
+                Text("한 판 하기").frame(maxWidth: .infinity)
+            }.buttonStyle(.borderedProminent).focused($dockFocused)
+                .accessibilityLabel("소인이 찍겠습니다! 한 판 하기")
+        }
+        .padding(18)
+        .background(UMCColor.Custom.backgroundSurfaceGreyWeaker, in: .rect(cornerRadius: 12))
+    }
+
     private func gameCard(_ game: MiniGame) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             Text(game.title).umcTypography(.headlineBold)
@@ -388,10 +423,13 @@ public struct HomeView: View {
     }
 
     private func save(_ game: MiniGame, score: Int) {
-        let id = game.rawValue
+        save(id: game.rawValue, title: game.title, score: score)
+    }
+
+    private func save(id: String, title: String, score: Int) {
         records.best[id] = max(score, records.best[id, default: 0])
         records.totals[id, default: 0] += score
-        records.recent = Array((["\(game.title) \(score)점"] + records.recent).prefix(3))
+        records.recent = Array((["\(title) \(score)점"] + records.recent).prefix(3))
         recordStore.save(records)
     }
 }
