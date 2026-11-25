@@ -1,6 +1,40 @@
 {
   "sourceLanguage": "ko",
   "strings": {
+    "탭 이동": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "탭 이동"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Go to Tab"
+          }
+        }
+      }
+    },
+    "프로젝트 매칭": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "프로젝트 매칭"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Project Matching"
+          }
+        }
+      }
+    },
     "프로필 링크는 어디에서 바꾸나요?": {
       "extractionState": "manual",
       "localizations": {
