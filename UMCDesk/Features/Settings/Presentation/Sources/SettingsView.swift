@@ -195,11 +195,11 @@ public struct SettingsView: View {
             }
         }
         .environment(\.windowDetail, detailSelection)
-        .onChange(of: location, initial: true) { _, destination in
-            // Replaying an entry already moved the cursor, including its article selection.
-            if history.current?.location != destination {
-                history.visit(WindowVisit(location: destination))
-            }
+        .environment(\.invalidateWindowDetail, { [location] detail in
+            history.invalidate(WindowVisit(location: location, detail: detail))
+        })
+        .onChange(of: windowEntry, initial: true) { old, new in
+            history.arrive(from: old, at: new)
         }
         .toolbar { navigationToolbar }
         .toolbarBackground(UMCColor.Custom.backgroundAppShell, for: .windowToolbar)
@@ -443,6 +443,10 @@ public struct SettingsView: View {
         return .settings(viewModel.page)
     }
 
+    private var windowEntry: WindowEntry {
+        WindowEntry(location: location, explicitNavigationID: featureRouter?.explicitNavigationID)
+    }
+
     private var detailSelection: Binding<WindowDetail?> {
         let destination = location
         return Binding {
@@ -467,19 +471,18 @@ public struct SettingsView: View {
 
     @ToolbarContentBuilder
     private var navigationToolbar: some ToolbarContent {
-        ToolbarItem(placement: .navigation) {
-            HStack(spacing: UMCSpacing.value4) {
-                navigationButton(
-                    AppLocalization.string("뒤로"), symbol: "chevron.left", shortcut: "[",
-                    isEnabled: history.canGoBack
-                ) { restore(history.back()) }
-                navigationButton(
-                    AppLocalization.string("앞으로"), symbol: "chevron.right", shortcut: "]",
-                    isEnabled: history.canGoForward
-                ) { restore(history.forward()) }
-            }
-            .frame(width: UMCSpacing.value32 * 2 + UMCSpacing.value4,
-                height: UMCSpacing.value40)
+        ToolbarItem(id: "window.back", placement: .navigation) {
+            navigationButton(
+                AppLocalization.string("뒤로"), symbol: "chevron.left", shortcut: "[",
+                isEnabled: history.canGoBack
+            ) { restore(history.back()) }
+        }
+        .sharedBackgroundVisibility(.hidden)
+        ToolbarItem(id: "window.forward", placement: .navigation) {
+            navigationButton(
+                AppLocalization.string("앞으로"), symbol: "chevron.right", shortcut: "]",
+                isEnabled: history.canGoForward
+            ) { restore(history.forward()) }
         }
         .sharedBackgroundVisibility(.hidden)
     }
@@ -492,7 +495,8 @@ public struct SettingsView: View {
             dismissSearchSuggestions()
             action()
         } label: {
-            Image(systemName: symbol)
+            Label(title, systemImage: symbol)
+                .labelStyle(.iconOnly)
                 .font(.system(size: 16, weight: .medium))
                 .foregroundStyle(sidebarChromeForeground.opacity(isEnabled ? 0.90 : 0.46))
                 .frame(width: UMCSpacing.value32, height: UMCSpacing.value32)

@@ -259,15 +259,20 @@ private struct AppRootView: View {
                         activities: dependencies.settingsViewModel.profile?.activities ?? [],
                         openWorkspace: dependencies.navigation.openWorkspace
                     )
+                    .id(destination)
                     .id(dependencies.navigation.matchingNavigationID)
                     .id(dependencies.settingsViewModel.profile?.id))
                 } ?? featureContent, matchingSelected: dependencies.navigation.matchingDestination != nil,
                 onOpenMatching: { dependencies.openMatching() },
                 onSelectSection: dependencies.selectSection
             )
-            .windowFeatureNavigation(location: featureLocation) { location in
+            .windowFeatureNavigation(
+                location: featureLocation,
+                explicitNavigationID: dependencies.navigation.matchingNavigationID
+            ) { location in
                 switch location {
-                case .matching(let destination): dependencies.openMatching(destination)
+                case .matching(let destination):
+                    dependencies.openMatching(destination, isRestoring: true)
                 case .project(let id):
                     if let member = dependencies.navigation.account?.memberID {
                         dependencies.navigation.openWorkspace(projectID: id, memberID: member)

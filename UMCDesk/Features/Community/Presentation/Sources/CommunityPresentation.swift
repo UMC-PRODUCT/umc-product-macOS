@@ -10,6 +10,7 @@ import CommunityDomain
 import CoreDesignSystem
 import CoreRouting
 import SwiftUI
+import UMCFoundation
 
 public struct CommunityThreadsView: View {
     private let accountID: String
@@ -37,6 +38,49 @@ public struct CommunityThreadsView: View {
     }
 }
 
+/// Restoring a paginated thread fetches its detail independently of the current list.
+@MainActor @Observable
+final class ThreadRestoration {
+    private(set) var state: Loadable<CommunityThread> = .idle
+
+    func load(id: String, repository: any CommunityThreadRepository) async {
+        state = .loading
+        do {
+            let thread = try await repository.thread(id: id)
+            if !Task.isCancelled { state = .loaded(thread) }
+        } catch {
+            if !Task.isCancelled { state = .failed(error) }
+        }
+    }
+}
+
+private struct RestoredThreadPane<Content: View>: View {
+    let id: String
+    let repository: any CommunityThreadRepository
+    let content: (CommunityThread) -> Content
+    @State private var restoration = ThreadRestoration()
+    @State private var attempt = 0
+
+    var body: some View {
+        Group {
+            switch restoration.state {
+            case .idle, .loading: ProgressView("스레드를 불러오는 중")
+            case .loaded(let thread): content(thread)
+            case .failed(let error):
+                ContentUnavailableView {
+                    Label("스레드를 열지 못했어요", systemImage: "bubble.left")
+                } description: {
+                    Text(error.localizedDescription)
+                } actions: {
+                    Button("다시 시도") { attempt += 1 }
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .task(id: attempt) { await restoration.load(id: id, repository: repository) }
+    }
+}
+
 private struct ThreadBrowser: View {
     let accountID: String
     let repository: any CommunityThreadRepository
@@ -52,7 +96,6 @@ private struct ThreadBrowser: View {
     @State private var threads: [CommunityThread] = []
     @State private var next: String?
     @WindowDetailSelection private var selection: String?
-    @State private var restoredThread: CommunityThread?
     @State private var reload = 0
     @State private var loading = false
     @State private var failure: String?
@@ -116,28 +159,16 @@ private struct ThreadBrowser: View {
             .padding(UMCSpacing.value16)
             .frame(minWidth: 220, idealWidth: 344, maxWidth: 344,
                    minHeight: 0, maxHeight: .infinity, alignment: .topLeading)
-            if let item = threads.first(where: { $0.id == selection })
-                ?? restoredThread.flatMap({ $0.id == selection ? $0 : nil }) {
-                ThreadDestination(accountID: accountID, thread: item, detached: false,
-                                  repository: repository, conversations: conversations,
-                                  management: management, defaults: defaults)
-                    .id(item.id)
+            if let item = threads.first(where: { $0.id == selection }) {
+                destination(for: item)
+            } else if let selection {
+                RestoredThreadPane(id: selection, repository: repository, content: destination)
+                    .id(selection)
             } else {
                 ContentUnavailableView(threads.isEmpty && !loading && failure == nil
                     ? "표시할 스레드가 없어요" : "스레드를 선택하세요",
                     systemImage: "bubble.left.and.bubble.right")
                     .frame(minWidth: 0, maxWidth: .infinity, minHeight: 0, maxHeight: .infinity)
-            }
-        }
-        .task(id: selection) {
-            restoredThread = nil
-            guard let id = selection, !threads.contains(where: { $0.id == id }) else { return }
-            do {
-                let item = try await repository.thread(id: id)
-                guard !Task.isCancelled, selection == id else { return }
-                restoredThread = item
-            } catch {
-                if !Task.isCancelled && selection == id { failure = error.localizedDescription }
             }
         }
         .communitySplitContent()
@@ -219,6 +250,13 @@ private struct ThreadBrowser: View {
             .listRowBackground(UMCColor.Custom.backgroundDefault)
             .tag(item.id)
         }
+    }
+
+    private func destination(for item: CommunityThread) -> some View {
+        ThreadDestination(accountID: accountID, thread: item, detached: false,
+                          repository: repository, conversations: conversations,
+                          management: management, defaults: defaults)
+            .id(item.id)
     }
 
     private func showAll() {

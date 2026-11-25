@@ -239,6 +239,36 @@ struct SettingsViewModelTests {
         #expect(WindowHistory().current == nil)
     }
 
+    @Test func revokingRestoredArticlePreservesForwardHistory() {
+        var history = WindowHistory()
+        let list = WindowVisit(location: .section(.notice))
+        let revoked = WindowVisit(location: list.location, detail: WindowDetail("21"))
+        let readable = WindowVisit(location: list.location, detail: WindowDetail("22"))
+        for visit in [list, revoked, readable] { history.visit(visit) }
+        #expect(history.back() == revoked)
+        history.invalidate(revoked)
+        #expect(history.current == list)
+        #expect(history.back() == nil)
+        #expect(history.forward() == readable)
+        #expect(history.back() == list)
+    }
+
+    @Test func explicitMatchingEntryReturnsToRootAndHistoryRestoresThePreviousDetail() {
+        var history = WindowHistory()
+        let root = WindowVisit(location: .matching)
+        let detail = WindowVisit(location: .matching, detail: WindowDetail("project"))
+        let original = WindowEntry(location: .matching, explicitNavigationID: UUID())
+        let reopened = WindowEntry(location: .matching, explicitNavigationID: UUID())
+        history.arrive(from: original, at: original)
+        history.visit(detail)
+        history.arrive(from: original, at: reopened)
+        #expect(history.current == root)
+        #expect(history.back() == detail)
+        history.arrive(from: reopened, at: reopened)
+        #expect(history.current == detail)
+        #expect(history.forward() == root)
+    }
+
     @Test("A refresh started before saving cannot overwrite the saved links")
     func savedLinksRejectStaleRefresh() async {
         let useCase = ControlledSettingsUseCase()

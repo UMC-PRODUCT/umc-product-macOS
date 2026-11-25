@@ -67,7 +67,7 @@ struct NoticeArticleView: View {
     @State private var access = NoticeAccessState()
     let id: String
     let confirmed: Bool
-    let onBack: () -> Void
+    let onDelete: () -> Void
     let onAccessLost: () -> Void
     let onChanged: () -> Void
     let onRead: () -> Void
@@ -174,7 +174,7 @@ struct NoticeArticleView: View {
                     await perform {
                         try await repository.delete(id: id)
                         onChanged()
-                        onBack()
+                        onDelete()
                     }
                 }
             }

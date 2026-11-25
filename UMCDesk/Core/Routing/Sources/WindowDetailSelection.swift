@@ -24,6 +24,7 @@ public struct WindowDetail: Equatable, Sendable {
 
 public extension EnvironmentValues {
     @Entry var windowDetail: Binding<WindowDetail?>?
+    @Entry var invalidateWindowDetail: (@MainActor (WindowDetail) -> Void)?
 }
 
 /// Standalone feature windows keep their local selection when no shell hosts them.

@@ -18,6 +18,18 @@ import CoreNetwork
 @MainActor
 struct AppDependenciesTests {
     #if DEBUG
+    @Test func matchingRestorationPreservesTheExplicitEntryIdentifier() {
+        let navigation = AppNavigation(launchPage: .login)
+        navigation.openMatching(.explore, memberId: "101")
+        let first = navigation.matchingNavigationID
+        navigation.openMatching(.explore, memberId: "101")
+        let second = navigation.matchingNavigationID
+        #expect(first != second)
+        navigation.openMatching(.applications, memberId: "101", isRestoring: true)
+        #expect(navigation.matchingNavigationID == second)
+        #expect(navigation.matchingDestination == .applications)
+    }
+
     @Test("로그인 대기 중 탭을 바꾸면 마지막으로 선택한 목적지만 남는다")
     func latestTabReplacesPendingDestination() {
         let navigation = AppNavigation(launchPage: .login)

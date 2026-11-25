@@ -45,6 +45,24 @@ struct ThreadSearchFieldTests {
         window.contentView = nil
     }
 
+    @Test func retryRestoresTheSelectedThreadAfterAnIndependentFetchFailure() async {
+        let fixture = ThreadSearchRepository()
+        await fixture.failNextDetailFetch()
+        let restoration = ThreadRestoration()
+        await restoration.load(id: "42", repository: fixture)
+        guard case .failed = restoration.state else {
+            Issue.record("상세 조회 실패가 복원 패널에 표시되어야 합니다.")
+            return
+        }
+        await restoration.load(id: "42", repository: fixture)
+        guard case .loaded(let thread) = restoration.state else {
+            Issue.record("다시 시도하면 같은 스레드가 복원되어야 합니다.")
+            return
+        }
+        #expect(thread.id == "42")
+        #expect(await fixture.detailRequests == ["42", "42"])
+    }
+
     @Test func filterMenuShowsOneNativeMarkPerGroupAfterReopening() throws {
         var category = ThreadListFilter.all
         var participation = ThreadParticipationFilter.all
@@ -174,11 +192,20 @@ private actor ThreadSearchRepository:
     CommunityThreadRepository, ThreadConversationRepository, ThreadManagementRepository
 {
     var selected = ""
+    private var failDetail = false
+    private(set) var detailRequests: [String] = []
+
+    func failNextDetailFetch() { failDetail = true }
     let row = CommunityThread(id: "42", title: "한글 결과", description: nil, icon: "💬",
                               isPinned: false, isMuted: false, isJoined: false,
                               membershipState: nil, unread: "0")
 
     func thread(id: String) async throws -> CommunityThread {
+        detailRequests.append(id)
+        if failDetail {
+            failDetail = false
+            throw URLError(.timedOut)
+        }
         selected = id
         return row
     }

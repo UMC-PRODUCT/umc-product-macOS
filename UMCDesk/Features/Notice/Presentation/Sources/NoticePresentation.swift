@@ -77,6 +77,7 @@ final class NoticeBoardModel {
 
 public struct NoticeBoardView: View {
     @State private var model: NoticeBoardModel
+    @Environment(\.invalidateWindowDetail) private var invalidateDetail
     @WindowDetailSelection private var selection: String?
     @State private var search = ""
     @State private var composing = false
@@ -104,10 +105,10 @@ public struct NoticeBoardView: View {
                     NoticeArticleView(
                         repository: model.repository, id: id,
                         confirmed: model.readIDs.contains(id),
-                        onBack: { selection = nil },
+                        onDelete: { discardArticle(id) },
                         onAccessLost: {
                             model.revokeArticle(id)
-                            if selection == id { selection = nil }
+                            discardArticle(id)
                         },
                         onChanged: { Task { await model.load() } },
                         onRead: { model.readIDs.insert(id) }
@@ -120,7 +121,9 @@ public struct NoticeBoardView: View {
         }
         .background(UMCColor.Custom.backgroundDefault)
         .task(id: model.tab) { await model.load() }
-        .onChange(of: model.accessLossRevision) { selection = nil }
+        .onChange(of: model.accessLossRevision) {
+            if let selection { discardArticle(selection) }
+        }
         .onChange(of: model.part) { _, _ in Task { await model.load() } }
         .onChange(of: model.canCompose) { _, allowed in
             if !allowed { composing = false }
@@ -139,6 +142,11 @@ public struct NoticeBoardView: View {
                 Task { await model.load() }
             }
         }
+    }
+
+    private func discardArticle(_ id: String) {
+        if let invalidateDetail { invalidateDetail(WindowDetail(id)) }
+        else if selection == id { selection = nil }
     }
 
     private var toolbar: some View {
