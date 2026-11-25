@@ -9,17 +9,12 @@ import HomeDomain
 import SwiftUI
 import UMCFoundation
 
-fileprivate enum Constants {
-    static let contentInset = UMCSpacing.value24
-    static let maximumContentWidth: CGFloat = 1040
-}
-
 public enum HomeDestination {
     case activity, notice, project
 }
 
 @MainActor @Observable
-private final class HomeViewModel {
+final class HomeViewModel {
     var profile: HomeProfile?
     var schedule: Loadable<HomeSchedule?> = .idle
     var notice: Loadable<String?> = .idle
@@ -28,32 +23,51 @@ private final class HomeViewModel {
 
     init(_ repository: any HomeRepository) { self.repository = repository }
 
-    func load() async {
-        schedule = .loading
-        notice = .loading
-        project = .loading
-        async let identity = try? repository.profile()
-        async let schedules = result { try await self.repository.schedule() }
-        async let notices = result { try await self.repository.notice() }
-        async let projects = result { try await self.repository.project() }
-        let values = await (identity, schedules, notices, projects)
-        guard !Task.isCancelled else { return }
-        profile = values.0
-        schedule = state(values.1)
-        notice = state(values.2)
-        project = state(values.3)
-    }
+    enum Focus: Equatable { case schedule, project, notice, empty }
 
-    private func result<Value>(_ read: () async throws -> Value) async -> Result<Value, Error> {
-        do { return .success(try await read()) } catch { return .failure(error) }
-    }
-
-    private func state<Value>(_ result: Result<Value, Error>) -> Loadable<Value> {
-        switch result {
-        case .success(let value): .loaded(value)
-        case .failure(let error): .failed(error)
+    var focus: Focus {
+        guard case .loaded(nil) = schedule else { return .schedule }
+        switch project {
+        case .loaded(.some): return .project
+        case .loaded(nil):
+            switch notice {
+            case .loaded(.some): return .notice
+            case .loaded(nil): return .empty
+            default: return .schedule
+            }
+        default: return .schedule
         }
     }
+
+    func load() async {
+        schedule = refreshing(schedule)
+        notice = refreshing(notice)
+        project = refreshing(project)
+        async let identity: Void = loadProfile()
+        async let schedules: Void = read(repository.schedule) { self.schedule = $0 }
+        async let notices: Void = read(repository.notice) { self.notice = $0 }
+        async let projects: Void = read(repository.project) { self.project = $0 }
+        _ = await (identity, schedules, notices, projects)
+    }
+
+    private func loadProfile() async {
+        if let value = try? await repository.profile(), !Task.isCancelled { profile = value }
+    }
+
+    private func refreshing<Value>(_ state: Loadable<Value>) -> Loadable<Value> {
+        if case .loaded = state { return state }
+        return .loading
+    }
+
+    private func read<Value: Sendable>(
+        _ read: @Sendable () async throws -> Value,
+        apply: @MainActor (Loadable<Value>) -> Void
+    ) async {
+        let result: Loadable<Value>
+        do { result = .loaded(try await read()) } catch { result = .failed(error) }
+        if !Task.isCancelled { apply(result) }
+    }
+
 }
 
 public struct HomeView: View {
@@ -62,6 +76,11 @@ public struct HomeView: View {
     @State private var selectedGame: MiniGame?
     @State private var reload = UUID()
     @State private var records = GameRecords()
+    @Environment(\.colorScheme) private var scheme
+    @Environment(\.colorSchemeContrast) private var contrast
+    @State private var wideHero = false
+    @State private var narrowPage = false
+    private var paper: DeskPaper { DeskPaper(dark: scheme == .dark) }
     private let defaults: UserDefaults
     private let memberID: String?
     private let onOpen: ((HomeDestination) -> Void)?
@@ -90,25 +109,25 @@ public struct HomeView: View {
             } else {
                 ScrollView {
                     VStack(alignment: .leading, spacing: UMCSpacing.value24) {
-                        VStack(alignment: .leading, spacing: UMCSpacing.value24) {
-                            homeHeader
-                            workSummary
-                            arcadeHeader.padding(.top, UMCSpacing.value8)
-                        }
-                        .padding(.horizontal, Constants.contentInset)
-                        .transformEnvironment(\.umcFontDesign) { design in
-                            if design == nil { design = .default }
-                        }
+                        homeHeader
+                        workSummary
+                        arcadeHeader
                         if showsArcade { arcade }
                     }
-                    .frame(maxWidth: Constants.maximumContentWidth)
-                    .padding(UMCSpacing.value32)
+                    .frame(maxWidth: 1120)
+                    .padding(narrowPage ? UMCSpacing.value20 : UMCSpacing.value32)
                     .frame(maxWidth: .infinity)
+                    .transformEnvironment(\.umcFontDesign) { design in
+                        if design == nil { design = .default }
+                    }
+                }
+                .onGeometryChange(for: Bool.self) { $0.size.width < 684 } action: {
+                    narrowPage = $0
                 }
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(UMCColor.Custom.backgroundSurface)
+        .background(selectedGame == nil ? paper.background : UMCColor.Custom.backgroundSurface)
         .tint(UMCColor.Semantic.textBrandDefault)
         .task(id: reload) { await model.load() }
         .onChange(of: recordStore, initial: true) { _, store in
@@ -119,14 +138,14 @@ public struct HomeView: View {
     private var homeHeader: some View {
         HStack {
             Text(model.profile.map { "안녕, " + $0.nickname + "." } ?? "나만의 공간")
-                .umcTypography(.title3Bold)
+                .umcTypography(.largeTitle2Bold)
             Spacer()
             Button {
                 reload = UUID()
             } label: {
                 Image(systemName: "arrow.clockwise")
-                    .frame(width: 28, height: 28)
-                    .contentShape(.rect)
+                    .font(.system(size: 19, weight: .medium))
+                    .frame(width: 32, height: 32).contentShape(.rect)
             }
             .buttonStyle(.borderless)
             .accessibilityLabel("새로고침")
@@ -135,161 +154,185 @@ public struct HomeView: View {
     }
 
     private var workSummary: some View {
-        VStack(alignment: .leading, spacing: UMCSpacing.value16) {
-            if case .loaded(nil) = model.schedule {
-                HStack(spacing: UMCSpacing.value12) {
-                    Text(Date.now, format: .dateTime.month().day().weekday(.wide))
-                    Text("오늘 남은 일정이 없어요")
-                    Spacer()
-                    navigationLink("일정 보기", destination: .activity)
-                }
-                .umcTypography(.headlineRegular)
-                .foregroundStyle(UMCColor.Semantic.textNeutralMedium600)
+        DeskCardLayout {
+            hero
+            if model.focus != .notice && model.focus != .empty {
+                companion("공지", state: model.notice, destination: .notice)
+            }
+            if model.focus != .project && model.focus != .empty {
+                companion("프로젝트", state: model.project, destination: .project)
+            }
+        }
+    }
 
-                if case .loaded(.some) = model.project {
-                    featured("이어서 작업", symbol: "folder", action: "프로젝트 보기",
-                             destination: .project) {
-                        summary(model.project, title: "이어서 작업",
-                                empty: "관리하는 프로젝트가 없어요", style: .largeTitle3Bold)
-                    }
-                    noticeRow
+    private var heroTitle: String {
+        switch model.focus {
+        case .empty: return "표시할 일정, 프로젝트, 공지가 없어요"
+        case .project: if case .loaded(let title?) = model.project { return title }
+        case .notice: if case .loaded(let title?) = model.notice { return title }
+        case .schedule:
+            switch model.schedule {
+            case .loaded(let item?): return item.name
+            case .loaded(nil): return "오늘 남은 일정이 없어요"
+            case .failed: return "일정을 불러오지 못했어요"
+            case .idle, .loading: return ""
+            }
+        }
+        return ""
+    }
+
+    private var schedule: HomeSchedule? {
+        if case .loaded(let item) = model.schedule { return item }
+        return nil
+    }
+
+    private var hero: some View {
+        let showArt = wideHero && heroTitle.count <= 80
+        return HStack {
+            VStack(alignment: .leading, spacing: UMCSpacing.value16) {
+                if model.focus == .schedule && heroTitle.isEmpty {
+                    placeholders
                 } else {
-                    featured("공지", symbol: "megaphone", action: "공지 보기", destination: .notice) {
-                        summary(model.notice, title: "공지",
-                                empty: "확인할 새 소식이 없어요", style: .largeTitle3Bold)
-                    }
-                    projectRow
-                }
-            } else {
-                featured("오늘 일정", symbol: "calendar", action: "일정 보기", destination: .activity) {
-                    switch model.schedule {
-                    case .loaded(let schedule?):
-                        Text(schedule.name)
-                            .umcTypography(.largeTitle3Bold)
+                    VStack(alignment: .leading, spacing: UMCSpacing.value8) {
+                        Text(schedule?.startsAt ?? .now,
+                             format: .dateTime.month().day().weekday(.wide))
+                            .umcTypography(.title4Regular)
+                            .foregroundStyle(paper.muted)
+                        Rectangle().fill(paper.muted.opacity(0.38))
+                            .frame(maxWidth: 230).frame(height: 1)
+                            .padding(.bottom, UMCSpacing.value4)
+                        Text(heroTitle).umcTypography(.largeTitle1Bold)
                             .fixedSize(horizontal: false, vertical: true)
-                        Text(schedule.startsAt,
-                             format: .dateTime.month().day().weekday().hour().minute())
-                            .umcTypography(.headlineRegular)
-                            .foregroundStyle(UMCColor.Semantic.textNeutralStrong800)
-                    case .failed: Text("불러오지 못했어요")
-                    case .idle, .loading:
-                        ProgressView().controlSize(.small)
-                            .accessibilityLabel("오늘 일정 불러오는 중")
-                    case .loaded(nil): EmptyView()
+                        if let schedule {
+                            Text(schedule.startsAt, format: .dateTime.hour().minute())
+                                .umcTypography(.title2Regular)
+                        }
                     }
+                    .accessibilityElement(children: .combine)
                 }
-                noticeRow
-                projectRow
+                if let onOpen, model.focus != .empty {
+                    let action: (String, HomeDestination) = switch model.focus {
+                    case .project: ("프로젝트 보기", .project)
+                    case .notice: ("공지 보기", .notice)
+                    case .schedule, .empty: ("일정 보기", .activity)
+                    }
+                    Button { onOpen(action.1) } label: {
+                        Text(action.0).umcTypography(.headlineBold)
+                            .padding(.horizontal, UMCSpacing.value16)
+                            .frame(minHeight: 32)
+                            .foregroundStyle(paper.buttonText)
+                            .background(paper.button, in: .rect(cornerRadius: 8))
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityHint(model.focus == .schedule ? "활동 탭으로 이동" : "해당 탭으로 이동")
+                }
             }
+            Spacer(minLength: showArt ? 188 : 0)
         }
-    }
-
-    private func featured<Content: View>(
-        _ title: String, symbol: String, action: String, destination: HomeDestination,
-        @ViewBuilder content: () -> Content
-    ) -> some View {
-        HStack(alignment: .top, spacing: UMCSpacing.value16) {
-            VStack(alignment: .leading, spacing: UMCSpacing.value8) {
-                Label(title, systemImage: symbol)
-                    .umcTypography(.headlineBold)
-                    .foregroundStyle(UMCColor.Semantic.textBrandDefault)
-                content()
-            }
-            .accessibilityElement(children: .contain)
-            .accessibilitySortPriority(1)
-            Spacer(minLength: 0)
-            if let onOpen {
-                Button(action) { onOpen(destination) }
-                    .fixedSize()
-                    .buttonStyle(.bordered)
-            }
-        }
-        .padding(.vertical, UMCSpacing.value24)
-        .background {
-            // 카드 표면만 넓혀 모든 행의 버튼이 같은 열에 남도록 한다.
-            RoundedRectangle(cornerRadius: UMCRadius.value16)
-                .fill(UMCColor.Custom.backgroundSurfaceGreyWeak)
-                .padding(.horizontal, -Constants.contentInset)
-        }
+        .foregroundStyle(paper.ink)
+        .padding(UMCSpacing.value32)
+        .frame(maxWidth: .infinity, minHeight: 272, maxHeight: .infinity, alignment: .leading)
+        .background { DeskPaperSurface(paper: paper, showsCalendar: showArt) }
+        .onGeometryChange(for: Bool.self) { $0.size.width >= 536 } action: { wideHero = $0 }
         .accessibilityElement(children: .contain)
     }
 
-    private var noticeRow: some View {
-        workRow("공지", symbol: "megaphone", state: model.notice,
-                empty: "확인할 새 소식이 없어요", action: "공지 보기", destination: .notice)
-    }
-
-    private var projectRow: some View {
-        workRow("이어서 작업", symbol: "folder", state: model.project,
-                empty: "관리하는 프로젝트가 없어요", action: "프로젝트 보기", destination: .project)
-    }
-
-    private func workRow(
-        _ title: String, symbol: String, state: Loadable<String?>,
-        empty: String, action: String, destination: HomeDestination
-    ) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: UMCSpacing.value16) {
-            Label(title, systemImage: symbol)
-                .umcTypography(.headlineRegular)
-                .foregroundStyle(UMCColor.Semantic.textNeutralMedium600)
-                .frame(minWidth: 100, alignment: .leading)
-            summary(state, title: title, empty: empty, style: .title4Bold)
-            Spacer(minLength: 0)
-            navigationLink(action, destination: destination)
+    private var placeholders: some View {
+        VStack(alignment: .leading, spacing: UMCSpacing.value16) {
+            ForEach([90, 210, 70], id: \.self) { width in
+                RoundedRectangle(cornerRadius: 4).fill(paper.muted.opacity(0.18))
+                    .frame(maxWidth: CGFloat(width)).frame(height: width == 210 ? 36 : 18)
+            }
         }
-        .padding(.vertical, UMCSpacing.value8)
-        .accessibilityElement(children: .contain)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("일정을 불러오는 중")
     }
 
     @ViewBuilder
-    private func summary(
-        _ state: Loadable<String?>, title: String, empty: String, style: UMCTypography
+    private func companion(
+        _ title: String, state: Loadable<String?>, destination: HomeDestination
     ) -> some View {
-        switch state {
-        case .loaded(let value):
-            Text(value ?? empty)
-                .umcTypography(value == nil ? .headlineRegular : style)
+        let content = switch state {
+        case .loaded(let value): value ?? (destination == .notice ? "표시할 공지가 없어요" : "표시할 프로젝트가 없어요")
+        case .failed: destination == .notice ? "공지를 불러오지 못했어요" : "프로젝트를 불러오지 못했어요"
+        case .idle, .loading: "불러오는 중"
+        }
+        let card = VStack(alignment: .leading, spacing: UMCSpacing.value8) {
+            HStack(spacing: UMCSpacing.value8) {
+                Capsule().fill(paper.muted).frame(width: 3, height: 14)
+                Text(title).umcTypography(.headlineBold)
+            }
+            .foregroundStyle(paper.muted)
+            Text(content).umcTypography(.title3Bold)
                 .fixedSize(horizontal: false, vertical: true)
-        case .idle, .loading:
-            ProgressView().controlSize(.small).accessibilityLabel(title + " 불러오는 중")
-        case .failed: Text("불러오지 못했어요")
+            if onOpen != nil {
+                Divider().accessibilityHidden(true)
+                HStack {
+                    Text(title + " 보기").umcTypography(.headlineRegular)
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                }
+                .foregroundStyle(paper.muted)
+            }
+        }
+        .padding(UMCSpacing.value20)
+        .frame(maxWidth: .infinity, minHeight: 120, maxHeight: .infinity, alignment: .leading)
+        .background { panelSurface }
+        .contentShape(.rect(cornerRadius: 14))
+        if let onOpen {
+            Button { onOpen(destination) } label: { card }
+                .buttonStyle(.plain)
+                .accessibilityLabel(title + ", " + content)
+                .accessibilityHint(title + " 탭으로 이동")
+        } else {
+            card.accessibilityElement(children: .combine)
         }
     }
 
-    @ViewBuilder
-    private func navigationLink(_ title: String, destination: HomeDestination) -> some View {
-        if let onOpen {
-            Button {
-                onOpen(destination)
-            } label: {
-                Text(title)
-                    .frame(minHeight: UMCSpacing.value24)
-                    .contentShape(.rect)
+    private var panelSurface: some View {
+        RoundedRectangle(cornerRadius: 14)
+            .fill(paper.panel)
+            .overlay {
+                RoundedRectangle(cornerRadius: 14)
+                    .strokeBorder(.primary.opacity(contrast == .increased ? 0.55 : 0.13))
             }
-            .buttonStyle(.borderless)
-            .fixedSize()
-        }
+            .shadow(color: .black.opacity(0.07), radius: 3, y: 2)
     }
 
     private var arcadeHeader: some View {
-        HStack {
-            Label("잠깐, 한 판?", systemImage: "gamecontroller")
-                .umcTypography(.headlineRegular)
-            Spacer()
+        HStack(spacing: UMCSpacing.value16) {
+            Image("desk-scene", bundle: .module)
+                .resizable().aspectRatio(contentMode: .fit)
+                .frame(maxWidth: narrowPage ? 110 : 215)
+                .clipShape(.rect(cornerRadius: 9))
+                .accessibilityHidden(true)
+            GameBoard(round: MiniGameRound(game: .jump), preview: true, surface: paper.panel)
+                .aspectRatio(100.0 / 60, contentMode: .fit)
+                .frame(width: 48, height: 48)
+                .accessibilityHidden(true)
+            Text("잠깐, 한 판?").umcTypography(.title2Bold)
+            Spacer(minLength: 0)
             Button {
                 showsArcade.toggle()
             } label: {
                 HStack(spacing: UMCSpacing.value4) {
                     Text(showsArcade ? "게임 접기" : "게임 선택")
                     Image(systemName: showsArcade ? "chevron.up" : "chevron.down")
-                        .imageScale(.small).accessibilityHidden(true)
                 }
-                .frame(minHeight: UMCSpacing.value24)
-                .contentShape(.rect)
+                .umcTypography(.headlineBold)
+                .foregroundStyle(paper.buttonText)
+                .padding(.horizontal, UMCSpacing.value12)
+                .frame(minHeight: 32)
+                .background(paper.button, in: .rect(cornerRadius: 8))
             }
-            .buttonStyle(.borderless)
+            .buttonStyle(.plain)
+            .accessibilityLabel(showsArcade ? "게임 접기" : "게임 선택")
+            .accessibilityValue(showsArcade ? "펼침" : "접힘")
         }
-        .foregroundStyle(UMCColor.Semantic.textNeutralMedium600)
+        .padding(.horizontal, UMCSpacing.value16)
+        .padding(.vertical, UMCSpacing.value12)
+        .frame(minHeight: 76)
+        .background { panelSurface }
     }
 
     private var arcade: some View {
