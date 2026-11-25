@@ -27,6 +27,7 @@ struct SupportTicket: Identifiable {
     var subject: String
     var content: String
     var team: SupportTeam
+    var category = "기타"
     var assignee = "미배정"
     var label = "미분류"
     var status = SupportInquiryStatus.received
@@ -84,13 +85,13 @@ struct SupportDraft: Identifiable {
 final class SupportFixture {
     var tickets = [
         SupportTicket(subject: "출석 화면 오류 문의", content: "예시 일정의 출석 기록을 확인해 주세요.",
-                      team: .product, label: "화면 오류", status: .active,
+                      team: .product, category: "출석·과제", assignee: "예시 담당자", label: "화면 오류", status: .active,
                       replies: [.init(author: .agent, text: "확인해 볼게요. 사용 중인 앱 버전을 알려 주세요.")]),
         SupportTicket(subject: "종료된 예시 문의", content: "앱 언어 설정을 확인했어요.",
-                      team: .operations, status: .closed,
+                      team: .operations, category: "앱 설정", status: .closed,
                       replies: [.init(author: .agent, text: "언어 설정 확인이 끝나 문의를 종료했어요.")]),
         SupportTicket(belongsToCurrentUser: false, subject: "다른 사용자의 예시 문의",
-                      content: "알림 설정을 확인하고 싶어요.", team: .operations)
+                      content: "알림 설정을 확인하고 싶어요.", team: .operations, category: "앱 설정")
     ]
     var drafts: [SupportDraft]
 

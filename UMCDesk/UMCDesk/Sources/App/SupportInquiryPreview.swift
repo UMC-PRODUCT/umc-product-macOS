@@ -14,7 +14,22 @@ struct SupportInquiryPreview: View {
     var isOperator = false
     let showAnswers: () -> Void
     @State private var status: SupportInquiryStatus?
-    @State private var onlyUnassigned = false
+    private enum Assignment: String, CaseIterable {
+        case all = "전체", mine = "내 담당", unassigned = "미배정"
+
+        func includes(_ ticket: SupportTicket) -> Bool {
+            switch self {
+            case .all: true
+            case .mine: ticket.assignee == "예시 담당자"
+            case .unassigned: ticket.assignee == "미배정"
+            }
+        }
+    }
+
+    @State private var assignment = Assignment.all
+    @State private var category: String?
+    @State private var label: String?
+    @State private var initialDraft: SupportDraft?
 
     init(fixture: SupportFixture, isOperator: Bool = false, initialTicket: UUID? = nil,
          showAnswers: @escaping () -> Void) {
@@ -28,7 +43,9 @@ struct SupportInquiryPreview: View {
         guard isOperator else { return fixture.myTickets }
         return fixture.tickets.filter { ticket in
             (status == nil || status == ticket.status)
-                && (!onlyUnassigned || ticket.assignee == "미배정")
+                && assignment.includes(ticket)
+                && (category == nil || category == ticket.category)
+                && (label == nil || label == ticket.label)
         }
     }
     @FocusState private var tableFocused: Bool
@@ -46,7 +63,10 @@ struct SupportInquiryPreview: View {
 
     var body: some View {
         if isOperator && managingFAQ {
-            SupportFAQPreview(fixture: fixture) { managingFAQ = false }
+            SupportFAQPreview(fixture: fixture, initialDraft: initialDraft) {
+                initialDraft = nil
+                managingFAQ = false
+            }
         } else if let ticket = selectedTicket {
             SupportTicketDetail(ticket: ticket, isOperator: isOperator) {
                 highlightedID = selectedID
@@ -84,20 +104,30 @@ struct SupportInquiryPreview: View {
                     }
                 } else {
                     if isOperator {
-                        HStack {
-                            Picker("상태", selection: $status) {
-                                Text("상태 전체").tag(SupportInquiryStatus?.none)
-                                ForEach(SupportInquiryStatus.allCases, id: \.self) {
-                                    Text($0.rawValue).tag(Optional($0))
-                                }
-                            }
-                            .fixedSize()
-                            Toggle("미배정", isOn: $onlyUnassigned)
-                            Spacer()
-                            Text("\(tickets.count)건").monospacedDigit()
-                        }
+                        operatorFilters
                     }
+
                     ticketTable
+                    if isOperator, let suggestion = tickets.first(where: needsDraft) {
+                        HStack {
+                            VStack(alignment: .leading, spacing: UMCSpacing.value4) {
+                                Text("답변 준비 필요").umcTypography(.headlineBold)
+                                Text(suggestion.subject).umcTypography(.bodyRegular)
+                            }
+                            Spacer()
+                            Button("FAQ 초안 작성") {
+                                // Operators edit a public question before publication.
+                                initialDraft = SupportDraft(article: SupportArticle(
+                                    id: UUID().uuidString, question: "", answer: "",
+                                    category: suggestion.category
+                                ))
+                                managingFAQ = true
+                            }
+                        }
+                        .padding(UMCSpacing.value12)
+                        .background(UMCColor.Custom.backgroundSurfaceGreyWeaker,
+                                    in: .rect(cornerRadius: UMCRadius.value12))
+                    }
                 }
             }
             .sheet(isPresented: $composing) {
@@ -106,6 +136,45 @@ struct SupportInquiryPreview: View {
                     composing = false
                 }
             }
+        }
+    }
+
+    private func needsDraft(_ ticket: SupportTicket) -> Bool {
+        ticket.status != .closed && !fixture.publishedArticles.contains {
+            $0.question == ticket.subject
+        }
+    }
+
+    private var operatorFilters: some View {
+        VStack(alignment: .leading, spacing: UMCSpacing.value8) {
+            Picker("담당 범위", selection: $assignment) {
+                ForEach(Assignment.allCases, id: \.self) { scope in
+                    let count = fixture.tickets.filter(scope.includes).count
+                    Text("\(scope.rawValue) \(count)").tag(scope)
+                }
+            }.pickerStyle(.segmented).labelsHidden().fixedSize()
+            HStack {
+                Picker("상태", selection: $status) {
+                    Text("상태 전체").tag(SupportInquiryStatus?.none)
+                    ForEach(SupportInquiryStatus.allCases, id: \.self) {
+                        Text($0.rawValue).tag(Optional($0))
+                    }
+                }
+                Picker("카테고리", selection: $category) {
+                    Text("카테고리 전체").tag(String?.none)
+                    ForEach(Set(fixture.tickets.map(\.category)).sorted(), id: \.self) {
+                        Text($0).tag(Optional($0))
+                    }
+                }
+                Picker("라벨", selection: $label) {
+                    Text("라벨 전체").tag(String?.none)
+                    ForEach(Set(fixture.tickets.map(\.label)).sorted(), id: \.self) {
+                        Text($0).tag(Optional($0))
+                    }
+                }
+                Spacer(minLength: 0)
+                Text("\(tickets.count)건").monospacedDigit()
+            }.labelsHidden()
         }
     }
 
@@ -125,6 +194,7 @@ struct SupportInquiryPreview: View {
                 Text($0.createdAt, format: .dateTime.month().day()).monospacedDigit()
             }
         }
+        .alternatingRowBackgrounds(.disabled)
         .focused($tableFocused)
         .onAppear { tableFocused = true }
         .contextMenu(forSelectionType: UUID.self) { _ in } primaryAction: { ids in

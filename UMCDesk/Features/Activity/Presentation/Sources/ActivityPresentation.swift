@@ -144,6 +144,7 @@ final class ActivityViewModel {
 }
 
 public struct ActivityView: View {
+    @Environment(\.colorScheme) private var colorScheme
     @State private var model: ActivityViewModel
     @State private var selectedGroup: String?
     @State private var selectedSchedule: String?
@@ -377,6 +378,7 @@ public struct ActivityView: View {
                                 presented = .location(schedule)
                             }
                         }.buttonStyle(.borderedProminent)
+                        .tint(colorScheme == .dark ? UMCColor.Semantic.fillPrimaryStrong200 : UMCColor.Semantic.textBrandDefault)
                     }
                     if schedule.isParticipant, [nil, "LATE", "ABSENT"].contains(schedule.status) {
                         Button("사유 제출") { presented = .excuse(schedule.id) }

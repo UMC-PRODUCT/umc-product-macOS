@@ -10,6 +10,7 @@ import SwiftUI
 import UMCFoundation
 
 struct SupportView: View {
+    @Environment(\.colorScheme) private var colorScheme
     private enum Page {
         case answers, inquiries
         #if DEBUG
@@ -88,7 +89,7 @@ struct SupportView: View {
         .frame(minWidth: 560, maxWidth: .infinity, minHeight: 420, maxHeight: .infinity,
                alignment: .topLeading)
         .background(UMCColor.Custom.backgroundDefault)
-        .tint(UMCColor.Semantic.textBrandDefault)
+        .tint(colorScheme == .dark ? UMCColor.Semantic.fillPrimaryStrong200 : UMCColor.Semantic.textBrandDefault)
         #if DEBUG
         .safeAreaInset(edge: .bottom, alignment: .leading, spacing: 0) {
             if fixture != nil {
@@ -306,6 +307,7 @@ private struct SupportAnswersView: View {
                     }.width(65)
                 }
             }
+            .alternatingRowBackgrounds(.disabled)
             .accessibilityIdentifier("support.faq.table")
             .focused($focus, equals: .table)
             .task {

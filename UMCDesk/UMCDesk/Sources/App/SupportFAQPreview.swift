@@ -15,6 +15,12 @@ struct SupportFAQPreview: View {
     let back: () -> Void
     @State private var editing: SupportDraft?
 
+    init(fixture: SupportFixture, initialDraft: SupportDraft? = nil, back: @escaping () -> Void) {
+        self.fixture = fixture
+        self.back = back
+        _editing = State(initialValue: initialDraft)
+    }
+
     var body: some View {
         HStack {
             Button("문의 관리로", action: back).keyboardShortcut(.cancelAction)
@@ -32,6 +38,7 @@ struct SupportFAQPreview: View {
             }
             TableColumn("상태") { Text($0.status) }
         }
+        .alternatingRowBackgrounds(.disabled)
         .sheet(item: $editing) { draft in
             SupportFAQEditor(draft: draft) { result in
                 if let index = fixture.drafts.firstIndex(where: { $0.id == result.id }) {
