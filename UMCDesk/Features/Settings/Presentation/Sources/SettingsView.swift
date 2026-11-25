@@ -497,9 +497,9 @@ public struct SettingsView: View {
         } label: {
             Label(title, systemImage: symbol)
                 .labelStyle(.iconOnly)
-                .font(.system(size: 16, weight: .medium))
+                .font(.system(size: 12, weight: .medium))
                 .foregroundStyle(sidebarChromeForeground.opacity(isEnabled ? 0.90 : 0.46))
-                .frame(width: UMCSpacing.value32, height: UMCSpacing.value32)
+                .frame(width: 28, height: 28)
         }
         .buttonStyle(WindowNavigationButtonStyle())
         .keyboardShortcut(shortcut, modifiers: .command)
