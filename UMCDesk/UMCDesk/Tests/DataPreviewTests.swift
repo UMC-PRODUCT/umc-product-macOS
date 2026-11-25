@@ -11,6 +11,19 @@ import Testing
 
 @MainActor
 struct DataPreviewTests {
+    @Test func matchingCommandsReplaceTheDisplayedPageEvenFromTheSameTab() {
+        let preview = DataPreviewMode()
+        preview.select(.matching)
+        guard let workspace = preview.session else { Issue.record("미리보기 세션 누락"); return }
+        let previousID = workspace.matchingNavigationID
+        workspace.openMatching(.applications)
+        #expect(workspace.destination == .matching)
+        #expect(workspace.matchingPage == .applications)
+        #expect(workspace.matchingNavigationID != previousID)
+        preview.select(.matching)
+        #expect(workspace.matchingPage == .explore)
+    }
+
     @Test func featureListsAndDetailsUseLocalTransport() async throws {
         let session = DataPreviewSession()
         let account = session.account

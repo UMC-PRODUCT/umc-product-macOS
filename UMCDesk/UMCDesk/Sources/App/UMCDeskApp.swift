@@ -34,6 +34,10 @@ struct UMCDeskApp: App {
     @State private var typographyPreview = UMCTypographyPreview()
     #endif
 
+    private var previewInMainWindow: some View {
+        ContentUnavailableView("메인 창에서 미리보기를 사용 중이에요", systemImage: "macwindow")
+    }
+
     private func publishedDocument(_ document: SettingsPublishedDocument,
                                    close: @escaping () -> Void) -> AnyView {
         AnyView(AuthPublishedTermsView(repository: dependencies.loginRepository,
@@ -81,24 +85,32 @@ struct UMCDeskApp: App {
         }
 
         Window("업데이트 확인", id: DeskWindow.updates) {
-            UpdateWindow()
+            UpdateWindow(usesInstalledRelease: dataPreview != nil)
+                .id(dataPreview != nil)
                 .preferredColorScheme(preferences.theme.colorScheme)
         }
         .defaultSize(width: 640, height: 440)
+        .commandsRemoved()
 
         Window(AppLocalization.string("고객센터"), id: DeskWindow.support) {
-            SupportView()
+            Group {
+                if let dataPreview { SupportView(fixture: dataPreview.support) }
+                else { SupportView() }
+            }
                 .environment(\.locale, AppLocalization.shared.language.locale)
                 .preferredColorScheme(preferences.theme.colorScheme)
                 .environment(\.umcBodyTextScale, preferences.bodyTextSize.scale)
                 .environment(\.umcFontDesign, preferences.font.design)
                 .environment(\.umcFontFamily, preferences.availableFontFamily)
         }
+        .commandsRemoved()
         .defaultSize(width: 980, height: 720)
         .windowToolbarStyle(.unifiedCompact)
 
         WindowGroup("스레드", for: ThreadWindowKey.self) { $key in
-            if let key, let account = dependencies.navigation.account, key.accountID == account.memberID {
+            if dataPreview != nil {
+                previewInMainWindow
+            } else if let key, let account = dependencies.navigation.account, key.accountID == account.memberID {
                 ThreadWindowContent(key: key, repository: account.threads,
                                     conversations: account.conversations, management: account.members,
                                     defaults: dependencies.featureDefaults)
@@ -113,21 +125,25 @@ struct UMCDeskApp: App {
         .defaultSize(width: 760, height: 640)
 
         Settings {
-            SettingsSceneView(dependencies: dependencies)
-                .environment(\.settingsPublishedDocument, publishedDocument)
-                .toggleStyle(UMCCheckboxStyle())
-                .environment(\.locale, AppLocalization.shared.language.locale)
-                .onChange(of: preferences.language) {
-                    dependencies.restoreSupportedFonts()
-                }
-                .preferredColorScheme(preferences.theme.colorScheme)
-                .environment(\.umcBodyTextScale, preferences.bodyTextSize.scale)
-                .environment(\.umcFontDesign, preferences.font.design)
-                .environment(\.umcFontFamily, preferences.availableFontFamily)
-                .frame(minWidth: 1040, minHeight: 720)
-                #if DEBUG || UMC_PRERELEASE
-                .environment(\.umcTypographyPreview, typographyPreview)
-                #endif
+            if dataPreview != nil {
+                previewInMainWindow
+            } else {
+                SettingsSceneView(dependencies: dependencies)
+                    .environment(\.settingsPublishedDocument, publishedDocument)
+                    .toggleStyle(UMCCheckboxStyle())
+                    .environment(\.locale, AppLocalization.shared.language.locale)
+                    .onChange(of: preferences.language) {
+                        dependencies.restoreSupportedFonts()
+                    }
+                    .preferredColorScheme(preferences.theme.colorScheme)
+                    .environment(\.umcBodyTextScale, preferences.bodyTextSize.scale)
+                    .environment(\.umcFontDesign, preferences.font.design)
+                    .environment(\.umcFontFamily, preferences.availableFontFamily)
+                    .frame(minWidth: 1040, minHeight: 720)
+                    #if DEBUG || UMC_PRERELEASE
+                    .environment(\.umcTypographyPreview, typographyPreview)
+                    #endif
+            }
         }
         .defaultSize(width: 1440, height: 960)
         .windowStyle(.titleBar)
@@ -186,10 +202,11 @@ struct UMCDeskApp: App {
 }
 
 private struct UpdateWindow: View {
+    let usesInstalledRelease: Bool
     @Environment(\.dismissWindow) private var dismissWindow
 
     var body: some View {
-        AuthUpdateCheckView(onClose: { dismissWindow(id: DeskWindow.updates) })
+        AuthUpdateCheckView(usesInstalledRelease: usesInstalledRelease, onClose: { dismissWindow(id: DeskWindow.updates) })
     }
 }
 
@@ -438,8 +455,7 @@ private struct AppMenuBarContent: View {
         }
         Button("내 매칭 지원") {
             if let preview {
-                preview.matchingPage = .applications
-                preview.select(.matching)
+                preview.openMatching(.applications)
             } else { dependencies.openMatching(.applications) }
             openWindow(id: "main")
             NSApplication.shared.activate()
@@ -493,6 +509,20 @@ private struct AppSettingsCommands: Commands {
                 openSettings()
             }
             .keyboardShortcut(",", modifiers: .command)
+        }
+        CommandGroup(before: .windowList) {
+            Button("업데이트 확인") {
+                if let preview {
+                    activateMainWindow()
+                    preview.showsUpdateInfo = true
+                } else { openWindow(id: DeskWindow.updates) }
+            }
+            Button(AppLocalization.string("고객센터")) {
+                if let preview {
+                    preview.select(.support)
+                    activateMainWindow()
+                } else { openWindow(id: DeskWindow.support) }
+            }
         }
         CommandGroup(after: .toolbar) {
             Menu(AppLocalization.string("탭 이동")) {

@@ -52,7 +52,9 @@ final class DataPreviewSession {
     let conversations: DataPreviewConversation
     let support = SupportFixture(emptyInquiries: false)
     var projectID: String?
-    var matchingPage = MatchingDestination.explore
+    private(set) var matchingPage = MatchingDestination.explore
+    private(set) var matchingNavigationID = UUID()
+    var showsUpdateInfo = false
     private(set) var destination = DataPreviewDestination.feature(.home)
     let defaults: UserDefaults
     let notifications = NotificationCenter()
@@ -76,8 +78,7 @@ final class DataPreviewSession {
         settings = SettingsDesignPreview.workspace(preferences: preferences)
         progress.setAccount(account.memberID)
         progress.openApplications = { [weak self] in
-            self?.matchingPage = .applications
-            self?.select(.matching)
+            self?.openMatching(.applications)
         }
     }
 
@@ -86,8 +87,15 @@ final class DataPreviewSession {
         try? FileManager.default.removeItem(at: journalDirectory)
     }
 
+    func openMatching(_ page: MatchingDestination) {
+        matchingPage = page
+        matchingNavigationID = UUID()
+        destination = .matching
+    }
+
     func select(_ destination: DataPreviewDestination) {
         switch destination {
+        case .matching: openMatching(.explore); return
         case .profile: SettingsDesignPreview.prepareViewModel(settings, page: .myPage)
         case .settings: SettingsDesignPreview.prepareViewModel(settings, page: .general)
         default: break
@@ -138,10 +146,10 @@ struct DataPreviewCommands: Commands {
 
 struct DataPreviewWindow: View {
     let session: DataPreviewSession
-    @State private var showsUpdateInfo = false
     @State private var externalLink: URL?
 
     var body: some View {
+        @Bindable var session = session
         let preferences = session.settings.preferences
         SettingsView(
             viewModel: session.settings, section: section, featureContent: content,
@@ -154,7 +162,7 @@ struct DataPreviewWindow: View {
         .environment(\.allowsDetachedThreads, false)
         .environment(\.settingsWindowHandler, { id in
             if id == DeskWindow.support { session.select(.support) }
-            if id == DeskWindow.updates { showsUpdateInfo = true }
+            if id == DeskWindow.updates { session.showsUpdateInfo = true }
         })
         .environment(\.settingsPublishedDocument, { document, close in
             AnyView(AuthPublishedTermsView(repository: session.documents,
@@ -175,8 +183,8 @@ struct DataPreviewWindow: View {
         .environment(\.umcBodyTextScale, preferences.bodyTextSize.scale)
         .toggleStyle(UMCCheckboxStyle())
         .frame(minWidth: 1040, minHeight: 720)
-        .sheet(isPresented: $showsUpdateInfo) {
-            AuthUpdateCheckView(usesInstalledRelease: true) { showsUpdateInfo = false }
+        .sheet(isPresented: $session.showsUpdateInfo) {
+            AuthUpdateCheckView(usesInstalledRelease: true) { session.showsUpdateInfo = false }
         }
         .alert("미리보기 외부 링크", isPresented: Binding(
             get: { externalLink != nil }, set: { if !$0 { externalLink = nil } }
@@ -198,7 +206,7 @@ struct DataPreviewWindow: View {
             applicantParts: ["WEB"], onOpenProject: { id in
                 session.projectID = id
                 session.select(.feature(.projects))
-            }))
+            }).id(session.matchingNavigationID))
         case .progress: AnyView(MatchingProgressPanel(controller: session.progress, onClose: { session.select(.matching) })
             .frame(maxWidth: 520, maxHeight: 254).task { await session.progress.refreshOnce() })
         case .support: AnyView(SupportView(fixture: session.support))
