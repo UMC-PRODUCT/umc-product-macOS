@@ -444,7 +444,8 @@ private final class DockMickey {
             let side: CGFloat = index == 0 ? -1 : 1
             let greeting = (welcome && index == 1) || finale
             let signals = pointing && ((index == 0) == (round.incomingSide == .west))
-            arms[index].eulerAngles.z = side * (greeting ? 2.55 + beat * 0.20 :
+            arms[index].position.x = side * (greeting ? 0.245 : 0.19)
+            arms[index].eulerAngles.z = side * (greeting ? 2.03 + beat * 0.13 :
                                                 signals ? 1.72 : 0.31)
             hands[index].eulerAngles.z = greeting ? side * beat * 0.48 : 0
         }
