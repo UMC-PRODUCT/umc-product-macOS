@@ -18,6 +18,7 @@ final class DockScenery {
     let crease = NSColor(srgbRed: 0.65, green: 0.63, blue: 0.54, alpha: 1)
     let alarm = NSColor(srgbRed: 1, green: 0.38, blue: 0.12, alpha: 1)
     let right = SCNNode(), left = SCNNode(), finger = SCNNode()
+    private let paperCorner = SCNNode(), thumb = SCNNode()
     let boss = SCNNode(), envelope = SCNNode(), barrier = SCNNode()
     let warning = SCNNode(), bands = SCNNode(), boat = SCNNode()
     let target = SCNNode(), impactMark = SCNNode(), echoMark = SCNNode()
@@ -50,12 +51,12 @@ final class DockScenery {
         constructTools()
         decorateWharf()
         // Sorting counter and pigeonholes sit below the signalman's shoes.
-        box(1.8, 1.1, 1.4, crease, -3.25, 0.55, 0.85)
-        box(1.96, 0.08, 1.5, ink, -3.25, 1.11, 0.85)
+        box(1.8, 1.1, 1.4, crease, -1.9, 0.55, -0.65)
+        box(1.96, 0.08, 1.5, ink, -1.9, 1.11, -0.65)
         for column in -1...1 {
-            let x = -3.25 + CGFloat(column) * 0.51
-            box(0.42, 0.52, 0.03, ink, x, 0.62, 1.56)
-            box(0.34, 0.13, 0.04, stock, x, 0.45, 1.58)
+            let x = -1.9 + CGFloat(column) * 0.51
+            box(0.42, 0.52, 0.03, ink, x, 0.62, 0.06)
+            box(0.34, 0.13, 0.04, stock, x, 0.45, 0.08)
         }
         // Static pier geometry shares materials. Batching removes hundreds of draw submissions.
         let live = [camera, right, left, boss, envelope, warning, bands, boat, barrier,
@@ -279,6 +280,23 @@ final class DockScenery {
         sheet.position = SCNVector3(0.32, 0.08, -0.24)
         sheet.eulerAngles = SCNVector3(-0.8, 0.12, 0.18)
         letter(sheet, scale: 0.8)
+        // A triangular dog-ear hinges on its diagonal crease under the left thumb.
+        let corner = NSBezierPath()
+        corner.move(to: NSPoint(x: -0.22, y: 0))
+        corner.line(to: NSPoint(x: 0.22, y: 0))
+        corner.line(to: NSPoint(x: 0, y: 0.22))
+        corner.close()
+        let hinge = SCNNode()
+        hinge.position = SCNVector3(-0.53, 0.30, 0.091)
+        hinge.eulerAngles.z = .pi / 4
+        sheet.addChildNode(hinge)
+        hinge.addChildNode(paperCorner)
+        shape(SCNShape(path: corner, extrusionDepth: 0.014), crease, 0, 0, 0,
+              parent: paperCorner)
+        left.addChildNode(thumb)
+        thumb.position = SCNVector3(0.13, 0.2, -0.09)
+        let pad = orb(0.115, stock, 0.10, 0, -0.015, thumb)
+        pad.scale = SCNVector3(1.6, 0.70, 0.85)
     }
 
     func draw(_ round: DockRound, time: Double, reduced: Bool) {
@@ -300,6 +318,9 @@ final class DockScenery {
         let press = round.stampTime > 0 ? sin(.pi * (0.38 - round.stampTime) / 0.38) : 0
         right.position = SCNVector3(0.35, -0.24 + 0.09 * press, -0.69 - 0.12 * press)
         right.eulerAngles.z = -0.16 + 0.32 * press
+        let flatten = min(1, press * 2)
+        paperCorner.eulerAngles.x = reduced ? 0 : (1 - flatten) * 2.5
+        thumb.eulerAngles.z = reduced ? 0 : -0.55 * flatten
         let reach = reduced ? 0 : min(1, press * 2)
         left.position = SCNVector3(-0.52 + 0.26 * reach, -0.47 + 0.23 * reach, -0.70)
         finger.eulerAngles.z = reduced || press > 0 ? 0 : max(0, sin(time * 5)) * 0.48
@@ -430,7 +451,7 @@ private final class DockMickey {
         let finale = round.phase == .won
         let beat = reduced ? 0 : sin(time * 5)
         let pointing = round.incomingSide != nil
-        root.position = welcome ? SCNVector3(-2.35, 0, 3.4) : SCNVector3(-3.25, 1.15, 0.85)
+        root.position = welcome ? SCNVector3(-2.35, 0, 3.4) : SCNVector3(-1.9, 1.15, -0.65)
         root.opacity = min(1, max(0, (hypot(round.position.x - root.position.x,
                                             round.position.y - root.position.z) - 1.4) / 1.2))
         root.eulerAngles.y = pointing ? 0 : atan2(round.position.x - root.position.x,
