@@ -30,7 +30,7 @@ struct WindowHistory {
 
     mutating func visit(_ destination: WindowVisit) {
         guard current != destination else { return }
-        visits = Array(visits.prefix(index + 1))
+        if canGoForward { visits.removeSubrange((index + 1)...) }
         visits.append(destination)
         index = visits.count - 1
     }

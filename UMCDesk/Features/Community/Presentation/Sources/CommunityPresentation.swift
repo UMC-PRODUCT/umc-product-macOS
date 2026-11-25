@@ -129,15 +129,6 @@ private struct ThreadBrowser: View {
                     .frame(minWidth: 0, maxWidth: .infinity, minHeight: 0, maxHeight: .infinity)
             }
         }
-        .communitySplitContent()
-        .task(id: search + [String(reload)]) {
-            if loadedSearch != search {
-                threads = []
-                if loadedSearch != nil { selection = nil }
-                next = nil
-            }
-            await load(offset: nil)
-        }
         .task(id: selection) {
             restoredThread = nil
             guard let id = selection, !threads.contains(where: { $0.id == id }) else { return }
@@ -148,6 +139,15 @@ private struct ThreadBrowser: View {
             } catch {
                 if !Task.isCancelled && selection == id { failure = error.localizedDescription }
             }
+        }
+        .communitySplitContent()
+        .task(id: search + [String(reload)]) {
+            if loadedSearch != search {
+                threads = []
+                if loadedSearch != nil { selection = nil }
+                next = nil
+            }
+            await load(offset: nil)
         }
         .onReceive(NotificationCenter.default.publisher(for: .threadBrowserChanged)) { notice in
             guard let key = notice.object as? ThreadWindowKey, key.accountID == accountID else { return }
