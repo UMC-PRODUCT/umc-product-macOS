@@ -15,6 +15,7 @@
 | [빌드와 모듈](Codex/build-and-modules.md) | Tuist 프로젝트·Feature·Core 구성 |
 | [아키텍처](Codex/architecture.md) | 계층 경계, 상태·DI·에러 처리 |
 | [디자인 시스템](Codex/design-system.md) | Figma 기준, Light/Dark 토큰, 공통 UI |
+| [macOS 탭 공통 버튼 가이드](Codex/tab-button-guide.md) | 목록·상세·작성 버튼 배치, 상태별 예외와 키보드·VoiceOver 검수 |
 | [홈 아케이드 · 먹물 우체부의 접지부두](Codex/dock-action-game.md) | 첫 부두의 공간·플레이 설계, 세 게임의 공통 품질 기준과 Mac 실측 기록표 |
 | [코딩 스타일](Codex/coding-style.md) | 네이밍·접근 제어·파일 규약 |
 | [Network Router](Codex/network-router.md) | API·Query·Body 구성 |
