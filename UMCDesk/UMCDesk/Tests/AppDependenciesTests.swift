@@ -18,18 +18,6 @@ import CoreNetwork
 @MainActor
 struct AppDependenciesTests {
     #if DEBUG
-    @Test func matchingRestorationPreservesTheExplicitEntryIdentifier() {
-        let navigation = AppNavigation(launchPage: .login)
-        navigation.openMatching(.explore, memberId: "101")
-        let first = navigation.matchingNavigationID
-        navigation.openMatching(.explore, memberId: "101")
-        let second = navigation.matchingNavigationID
-        #expect(first != second)
-        navigation.openMatching(.applications, memberId: "101", isRestoring: true)
-        #expect(navigation.matchingNavigationID == second)
-        #expect(navigation.matchingDestination == .applications)
-    }
-
     @Test("로그인 대기 중 탭을 바꾸면 마지막으로 선택한 목적지만 남는다")
     func latestTabReplacesPendingDestination() {
         let navigation = AppNavigation(launchPage: .login)
@@ -98,6 +86,18 @@ struct AppDependenciesTests {
         #expect(try await account.client.currentAccessToken() == "fixture-access")
         #expect(await store.getRefreshToken() == "fixture-refresh")
         #expect(barrier.profileCount.withLock { $0 } == 2)
+    }
+
+    @Test func matchingRestorationPreservesTheExplicitEntryIdentifier() {
+        let navigation = AppNavigation(launchPage: .login)
+        navigation.openMatching(.explore, memberId: "101")
+        let first = navigation.matchingNavigationID
+        navigation.openMatching(.explore, memberId: "101")
+        let second = navigation.matchingNavigationID
+        #expect(first != second)
+        navigation.openMatching(.applications, memberId: "101", isRestoring: true)
+        #expect(navigation.matchingNavigationID == second)
+        #expect(navigation.matchingDestination == .applications)
     }
 
     @Test("두 설정 창의 로그아웃은 갱신 대기 중 이전 계정을 숨기고 늦은 철회 응답에서 새 계정을 보호한다")
