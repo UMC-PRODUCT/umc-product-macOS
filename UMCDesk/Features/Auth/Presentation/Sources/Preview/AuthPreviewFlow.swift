@@ -107,35 +107,41 @@ extension AuthViewModel {
 }
 
 struct AuthPreviewFlowMenu: View {
-    @Bindable var viewModel: AuthViewModel
+    let viewModel: AuthViewModel
+    let showWindow: () -> Void
 
     var body: some View {
         Menu(AppLocalization.string("흐름 미리보기"), systemImage: "play.rectangle") {
-            Picker(AppLocalization.string("다음 실행 결과"), selection: $viewModel.previewScenario) {
+            Picker(AppLocalization.string("다음 실행 결과"), selection: Binding(
+                get: { viewModel.previewScenario },
+                set: { scenario in
+                    viewModel.previewScenario = scenario
+                    showWindow()
+                }
+            )) {
                 ForEach(AuthPreviewScenario.allCases) { scenario in
                     Text(scenario.title).tag(scenario)
                 }
             }
             Divider()
             if !viewModel.playsPreviewFlow {
-                    Button(AppLocalization.string("현재 화면 이어서 재생")) {
-                        viewModel.navigate(to: viewModel.screen)
-                    }
+                Button(AppLocalization.string("현재 화면 이어서 재생")) { play(viewModel.screen) }
             }
             Button(AppLocalization.string("로그인 처음부터")) {
-                viewModel.navigate(to: .loginSelection, resetsForm: true)
+                play(.loginSelection, resetsForm: true)
             }
-                Button(AppLocalization.string("저장된 로그인 확인")) {
-                    viewModel.navigate(to: .sessionChecking)
-                }
-            Button(AppLocalization.string("업데이트 흐름")) { viewModel.navigate(to: .updateAvailable) }
-            Button(AppLocalization.string("서비스 점검")) { viewModel.navigate(to: .maintenance) }
-            Button(AppLocalization.string("로그아웃")) { viewModel.navigate(to: .logoutConfirmation) }
-                Button(AppLocalization.string("회원 탈퇴")) {
-                    viewModel.navigate(to: .withdrawalConfirmation)
-                }
+            Button(AppLocalization.string("저장된 로그인 확인")) { play(.sessionChecking) }
+            Button(AppLocalization.string("업데이트 흐름")) { play(.updateAvailable) }
+            Button(AppLocalization.string("서비스 점검")) { play(.maintenance) }
+            Button(AppLocalization.string("로그아웃")) { play(.logoutConfirmation) }
+            Button(AppLocalization.string("회원 탈퇴")) { play(.withdrawalConfirmation) }
         }
         .help(AppLocalization.string("UI 흐름 재생 · 이메일 인증번호 123456 · 오류는 재시도로 복구됩니다."))
+    }
+
+    private func play(_ screen: AuthScreen, resetsForm: Bool = false) {
+        viewModel.navigate(to: screen, resetsForm: resetsForm)
+        showWindow()
     }
 }
 #endif

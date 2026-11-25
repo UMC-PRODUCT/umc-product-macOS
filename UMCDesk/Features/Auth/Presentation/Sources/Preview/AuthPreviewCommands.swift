@@ -9,32 +9,42 @@
 import SwiftUI
 import UMCFoundation
 
-struct AuthPreviewModelKey: FocusedValueKey {
-    typealias Value = Binding<AuthViewModel>
-}
+/// Owns the mock model shared by the View menu and the dedicated preview window.
+@MainActor
+@Observable
+public final class AuthPreviewSession {
+    public static let windowID = "auth-preview"
 
-extension FocusedValues {
-    var authPreviewModel: Binding<AuthViewModel>? {
-        get { self[AuthPreviewModelKey.self] }
-        set { self[AuthPreviewModelKey.self] = newValue }
+    fileprivate var viewModel = AuthViewModel()
+
+    public init() {}
+
+    public var content: some View {
+        AuthView(viewModel: viewModel)
+            .id(ObjectIdentifier(viewModel))
     }
 }
 
 public struct AuthPreviewCommands: Commands {
-    @FocusedBinding(\.authPreviewModel) private var viewModel
+    @Environment(\.openWindow) private var openWindow
+    private let session: AuthPreviewSession
 
-    public init() {}
+    public init(session: AuthPreviewSession) {
+        self.session = session
+    }
 
     public var body: some Commands {
         CommandGroup(after: .sidebar) {
-            if let binding = Binding($viewModel) {
-                AuthPreviewFlowMenu(viewModel: binding.wrappedValue)
-                AuthPreviewMenu(viewModel: binding)
-            } else {
-                Menu(AppLocalization.string("흐름 미리보기")) {}.disabled(true)
-                Menu(AppLocalization.string("디자인 미리보기")) {}.disabled(true)
+            AuthPreviewFlowMenu(viewModel: session.viewModel, showWindow: showWindow)
+            AuthPreviewMenu { preview in
+                session.viewModel = preview.makeViewModel()
+                showWindow()
             }
         }
+    }
+
+    private func showWindow() {
+        openWindow(id: AuthPreviewSession.windowID)
     }
 }
 #endif
