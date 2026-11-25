@@ -287,6 +287,7 @@ struct ThreadBrowserTools: View {
                     }
                 }.pickerStyle(.inline)
             }
+            .toggleStyle(.automatic)
             Button("전체 스레드") {
                 showAll()
             }
