@@ -81,7 +81,7 @@ struct SupportInquiryPreview: View {
                 if isOperator {
                     Button("FAQ 관리") { managingFAQ = true }
                 } else if !fixture.myTickets.isEmpty {
-                    Button("새 문의 작성") { composing = true }.modifier(SupportPrimaryAction())
+                    Button("새 문의 작성") { composing = true }.buttonStyle(.borderedProminent).modifier(SupportControlFill())
                 }
             }
             Group {
@@ -93,7 +93,7 @@ struct SupportInquiryPreview: View {
                     } actions: {
                         HStack {
                             Button("답변 찾아보기", action: showAnswers)
-                            Button("문의하기") { composing = true }.modifier(SupportPrimaryAction())
+                            Button("문의하기") { composing = true }.buttonStyle(.borderedProminent).modifier(SupportControlFill())
                         }
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -166,7 +166,7 @@ struct SupportInquiryPreview: View {
                     let count = fixture.tickets.filter(scope.includes).count
                     Text("\(scope.rawValue) \(count)").tag(scope)
                 }
-            }.pickerStyle(.segmented).labelsHidden().fixedSize()
+            }.pickerStyle(.segmented).modifier(SupportControlFill()).labelsHidden().fixedSize()
             HStack {
                 Picker("상태", selection: $status) {
                     Text("상태 전체").tag(SupportInquiryStatus?.none)

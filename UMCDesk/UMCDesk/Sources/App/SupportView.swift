@@ -57,7 +57,7 @@ struct SupportView: View {
                 #if DEBUG
                 if fixture != nil && page == .answers {
                     Button("문의하기") { composing = true }
-                        .modifier(SupportPrimaryAction())
+                        .buttonStyle(.borderedProminent).modifier(SupportControlFill())
                 }
                 #endif
             }
@@ -68,7 +68,7 @@ struct SupportView: View {
                 if fixture != nil { Text("운영").tag(Page.operations) }
                 #endif
             }
-            .pickerStyle(.segmented)
+            .pickerStyle(.segmented).modifier(SupportControlFill())
             .labelsHidden()
             .frame(maxWidth: 300)
             switch page {
@@ -285,7 +285,7 @@ private struct SupportAnswersView: View {
                     Picker("집계 기간", selection: $weekly) {
                         Text("최근 24시간").tag(false)
                         Text("최근 7일").tag(true)
-                    }.pickerStyle(.segmented).labelsHidden().fixedSize()
+                    }.pickerStyle(.segmented).modifier(SupportControlFill()).labelsHidden().fixedSize()
                 }
             }
             Table(matches, selection: $selectedID) {
@@ -341,16 +341,12 @@ private struct SupportAnswersView: View {
     }
 }
 
-
-#if DEBUG
-/// Keep the darker fill local to controls whose native prominent label is white.
-struct SupportPrimaryAction: ViewModifier {
+/// The system draws a white label on selected segments and prominent buttons.
+struct SupportControlFill: ViewModifier {
     @Environment(\.colorScheme) private var colorScheme
 
     func body(content: Content) -> some View {
-        content.buttonStyle(.borderedProminent)
-            .tint(colorScheme == .dark
+        content.tint(colorScheme == .dark
                   ? UMCColor.Semantic.fillPrimaryStrong200 : UMCColor.Semantic.textBrandDefault)
     }
 }
-#endif
