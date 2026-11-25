@@ -49,6 +49,14 @@ private final class HomeContractTransport: URLProtocol, @unchecked Sendable {
         case "/api/v1/member/me": result = #"{"id":101,"nickname":"합성 회원"}"#
         case "/api/v1/gisu/active": result = #"{"gisuId":10}"#
         case "/api/v2/schedules/me":
+            // The server includes ongoing events when the requested interval starts now.
+            guard let from = query.first(where: { $0.name == "from" })?.value,
+                let lowerBound = try? Date.ISO8601FormatStyle().parse(from),
+                abs(lowerBound.timeIntervalSinceNow) < 10
+            else {
+                client?.urlProtocol(self, didFailWithError: URLError(.badURL))
+                return
+            }
             result =
                 query.contains(URLQueryItem(name: "isAttendanceRequired", value: "true"))
                 ? #"[{"name":"합성 발표","startsAt":"2026-11-01T08:00:00Z"}]"# : "[]"

@@ -24,13 +24,14 @@ public struct LiveHomeRepository: HomeRepository {
     }
 
     public func schedule() async throws -> String? {
-        let today = Calendar.current.startOfDay(for: .now)
+        let now = Date.now
+        let today = Calendar.current.startOfDay(for: now)
         guard let tomorrow = Calendar.current.date(byAdding: .day, value: 1, to: today) else {
             throw URLError(.badURL)
         }
         func list(requiresAttendance: Bool) async throws -> [ScheduleDTO] {
             let query = [
-                URLQueryItem(name: "from", value: today.ISO8601Format()),
+                URLQueryItem(name: "from", value: now.ISO8601Format()),
                 URLQueryItem(name: "to", value: tomorrow.addingTimeInterval(-1).ISO8601Format()),
                 URLQueryItem(name: "isAttendanceRequired", value: String(requiresAttendance)),
             ]

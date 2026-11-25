@@ -53,6 +53,7 @@ private final class HomeViewModel {
 
 public struct HomeView: View {
     @State private var model: HomeViewModel
+    @State private var showsArcade = false
     @State private var selectedGame: MiniGame?
     @State private var reload = UUID()
     @State private var records = GameRecords()
@@ -95,52 +96,18 @@ public struct HomeView: View {
                             Button("새로고침", systemImage: "arrow.clockwise") { reload = UUID() }
                                 .labelStyle(.iconOnly)
                         }
-                        HStack(alignment: .top, spacing: 20) {
-                            entry(
-                                "오늘 일정", state: model.schedule, empty: "예정된 일정이 없어요",
-                                destination: .activity)
-                            entry(
-                                "공지", state: model.notice, empty: "확인할 새 소식이 없어요",
-                                destination: .notice)
-                            entry(
-                                "이어서 작업", state: model.project, empty: "관리하는 프로젝트가 없어요",
-                                destination: .project)
-                        }
+                        workSummary
+                        Divider()
                         HStack {
                             Text("잠깐, 한 판?").umcTypography(.title2Bold)
                             Spacer()
-                            Text("3가지 게임 · 인터넷 없이도 가능").foregroundStyle(.secondary)
-                        }
-                        HStack(alignment: .top, spacing: 16) {
-                            ForEach(MiniGame.allCases) { game in gameCard(game) }
-                        }
-                        Text("나의 기록").umcTypography(.headlineBold)
-                        HStack(alignment: .top, spacing: 20) {
-                            ForEach(MiniGame.allCases) { game in
-                                let total = records.totals[game.rawValue, default: 0]
-                                let goal = [500, 1500, 3000].first { $0 > total }
-                                VStack(alignment: .leading) {
-                                    Text("\(game.title) · 누적 \(total)점").umcTypography(
-                                        .headlineBold)
-                                    ProgressView(
-                                        value: Double(min(total, goal ?? 3000)),
-                                        total: Double(goal ?? 3000))
-                                    Text(goal.map { "다음 목표 \($0)점" } ?? "3단계 달성")
-                                        .umcTypography(.calloutRegular).foregroundStyle(.secondary)
-                                }.frame(maxWidth: .infinity, alignment: .leading)
+                            Button(showsArcade ? "게임 접기" : "게임 선택") {
+                                showsArcade.toggle()
                             }
                         }
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text("최근 플레이").umcTypography(.headlineBold)
-                            Text(
-                                records.recent.isEmpty
-                                    ? "아직 플레이 기록이 없어요"
-                                    : records.recent.joined(separator: "   /   ")
-                            )
-                            .foregroundStyle(.secondary)
-                        }
+                        if showsArcade { arcade }
                     }
-                    .padding(32)
+                    .padding(UMCSpacing.value32)
                 }
             }
         }
@@ -153,22 +120,119 @@ public struct HomeView: View {
         }
     }
 
+    private var workSummary: some View {
+        VStack(alignment: .leading, spacing: UMCSpacing.value16) {
+            if case .loaded(nil) = model.schedule {
+                HStack {
+                    Text("오늘 남은 일정이 없어요").foregroundStyle(.secondary)
+                    Spacer()
+                    navigationButton("일정 보기", destination: .activity)
+                }
+                if case .loaded(.some) = model.project {
+                    projectEntry(primary: true)
+                    noticeEntry(primary: false)
+                } else {
+                    noticeEntry(primary: true)
+                    projectEntry(primary: false)
+                }
+            } else {
+                entry(
+                    "오늘 일정", symbol: "calendar", state: model.schedule,
+                    empty: "오늘 남은 일정이 없어요", action: "일정 보기",
+                    destination: .activity, primary: true)
+                noticeEntry(primary: false)
+                projectEntry(primary: false)
+            }
+        }
+    }
+
+    private func projectEntry(primary: Bool) -> some View {
+        entry(
+            "이어서 작업", symbol: "folder", state: model.project,
+            empty: "관리하는 프로젝트가 없어요", action: "프로젝트 보기",
+            destination: .project, primary: primary)
+    }
+
+    private func noticeEntry(primary: Bool) -> some View {
+        entry(
+            "공지", symbol: "megaphone", state: model.notice,
+            empty: "확인할 새 소식이 없어요", action: "공지 보기",
+            destination: .notice, primary: primary)
+    }
+
     private func entry(
-        _ title: String, state: Loadable<String?>, empty: String,
-        destination: HomeDestination
+        _ title: String, symbol: String, state: Loadable<String?>, empty: String,
+        action: String, destination: HomeDestination, primary: Bool
     ) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(title).umcTypography(.calloutRegular).foregroundStyle(.secondary)
-            switch state {
-            case .idle, .loading: ProgressView().controlSize(.small)
-            case .loaded(let value): Text(value ?? empty).umcTypography(.headlineBold)
-            case .failed: Text("불러오지 못했어요").foregroundStyle(.secondary)
+        HStack(alignment: .center, spacing: UMCSpacing.value16) {
+            VStack(alignment: .leading, spacing: UMCSpacing.value4) {
+                Label(title, systemImage: symbol)
+                    .umcTypography(.headlineBold)
+                    .foregroundStyle(primary ? UMCColor.Semantic.textBrandDefault : .secondary)
+                switch state {
+                case .idle, .loading:
+                    ProgressView().controlSize(.small).accessibilityLabel(title + " 불러오는 중")
+                case .loaded(let value):
+                    Text(value ?? empty)
+                        .umcTypography(primary && value != nil ? .title1Bold : .headlineRegular)
+                        .fixedSize(horizontal: false, vertical: true)
+                case .failed:
+                    Text("불러오지 못했어요").foregroundStyle(.secondary)
+                }
             }
-            if let onOpen {
-                Button("자세히 보기 →") { onOpen(destination) }.buttonStyle(.link)
-                    .accessibilityLabel(title + " 자세히 보기")
+            Spacer(minLength: UMCSpacing.value8)
+            navigationButton(action, destination: destination)
+        }
+        .padding(.horizontal, UMCSpacing.value20)
+        .padding(.vertical, primary ? UMCSpacing.value20 : UMCSpacing.value8)
+        .background {
+            if primary {
+                RoundedRectangle(cornerRadius: UMCRadius.value12)
+                    .fill(UMCColor.Custom.backgroundSurfaceGreyWeaker)
             }
-        }.frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .accessibilityElement(children: .contain)
+    }
+
+    @ViewBuilder
+    private func navigationButton(_ title: String, destination: HomeDestination) -> some View {
+        if let onOpen {
+            Button(title) { onOpen(destination) }
+                .fixedSize()
+        }
+    }
+
+    private var arcade: some View {
+        VStack(alignment: .leading, spacing: UMCSpacing.value16) {
+            HStack(alignment: .top, spacing: UMCSpacing.value16) {
+                ForEach(MiniGame.allCases) { game in gameCard(game) }
+            }
+            Text("나의 기록").umcTypography(.headlineBold)
+            HStack(alignment: .top, spacing: 20) {
+                ForEach(MiniGame.allCases) { game in
+                    let total = records.totals[game.rawValue, default: 0]
+                    let goal = [500, 1500, 3000].first { $0 > total }
+                    VStack(alignment: .leading) {
+                        Text("\(game.title) · 누적 \(total)점").umcTypography(
+                            .headlineBold)
+                        ProgressView(
+                            value: Double(min(total, goal ?? 3000)),
+                            total: Double(goal ?? 3000))
+                        Text(goal.map { "다음 목표 \($0)점" } ?? "3단계 달성")
+                            .umcTypography(.calloutRegular).foregroundStyle(.secondary)
+                    }.frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
+            VStack(alignment: .leading, spacing: 8) {
+                Text("최근 플레이").umcTypography(.headlineBold)
+                Text(
+                    records.recent.isEmpty
+                        ? "아직 플레이 기록이 없어요"
+                        : records.recent.joined(separator: "   /   ")
+                )
+                .foregroundStyle(.secondary)
+            }
+        }
     }
 
     private func gameCard(_ game: MiniGame) -> some View {
