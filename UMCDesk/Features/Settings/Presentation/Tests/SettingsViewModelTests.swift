@@ -7,12 +7,13 @@
 
 import Foundation
 import SettingsDomain
+import CoreRouting
 import Testing
 @testable import SettingsPresentation
 
 @MainActor
 struct SettingsViewModelTests {
-    @Test("Search updates immediately and preserves navigation history and query")
+    @Test("Search updates immediately and preserves the query across page changes")
     func liveSearchNavigation() throws {
         let model = makeModel(useCase: ControlledSettingsUseCase())
         model.showSettings()
@@ -24,9 +25,9 @@ struct SettingsViewModelTests {
         model.selectSearchResult(result)
         #expect(model.page == .appearance)
         #expect(model.searchText == "다크")
-        model.goBack()
+        model.navigate(to: .general)
         #expect(model.page == .general)
-        model.goForward()
+        model.selectSearchResult(result)
         #expect(model.page == .appearance)
         model.searchText = "위치"
         #expect(model.searchResults.map(\.title) == ["위치 접근"])
@@ -220,15 +221,22 @@ struct SettingsViewModelTests {
 
     @Test("Navigation moves through real history and truncates forward history")
     func navigationHistory() {
-        let model = makeModel(useCase: ControlledSettingsUseCase())
-        model.navigate(to: .appearance)
-        model.navigate(to: .privacy)
-        model.goBack()
-        #expect(model.page == .appearance)
-        model.navigate(to: .about)
-        #expect(!model.canGoForward)
-        model.goBack()
-        #expect(model.page == .appearance)
+        var history = WindowHistory()
+        let home = WindowVisit(location: .section(.home))
+        let list = WindowVisit(location: .section(.notice))
+        let article = WindowVisit(location: .section(.notice), detail: WindowDetail("42"))
+        for visit in [home, list, article, article] { history.visit(visit) }
+        #expect(history.forward() == nil)
+        #expect(history.back() == list)
+        #expect(history.back() == home)
+        #expect(history.back() == nil)
+        #expect(history.forward() == list)
+        #expect(history.forward() == article)
+        #expect(history.back() == list)
+        history.visit(.init(location: .settings(.privacy)))
+        #expect(!history.canGoForward)
+        #expect(history.back() == list)
+        #expect(WindowHistory().current == nil)
     }
 
     @Test("A refresh started before saving cannot overwrite the saved links")

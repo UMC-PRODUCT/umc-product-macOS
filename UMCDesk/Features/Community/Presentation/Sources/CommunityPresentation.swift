@@ -8,6 +8,7 @@
 import AppKit
 import CommunityDomain
 import CoreDesignSystem
+import CoreRouting
 import SwiftUI
 
 public struct CommunityThreadsView: View {
@@ -50,7 +51,8 @@ private struct ThreadBrowser: View {
     @State private var focusRequest = 0
     @State private var threads: [CommunityThread] = []
     @State private var next: String?
-    @State private var selection: String?
+    @WindowDetailSelection private var selection: String?
+    @State private var restoredThread: CommunityThread?
     @State private var reload = 0
     @State private var loading = false
     @State private var failure: String?
@@ -114,7 +116,8 @@ private struct ThreadBrowser: View {
             .padding(UMCSpacing.value16)
             .frame(minWidth: 220, idealWidth: 344, maxWidth: 344,
                    minHeight: 0, maxHeight: .infinity, alignment: .topLeading)
-            if let item = threads.first(where: { $0.id == selection }) {
+            if let item = threads.first(where: { $0.id == selection })
+                ?? restoredThread.flatMap({ $0.id == selection ? $0 : nil }) {
                 ThreadDestination(accountID: accountID, thread: item, detached: false,
                                   repository: repository, conversations: conversations,
                                   management: management, defaults: defaults)
@@ -130,10 +133,21 @@ private struct ThreadBrowser: View {
         .task(id: search + [String(reload)]) {
             if loadedSearch != search {
                 threads = []
-                selection = nil
+                if loadedSearch != nil { selection = nil }
                 next = nil
             }
             await load(offset: nil)
+        }
+        .task(id: selection) {
+            restoredThread = nil
+            guard let id = selection, !threads.contains(where: { $0.id == id }) else { return }
+            do {
+                let item = try await repository.thread(id: id)
+                guard !Task.isCancelled, selection == id else { return }
+                restoredThread = item
+            } catch {
+                if !Task.isCancelled && selection == id { failure = error.localizedDescription }
+            }
         }
         .onReceive(NotificationCenter.default.publisher(for: .threadBrowserChanged)) { notice in
             guard let key = notice.object as? ThreadWindowKey, key.accountID == accountID else { return }

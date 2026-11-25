@@ -19,6 +19,8 @@ public struct SettingsView: View {
     @Environment(\.openWindow) private var openWindow
     @State private var viewModel: SettingsViewModel
     private let onSelectSection: ((DeskSection?) -> Void)?
+    @State private var history = WindowHistory()
+    @Environment(\.windowFeatureRouter) private var featureRouter
     private let section: DeskSection?
     private let matchingSelected: Bool
     private let onOpenMatching: (() -> Void)?
@@ -192,7 +194,14 @@ public struct SettingsView: View {
                 accessibleProfileMenuFocus = .trigger
             }
         }
-        .toolbar { if featureContent == nil { navigationToolbar } }
+        .environment(\.windowDetail, detailSelection)
+        .onChange(of: location, initial: true) { _, destination in
+            // Replaying an entry already moved the cursor, including its article selection.
+            if history.current?.location != destination {
+                history.visit(WindowVisit(location: destination))
+            }
+        }
+        .toolbar { navigationToolbar }
         .toolbarBackground(UMCColor.Custom.backgroundAppShell, for: .windowToolbar)
         .toolbarBackgroundVisibility(.visible, for: .windowToolbar)
         .toolbarColorScheme(.dark, for: .windowToolbar)
@@ -427,23 +436,48 @@ public struct SettingsView: View {
         .accessibilityFocused($accessibleProfileMenuFocus, equals: focus)
     }
 
+    private var location: WindowLocation {
+        if let key = featureRouter?.location { return .feature(key) }
+        if let section { return .section(section) }
+        if matchingSelected { return .matching }
+        return .settings(viewModel.page)
+    }
+
+    private var detailSelection: Binding<WindowDetail?> {
+        let destination = location
+        return Binding {
+            history.current?.location == destination ? history.current?.detail : nil
+        } set: { id in
+            guard history.current?.location == destination else { return }
+            history.visit(WindowVisit(location: destination, detail: id))
+        }
+    }
+
+    private func restore(_ visit: WindowVisit?) {
+        guard let visit, visit.location != location else { return }
+        switch visit.location {
+        case .section(let section): onSelectSection?(section)
+        case .matching: onOpenMatching?()
+        case .feature(let key): featureRouter?.restore(key)
+        case .settings(let page):
+            if featureContent != nil { onSelectSection?(nil) }
+            viewModel.navigate(to: page)
+        }
+    }
+
     @ToolbarContentBuilder
     private var navigationToolbar: some ToolbarContent {
         ToolbarItem(placement: .navigation) {
-            SettingsToolbarHost(content: HStack(spacing: UMCSpacing.value4) {
-                    navigationButton(
-                        AppLocalization.string("뒤로"), symbol: "chevron.left",
-                        isEnabled: viewModel.canGoBack
-                    ) {
-                    viewModel.goBack()
-                }
-                    navigationButton(
-                        AppLocalization.string("앞으로"), symbol: "chevron.right",
-                        isEnabled: viewModel.canGoForward
-                    ) {
-                    viewModel.goForward()
-                }
-            })
+            HStack(spacing: UMCSpacing.value4) {
+                navigationButton(
+                    AppLocalization.string("뒤로"), symbol: "chevron.left", shortcut: "[",
+                    isEnabled: history.canGoBack
+                ) { restore(history.back()) }
+                navigationButton(
+                    AppLocalization.string("앞으로"), symbol: "chevron.right", shortcut: "]",
+                    isEnabled: history.canGoForward
+                ) { restore(history.forward()) }
+            }
             .frame(width: UMCSpacing.value32 * 2 + UMCSpacing.value4,
                 height: UMCSpacing.value40)
         }
@@ -451,7 +485,8 @@ public struct SettingsView: View {
     }
 
     private func navigationButton(
-        _ title: String, symbol: String, isEnabled: Bool, action: @escaping () -> Void
+        _ title: String, symbol: String, shortcut: KeyEquivalent,
+        isEnabled: Bool, action: @escaping () -> Void
     ) -> some View {
         Button {
             dismissSearchSuggestions()
@@ -459,14 +494,16 @@ public struct SettingsView: View {
         } label: {
             Image(systemName: symbol)
                 .font(.system(size: 16, weight: .medium))
-                .foregroundStyle(sidebarChromeForeground.opacity(isEnabled ? 0.75 : 0.3))
+                .foregroundStyle(sidebarChromeForeground.opacity(isEnabled ? 0.90 : 0.46))
                 .frame(width: UMCSpacing.value32, height: UMCSpacing.value32)
         }
-        .buttonStyle(SettingsPlainButtonStyle(
-            highlight: sidebarChromeForeground.opacity(0.1)))
+        .buttonStyle(WindowNavigationButtonStyle())
+        .keyboardShortcut(shortcut, modifiers: .command)
         .disabled(showsProfileMenu || !isEnabled)
         .accessibilityLabel(title)
-        .modifier(ToolbarTooltip(title: title, isSuppressed: showsProfileMenu))
+        .modifier(ToolbarTooltip(
+            title: "\(title) ⌘\(shortcut.character)", isSuppressed: showsProfileMenu
+        ))
     }
 
     private var settingsSidebar: some View {
@@ -930,16 +967,21 @@ func profileMenuShowsKeyboardHighlight(
     keyboardNavigation && !hasHoveredItem && isFocused
 }
 
-private struct SettingsToolbarHost<Content: View>: NSViewRepresentable {
-    let content: Content
+private struct WindowNavigationButtonStyle: ButtonStyle {
+    @Environment(\.isEnabled) private var isEnabled
+    @Environment(\.isFocused) private var isFocused
+    @State private var isHovered = false
 
-    func makeNSView(context: Context) -> NSHostingView<Content> {
-        let view = NSHostingView(rootView: content)
-        view.clipsToBounds = false
-        return view
-    }
-
-    func updateNSView(_ view: NSHostingView<Content>, context: Context) {
-        view.rootView = content
+    func makeBody(configuration: Configuration) -> some View {
+        let opacity = configuration.isPressed ? 0.28 : (isHovered ? 0.15 : 0)
+        configuration.label
+            .background(.white.opacity(isEnabled ? opacity : 0), in: .circle)
+            .overlay {
+                if isEnabled && isFocused {
+                    Circle().strokeBorder(.white, lineWidth: 2)
+                }
+            }
+            .contentShape(.rect)
+            .onHover { isHovered = $0 }
     }
 }
