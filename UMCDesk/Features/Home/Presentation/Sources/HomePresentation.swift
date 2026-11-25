@@ -121,10 +121,16 @@ public struct HomeView: View {
             Text(model.profile.map { "안녕, " + $0.nickname + "." } ?? "나만의 공간")
                 .umcTypography(.title3Bold)
             Spacer()
-            Button("새로고침", systemImage: "arrow.clockwise") { reload = UUID() }
-                .labelStyle(.iconOnly)
-                .buttonStyle(.borderless)
-                .help("새로고침")
+            Button {
+                reload = UUID()
+            } label: {
+                Image(systemName: "arrow.clockwise")
+                    .frame(width: 28, height: 28)
+                    .contentShape(.rect)
+            }
+            .buttonStyle(.borderless)
+            .accessibilityLabel("새로고침")
+            .help("새로고침")
         }
     }
 
@@ -253,9 +259,15 @@ public struct HomeView: View {
     @ViewBuilder
     private func navigationLink(_ title: String, destination: HomeDestination) -> some View {
         if let onOpen {
-            Button(title) { onOpen(destination) }
-                .buttonStyle(.borderless)
-                .fixedSize()
+            Button {
+                onOpen(destination)
+            } label: {
+                Text(title)
+                    .frame(minHeight: UMCSpacing.value24)
+                    .contentShape(.rect)
+            }
+            .buttonStyle(.borderless)
+            .fixedSize()
         }
     }
 
@@ -272,6 +284,8 @@ public struct HomeView: View {
                     Image(systemName: showsArcade ? "chevron.up" : "chevron.down")
                         .imageScale(.small).accessibilityHidden(true)
                 }
+                .frame(minHeight: UMCSpacing.value24)
+                .contentShape(.rect)
             }
             .buttonStyle(.borderless)
         }
