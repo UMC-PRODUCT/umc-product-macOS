@@ -29,24 +29,44 @@ public final class UMCWindowButtonFocus {
 
 /// Opens a window and returns keyboard focus to its caller when the original window is reactivated.
 public struct UMCWindowOpeningButton<Label: View>: View {
-    @Environment(\.isEnabled) private var isEnabled
-    @State private var isHovered = false
-    private let title: String
-    private let identifier: String?
-    private let cornerRadius: CGFloat
-    private let focusTarget: UMCWindowButtonFocus?
-    private let action: () -> Void
-    private let label: (Bool) -> Label
+    private let button: UMCFocusableButton<Label>
 
     public init(
         _ title: String, identifier: String? = nil, cornerRadius: CGFloat = 4,
         focusTarget: UMCWindowButtonFocus? = nil, action: @escaping () -> Void,
         @ViewBuilder label: @escaping (Bool) -> Label
     ) {
+        button = UMCFocusableButton(
+            title, identifier: identifier, cornerRadius: cornerRadius, focusTarget: focusTarget,
+            restoresFocusOnReturn: true, action: action, label: label)
+    }
+
+    public var body: some View { button }
+}
+
+/// A native button that participates in the key-view loop with any keyboard navigation setting.
+public struct UMCFocusableButton<Label: View>: View {
+    @Environment(\.isEnabled) private var isEnabled
+    @State private var isHovered = false
+    private let title: String
+    private let identifier: String?
+    private let cornerRadius: CGFloat
+    private let focusTarget: UMCWindowButtonFocus?
+    private let restoresFocusOnReturn: Bool
+    private let action: () -> Void
+    private let label: (Bool) -> Label
+
+    public init(
+        _ title: String, identifier: String? = nil, cornerRadius: CGFloat = 4,
+        focusTarget: UMCWindowButtonFocus? = nil, restoresFocusOnReturn: Bool = false,
+        action: @escaping () -> Void,
+        @ViewBuilder label: @escaping (Bool) -> Label
+    ) {
         self.title = title
         self.identifier = identifier
         self.cornerRadius = cornerRadius
         self.focusTarget = focusTarget
+        self.restoresFocusOnReturn = restoresFocusOnReturn
         self.action = action
         self.label = label
     }
@@ -57,7 +77,8 @@ public struct UMCWindowOpeningButton<Label: View>: View {
             .allowsHitTesting(false)
             .overlay {
                 WindowButton(title: title, identifier: identifier, cornerRadius: cornerRadius,
-                             isEnabled: isEnabled, focusTarget: focusTarget, action: action)
+                             isEnabled: isEnabled, focusTarget: focusTarget,
+                             restoresFocusOnReturn: restoresFocusOnReturn, action: action)
             }
             .onHover { isHovered = $0 }
     }
@@ -69,6 +90,7 @@ private struct WindowButton: NSViewRepresentable {
     let cornerRadius: CGFloat
     let isEnabled: Bool
     let focusTarget: UMCWindowButtonFocus?
+    let restoresFocusOnReturn: Bool
     let action: () -> Void
 
     func makeNSView(context: Context) -> Control {
@@ -83,6 +105,7 @@ private struct WindowButton: NSViewRepresentable {
 
     func updateNSView(_ button: Control, context: Context) {
         focusTarget?.control = button
+        button.restoresAfterActivation = restoresFocusOnReturn
         button.open = action
         button.cornerRadius = cornerRadius
         button.isEnabled = isEnabled
@@ -95,6 +118,7 @@ private struct WindowButton: NSViewRepresentable {
     }
 
     final class Control: NSButton {
+        var restoresAfterActivation = false
         var open: (() -> Void)?
         var cornerRadius: CGFloat = 4
         private var restoresFocusOnReturn = false
@@ -116,7 +140,7 @@ private struct WindowButton: NSViewRepresentable {
         @objc func activate() {
             guard isEnabled, let window else { return }
             window.makeFirstResponder(self)
-            restoresFocusOnReturn = true
+            restoresFocusOnReturn = restoresAfterActivation
             open?()
         }
 

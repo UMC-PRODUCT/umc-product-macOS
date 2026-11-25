@@ -4,6 +4,7 @@
 //  Created by euijjang97 on 11/25/26.
 
 import CoreDesignSystem
+import CoreUIComponents
 import SwiftUI
 import UMCFoundation
 
@@ -59,7 +60,6 @@ struct LetterRun {
 
 struct NoticeLetterRunner: View {
     @State private var run = LetterRun()
-    @FocusState private var focused: Bool
     @Environment(\.appearsActive) private var active
     @Environment(\.scenePhase) private var scene
 
@@ -72,15 +72,17 @@ struct NoticeLetterRunner: View {
     }
 
     var body: some View {
-        Button {
-            focused = true
-            run.jump()
-        } label: {
+        let title = AppLocalization.string("편지 배달")
+        let score = AppLocalization.string("\(run.score)점")
+        UMCFocusableButton(
+            title + ", " + score + ", " + instruction,
+            identifier: "notice.connection.runner", cornerRadius: 12, action: { run.jump() }
+        ) { _ in
             VStack(alignment: .leading, spacing: 6) {
                 HStack {
-                    Text(AppLocalization.string("편지 배달")).umcTypography(.headlineBold)
+                    Text(title).umcTypography(.headlineBold)
                     Spacer()
-                    Text(AppLocalization.string("\(run.score)점")).monospacedDigit()
+                    Text(score).monospacedDigit()
                 }
                 Canvas { context, size in
                     let scale = size.width / 300
@@ -115,11 +117,6 @@ struct NoticeLetterRunner: View {
             }
             .contentShape(.rect)
         }
-        .buttonStyle(.plain)
-        .focused($focused)
-        .accessibilityLabel(AppLocalization.string("편지 배달"))
-        .accessibilityValue(AppLocalization.string("\(run.score)점") + ", " + instruction)
-        .accessibilityIdentifier("notice.connection.runner")
         .frame(maxWidth: 324)
         .task(id: active && scene == .active && run.phase == .running) {
             guard active, scene == .active, run.phase == .running else { return }

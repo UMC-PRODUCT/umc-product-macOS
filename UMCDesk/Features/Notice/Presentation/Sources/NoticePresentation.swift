@@ -4,6 +4,7 @@
 //  Created by euijjang97 on 11/23/26.
 
 import CoreDesignSystem
+import CoreUIComponents
 import Network
 import NoticeDomain
 import SwiftUI
@@ -258,8 +259,17 @@ public struct NoticeBoardView: View {
                 if let error = model.error {
                     Text((error as? UMCFoundation.NetworkError)?.userMessage ?? error.localizedDescription)
                         .foregroundStyle(.secondary)
-                    Button(AppLocalization.string("다시 시도")) {
+                    let retry = AppLocalization.string("다시 시도")
+                    UMCFocusableButton(retry, identifier: "notice.connection.retry") {
                         Task { await model.load(page: model.failedPage) }
+                    } label: { hovered in
+                        Text(retry)
+                            .foregroundStyle(UMCColor.Semantic.textBrandDefault)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 4)
+                            .background(hovered ? UMCColor.Semantic.fillPrimaryStrong200
+                                        : UMCColor.Semantic.surfaceBrandWeak,
+                                        in: .rect(cornerRadius: 5))
                     }
                     if model.entries.isEmpty, NoticeConnectionFailure.matches(error) {
                         NoticeLetterRunner()
