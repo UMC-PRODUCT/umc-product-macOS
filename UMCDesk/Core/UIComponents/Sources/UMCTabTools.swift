@@ -145,7 +145,7 @@ private struct ToolsTrigger: NSViewRepresentable {
 
     func makeNSView(context: Context) -> Control {
         let button = Control()
-        button.setButtonType(.momentaryPushIn)
+        button.setButtonType(.toggle)
         button.bezelStyle = .accessoryBarAction
         button.imagePosition = .imageOnly
         button.target = button
@@ -157,7 +157,8 @@ private struct ToolsTrigger: NSViewRepresentable {
         focus.control = button
         button.isEnabled = isEnabled
         button.activate = activate
-        let symbol = presented ? "sidebar.right.fill" : "sidebar.right"
+        let symbol = "sidebar.right"
+        button.state = presented ? .on : .off
         button.toolTitle = title
         button.image = NSImage(systemSymbolName: symbol, accessibilityDescription: title)
         button.imagePosition = .imageOnly
