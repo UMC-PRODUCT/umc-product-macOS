@@ -3,6 +3,7 @@
 //
 //  Created by euijjang97 on 11/23/26.
 
+import CoreUIComponents
 import CoreDesignSystem
 import CoreRouting
 import CoreUIComponents
@@ -98,7 +99,6 @@ public struct NoticeBoardView: View {
     @State private var composing = false
     @State private var checkingWriter = false
     @State private var pinnedExpanded = true
-    @State private var showTools = false
     @State private var fullReader = false
     @State private var pinnedOnly = false
 
@@ -135,6 +135,8 @@ public struct NoticeBoardView: View {
             }
         }
         .background(UMCColor.Custom.backgroundDefault)
+        .umcTabTools("공지 도구", description: "공지를 검색하고 대상과 파트를 선택하세요.",
+                     findShortcut: true) { _ in tools }
         .task(id: model.tab) { await model.load() }
         .task {
             let monitor = NWPathMonitor()
@@ -208,9 +210,7 @@ public struct NoticeBoardView: View {
                     }
                 }.disabled(checkingWriter)
             }
-            Button("공지 도구", systemImage: "slider.horizontal.3") { showTools.toggle() }
-                .keyboardShortcut("f")
-                .popover(isPresented: $showTools) { tools }
+
         }
         .padding(.horizontal, UMCSpacing.value20)
         .padding(.vertical, UMCSpacing.value12)
@@ -219,7 +219,6 @@ public struct NoticeBoardView: View {
     private var tools: some View {
         VStack(alignment: .leading, spacing: UMCSpacing.value16) {
             HStack {
-                Text("공지 도구").umcTypography(.headlineBold)
                 Spacer()
                 Button("초기화") {
                     search = ""
@@ -249,7 +248,7 @@ public struct NoticeBoardView: View {
                 }
             }
             Button("새로고침", systemImage: "arrow.clockwise") { Task { await model.load() } }
-        }.padding(UMCSpacing.value20).frame(width: 320)
+        }
     }
 
     private var noticeList: some View {

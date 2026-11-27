@@ -10,7 +10,7 @@ import SwiftUI
 /// Programmatic keyboard focus for the native control that opens a window.
 @MainActor
 public final class UMCWindowButtonFocus {
-    fileprivate weak var control: NSButton?
+    weak var control: NSButton?
 
     public init() {}
 

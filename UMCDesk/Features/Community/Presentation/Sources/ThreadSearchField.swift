@@ -25,10 +25,19 @@ struct ThreadSearchField: NSViewRepresentable {
     }
 
     func updateNSView(_ field: NSSearchField, context: Context) {
+        if field.isEnabled != context.environment.isEnabled {
+            field.isEnabled = context.environment.isEnabled
+        }
         context.coordinator.parent = self
         if context.coordinator.focusRequest != focusRequest {
             context.coordinator.focusRequest = focusRequest
-            field.selectText(nil)
+            // The panel relinquishes its first responder after SwiftUI removes the overlay.
+            Task { @MainActor [weak field] in
+                await Task.yield()
+                guard let field, field.isEnabled, let window = field.window,
+                      window.makeFirstResponder(field) else { return }
+                field.selectText(nil)
+            }
         }
         if let editor = field.currentEditor() as? NSTextView, editor.hasMarkedText() { return }
         if field.stringValue != query { field.stringValue = query }
@@ -60,7 +69,7 @@ struct ThreadSearchField: NSViewRepresentable {
 
 private final class ConversationSearchControl: NSSearchField {
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
-        if event.modifierFlags.intersection([.command, .shift, .option, .control]) == .command,
+        if isEnabled, event.modifierFlags.intersection([.command, .shift, .option, .control]) == .command,
            event.charactersIgnoringModifiers?.lowercased() == "f", let window,
            window.makeFirstResponder(self) {
             selectText(nil)
