@@ -11,8 +11,9 @@ first@example.test (participant) with password fixture-only.
 Restart this process to reset. Markers in the printed control folder:
 fail-read-once, fail-write-once, empty-search, fail-search, no-create,
 no-track, no-review, no-decide, empty-schedules, hold-write (remove to release).
-The first schedule is online; the multi-day onsite schedule has no coordinate,
-so opening its location sheet cannot trigger GPS. Never request real GPS.
+All returned onsite schedules, including newly created ones, omit coordinates,
+so their location sheets cannot trigger GPS. Directory requests deliberately
+return one member per page to exercise next/previous with the two known members. Never request real GPS.
 Point markers: drop-point-receipt-once, point-ledger-unavailable. Logs omit tokens/bodies.
 """
 
@@ -84,7 +85,9 @@ def handle(handler, method, path, query, body, email):
             record(server, method, path, query, 503)
             handler.send_result(503, None)
             return True
-        response = activity.handle(method, path, query, body, member)
+        response = (search_members(activity, query)
+                    if method == "GET" and path == "/api/v1/member/search"
+                    else activity.handle(method, path, query, body, member))
         if response is None:
             return False
         status, result = response
@@ -103,6 +106,10 @@ def handle(handler, method, path, query, body, email):
             elif path == "/api/v2/schedules/me":
                 for row in result:
                     row["name"] = ("긴 일정 제목과 날짜 및 장소를 확인하는 합성 일정 " * 5)[:100]
+                    # Sanitize every response, including POST-created schedules.
+                    if isinstance(row.get("location"), dict):
+                        row["location"].pop("latitude", None)
+                        row["location"].pop("longitude", None)
                     if row["scheduleId"] == "702":
                         row["startsAt"] = activity._iso(activity._anchor - timedelta(days=1))
                         row["endsAt"] = activity._iso(activity._anchor + timedelta(days=2))
@@ -118,16 +125,14 @@ def handle(handler, method, path, query, body, email):
                     row["name"] = "긴 검토 일정 " * 10
                     row["participants"][0]["name"] = activity._names["101"]
                     row["participants"][0]["excuseReason"] = ("긴 사유의 줄바꿈과 복사 및 개별 판정을 검수합니다. " * 15)[:300]
-            elif path.startswith("/api/v1/study-groups/") and "mentors" in result:
+            elif (method == "GET" and path.startswith("/api/v1/study-groups/")
+                  and isinstance(result, dict) and "mentors" in result):
                 for role in ("mentors", "members"):
                     for row in result[role]:
                         row["schoolName"] = "긴 이름의 합성대학교 소프트웨어융합대학 " * 3
             elif path == "/api/v1/member/search":
                 if (server.control / "empty-search").exists():
-                    result["page"]["content"] = []
-                for row in result["page"]["content"]:
-                    row["name"] = activity._names[str(row["memberId"])]
-                    row["schoolName"] = "긴 이름의 합성대학교 소프트웨어융합대학 " * 3
+                    result["page"] = {"content": [], "hasNext": False}
             elif path.endswith("resource-permission"):
                 if query.get("resourceType") == ["ATTENDANCE"] and (server.control / "no-review").exists():
                     for permission in result["permissions"]:
@@ -139,6 +144,27 @@ def handle(handler, method, path, query, body, email):
         record(server, method, path, query, status)
         handler.send_result(status, result)
         return True
+
+
+def search_members(activity, query):
+    """Filter the displayed names before paging; search sheets receive both rows."""
+    rows = [{"memberId": identifier, "name": activity._names[identifier],
+             "schoolName": "긴 이름의 합성대학교 소프트웨어융합대학 " * 3,
+             "gisu": "10", "part": part}
+            for identifier, part in [("101", "WEB"), ("102", "PLAN")]]
+    keyword = query.get("keyword", [""])[0].casefold()
+    part = query.get("part", [""])[0]
+    rows = [row for row in rows if keyword in row["name"].casefold()
+            and (not part or row["part"] == part)]
+    if "page" not in query:
+        return 200, {"page": {"hasNext": False, "content": rows}}
+    try:
+        page = int(query["page"][0])
+        if page < 0:
+            raise ValueError()
+    except (ValueError, IndexError):
+        return 400, None
+    return 200, {"page": {"hasNext": page + 1 < len(rows), "content": rows[page:page + 1]}}
 
 
 def record(server, method, path, query, status):

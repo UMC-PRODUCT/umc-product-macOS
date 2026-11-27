@@ -73,6 +73,8 @@ private struct StudyEditor: View {
     @State private var working = false
     @State private var searching = false
     @State private var searchError: String?
+    @State private var searchRetry = UUID()
+    @State private var scheduleRetry = UUID()
 
     private var trimmed: String { name.trimmingCharacters(in: .whitespacesAndNewlines) }
     private var valid: Bool {
@@ -119,6 +121,7 @@ private struct StudyEditor: View {
                         }
                         if let searchError {
                             ActivityLoadMessage(section: "검색 결과", message: searchError)
+                            Button("다시 시도") { searchRetry = UUID() }
                         }
                         Text("멘토 · " + mentors.map(\.title).joined(separator: ", "))
                         Text("스터디원 · " + members.map(\.title).joined(separator: ", "))
@@ -131,6 +134,7 @@ private struct StudyEditor: View {
                     }
                     if let loadError {
                         ActivityLoadMessage(section: "일정·주차", message: loadError)
+                        Button("다시 시도") { scheduleRetry = UUID() }
                     }
                     if loadingSchedules {
                         ProgressView(AppLocalization.string("\("일정")을 불러오는 중"))
@@ -158,7 +162,8 @@ private struct StudyEditor: View {
                         .umcTypography(.calloutRegular)
                     }
                     if let error { ActivityFeedback(message: error, failed: true) }
-                }.frame(maxWidth: .infinity, alignment: .leading).padding(24)
+                }.umcTypography(.headlineRegular)
+                    .frame(maxWidth: .infinity, alignment: .leading).padding(24)
             }
             ActivityDivider()
             HStack(spacing: 12) {
@@ -173,19 +178,22 @@ private struct StudyEditor: View {
             minWidth: 440, idealWidth: 520, maxWidth: 640,
             minHeight: 300, idealHeight: 500, maxHeight: 620
         ).disabled(working).interactiveDismissDisabled(working)
-        .task {
+        .task(id: scheduleRetry) {
             if tool == .rename { name = group?.title ?? "" }
             if tool == .schedule {
+                loadError = nil
                 loadingSchedules = true
                 defer { loadingSchedules = false }
                 do {
                     async let available = repository.schedules()
                     async let curriculum = repository.study()
-                    (schedules, weeks) = try await (available, curriculum)
-                } catch { loadError = error.localizedDescription }
+                    let result = try await (available, curriculum)
+                    try Task.checkCancellation()
+                    (schedules, weeks) = result
+                } catch { if !Task.isCancelled { loadError = error.localizedDescription } }
             }
         }
-        .task(id: keyword) {
+        .task(id: ActivitySearchRequest(keyword: keyword, retry: searchRetry)) {
             let query = keyword.trimmingCharacters(in: .whitespacesAndNewlines)
             results = []
             searchError = nil
@@ -251,6 +259,7 @@ struct ActivityMemberDetail: View {
     @State private var feedbackSymbol = "info.circle"
     @State private var profileError: String?
     @State private var loadingProfile = true
+    @State private var profileRetry = UUID()
     @State private var working = false
     @State private var confirming = false
     @State private var operationID = UUID()
@@ -269,6 +278,7 @@ struct ActivityMemberDetail: View {
                     if let profileError {
                         Label("프로필을 불러오지 못했어요", systemImage: "exclamationmark.circle")
                         Text(profileError).textSelection(.enabled)
+                        Button("다시 시도") { profileRetry = UUID() }
                     }
                     if let profile, !profile.records.isEmpty {
                         Picker("활동 이력", selection: $selected) {
@@ -297,7 +307,8 @@ struct ActivityMemberDetail: View {
                         Label(feedback, systemImage: feedbackSymbol)
                             .umcTypography(.headlineRegular).textSelection(.enabled)
                     }
-                }.frame(maxWidth: .infinity, alignment: .leading).padding(24)
+                }.umcTypography(.headlineRegular)
+                    .frame(maxWidth: .infinity, alignment: .leading).padding(24)
             }
             ActivityDivider()
             HStack(spacing: 12) {
@@ -310,7 +321,9 @@ struct ActivityMemberDetail: View {
             minWidth: 408, idealWidth: 480, maxWidth: 600,
             minHeight: 280, idealHeight: 480, maxHeight: 620
         ).disabled(working).interactiveDismissDisabled(working)
-        .task {
+        .task(id: profileRetry) {
+            loadingProfile = true
+            profileError = nil
             defer { loadingProfile = false }
             do {
                 let loaded = try await repository.memberProfile(id: member.id)

@@ -34,6 +34,7 @@ struct ScheduleEditor: View {
     @State private var selected: [ActivityRow] = []
     @State private var searchError: String?
     @State private var isSearching = false
+    @State private var searchRetry = UUID()
 
     private var valid: Bool {
         let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -145,7 +146,10 @@ struct ScheduleEditor: View {
                     }
                     TextField("이름으로 검색", text: $keyword)
                     if isSearching { ProgressView().controlSize(.small) }
-                    if let searchError { Text(searchError).foregroundStyle(.secondary) }
+                    if let searchError {
+                        ActivityLoadMessage(section: "검색 결과", message: searchError)
+                        Button("다시 시도") { searchRetry = UUID() }
+                    }
                     if !keyword.isEmpty && results.isEmpty && !isSearching && searchError == nil {
                         Text("검색 결과가 없어요").foregroundStyle(.secondary)
                     }
@@ -161,8 +165,8 @@ struct ScheduleEditor: View {
                         }
                     }
                 }
-            }.formStyle(.grouped)
-            if let feedback = model.feedback {
+            }.formStyle(.grouped).umcTypography(.headlineRegular)
+            if let feedback = model.feedback(in: .scheduleCreation) {
                 ActivityFeedback(message: feedback, failed: model.feedbackFailed).padding(
                     .horizontal)
             }
@@ -181,7 +185,7 @@ struct ScheduleEditor: View {
         )
         .disabled(model.submitting).interactiveDismissDisabled(model.submitting)
         .onAppear { model.feedback = nil }
-        .task(id: keyword) {
+        .task(id: ActivitySearchRequest(keyword: keyword, retry: searchRetry)) {
             let query = keyword.trimmingCharacters(in: .whitespacesAndNewlines)
             results = []
             searchError = nil
@@ -221,7 +225,7 @@ struct ScheduleEditor: View {
             {
                 try await model.repository.createSchedule(draft)
                 return "일정을 만들었어요."
-            }, reload: .attendance)
+            }, reload: .attendance, scope: .scheduleCreation)
         {
             dismiss()
         }

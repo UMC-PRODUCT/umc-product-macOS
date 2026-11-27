@@ -4,6 +4,7 @@
 #  Created by euijjang97 on 11/27/26.
 
 """No HTTP listener, app launch, network, Keychain, or GPS."""
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -92,6 +93,69 @@ class ActivityDesignFixtureTests(unittest.TestCase):
         (self.server.control / "point-ledger-unavailable").unlink()
         ledger = self.request("/api/v1/challenger/101")
         self.assertEqual(len(ledger["points"]), 1)
+
+    def test_created_onsite_schedule_cannot_expose_gps_coordinates(self):
+        module = self.server.activity_design
+        anchor = module._anchor
+        created = self.request("/api/v2/schedules", method="POST", body={
+            "name": "새 대면 일정", "startsAt": module._iso(anchor - timedelta(minutes=5)),
+            "endsAt": module._iso(anchor + timedelta(hours=1)),
+            "participantMemberIds": [102],
+            "location": {"locationName": "합성 장소", "latitude": 37.5, "longitude": 127.0},
+            "attendancePolicy": {"checkInStartAt": module._iso(anchor - timedelta(minutes=10)),
+                                 "onTimeEndAt": module._iso(anchor + timedelta(minutes=10)),
+                                 "lateEndAt": module._iso(anchor + timedelta(minutes=30))}})
+        row = next(row for row in self.schedules() if row["scheduleId"] == created)
+        self.assertFalse(row["isOnline"])
+        self.assertEqual(row["location"]["locationName"], "합성 장소")
+        self.assertNotIn("latitude", row["location"])
+        self.assertNotIn("longitude", row["location"])
+
+    def test_group_rename_and_assign_return_and_log_once(self):
+        self.assertIsNone(self.request("/api/v1/study-groups/301", method="PATCH",
+                                       body={"name": "바뀐 이름"}))
+        self.assertIsNone(self.request("/api/v1/study-groups/301/mentors/101", method="PATCH"))
+        groups = self.request("/api/v1/study-groups/names")
+        self.assertEqual(groups["studyGroups"][0]["name"], "바뀐 이름")
+        detail = self.request("/api/v1/study-groups/301")
+        self.assertIn("101", [row["memberId"] for row in detail["mentors"]])
+        logs = [json.loads(line) for line in
+                (self.server.control / "activity-requests.jsonl").read_text().splitlines()]
+        self.assertEqual(len([row for row in logs if row["method"] == "PATCH"]), 2)
+        self.assertTrue(all(row["status"] == 200 for row in logs))
+
+    def test_visible_names_are_the_search_source_and_pages_do_not_repeat(self):
+        path = "/api/v1/member/search"
+        first = self.request(path, {"size": ["30"], "page": ["0"]})["page"]
+        self.assertTrue(first["hasNext"])
+        second = self.request(path, {"size": ["30"], "page": ["1"]})["page"]
+        self.assertFalse(second["hasNext"])
+        first_ids = {row["memberId"] for row in first["content"]}
+        self.assertFalse(first_ids & {row["memberId"] for row in second["content"]})
+        prefix = first["content"][0]["name"][:5]
+        found = self.request(path, {"size": ["30"], "keyword": [prefix]})["page"]
+        self.assertEqual({row["memberId"] for row in found["content"]}, first_ids)
+        self.assertEqual(self.request(path, {"size": ["30"], "keyword": ["첫 챌린저"]})
+                         ["page"]["content"], [])
+        web = self.request(path, {"size": ["30"], "part": ["WEB"], "page": ["0"]})["page"]
+        self.assertTrue(all(row["part"] == "WEB" for row in web["content"]))
+
+    def test_same_input_read_retries_do_not_send_writes(self):
+        reads = [("/api/v1/member/search", {"size": ["30"], "keyword": ["이름이아주"]}),
+                 ("/api/v1/member/profile/101", {}),
+                 ("/api/v2/curriculums/progress/me", {"gisuId": ["10"]})]
+        for path, query in reads:
+            self.arm("fail-read-once")
+            self.request(path, query, status=503)
+            self.assertIsNotNone(self.request(path, query))
+        logs = [json.loads(line) for line in
+                (self.server.control / "activity-requests.jsonl").read_text().splitlines()]
+        self.assertEqual(len(logs), 6)
+        self.assertTrue(all(row["method"] == "GET" for row in logs))
+        for failed, retry in zip(logs[::2], logs[1::2]):
+            self.assertEqual(failed["path"], retry["path"])
+            self.assertEqual(failed["query"], retry["query"])
+            self.assertEqual((failed["status"], retry["status"]), (503, 200))
 
     def test_logs_omit_identity_tokens_and_body(self):
         self.schedules()

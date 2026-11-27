@@ -22,6 +22,12 @@ enum ActivityTab: String, CaseIterable, Identifiable {
     var id: Self { self }
 }
 
+enum ActivityFeedbackScope: Equatable {
+    case attendance(String)
+    case review(String)
+    case scheduleCreation
+}
+
 @MainActor @Observable
 final class ActivityViewModel {
     let repository: any ActivityRepository
@@ -38,7 +44,7 @@ final class ActivityViewModel {
     var submitting = false
     var feedback: String?
     var feedbackFailed = false
-    var feedbackScheduleID: String?
+    private(set) var feedbackScope: ActivityFeedbackScope?
 
     init(_ repository: any ActivityRepository) { self.repository = repository }
 
@@ -121,7 +127,7 @@ final class ActivityViewModel {
                     throw error
                 }
                 return "출석 판정을 저장했어요."
-            }, reload: .management, scheduleID: item.schedule)
+            }, reload: .management, scope: .review(item.schedule))
     }
 
     func loadMembers(_ id: String) async {
@@ -132,11 +138,11 @@ final class ActivityViewModel {
 
     func perform(
         _ operation: () async throws -> String, reload tab: ActivityTab,
-        scheduleID: String? = nil
+        scope: ActivityFeedbackScope
     ) async -> Bool {
         guard !submitting else { return false }
         submitting = true
-        feedbackScheduleID = scheduleID
+        feedbackScope = scope
         defer { submitting = false }
         do {
             feedback = nil
@@ -149,6 +155,10 @@ final class ActivityViewModel {
             feedback = error.localizedDescription
             return false
         }
+    }
+
+    func feedback(in scope: ActivityFeedbackScope) -> String? {
+        feedbackScope == scope ? feedback : nil
     }
 
     private func capture<T>(_ operation: () async throws -> T) async -> Loadable<T> {
@@ -194,7 +204,9 @@ public struct ActivityView: View {
             Divider()
             ScrollView {
                 VStack(alignment: .leading, spacing: 24) {
-                    if model.feedbackScheduleID == nil, let feedback = model.feedback {
+                    if model.tab == .attendance, !model.feedbackFailed,
+                        let feedback = model.feedback(in: .scheduleCreation)
+                    {
                         ActivityFeedback(message: feedback, failed: model.feedbackFailed)
                     }
                     switch model.tab {
@@ -387,8 +399,7 @@ public struct ActivityView: View {
                     }
                 }
             }.frame(width: 100, height: 100)
-                .accessibilityElement(children: .ignore)
-                .accessibilityLabel(timing.accessibilitySummary)
+                .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 12) {
                 Label(phase, systemImage: open ? "clock" : "calendar")
                     .umcTypography(.calloutRegular)
@@ -416,6 +427,9 @@ public struct ActivityView: View {
                     )
                     .umcTypography(.calloutRegular)
                 }
+                if let summary = timing.remainingSummary {
+                    Text(summary).umcTypography(.calloutRegular)
+                }
                 ActivityFlow {
                     if schedule.isParticipant, open, schedule.status == nil {
                         Button(schedule.isOnline ? "지금 출석 요청" : "위치 확인 후 출석") {
@@ -435,7 +449,7 @@ public struct ActivityView: View {
                     }
                     if schedule.status != nil { Button("결과 다시 확인") { retry = UUID() } }
                 }.disabled(model.submitting)
-                if model.feedbackScheduleID == schedule.id, let feedback = model.feedback {
+                if let feedback = model.feedback(in: .attendance(schedule.id)) {
                     ActivityFeedback(message: feedback, failed: model.feedbackFailed)
                 }
             }
@@ -451,7 +465,7 @@ public struct ActivityView: View {
                     let result = try await model.repository.attend(
                         scheduleID: schedule.id, reason: nil, coordinate: nil)
                     return status(result, fallback: "출석 요청 완료")
-                }, reload: .attendance, scheduleID: schedule.id)
+                }, reload: .attendance, scope: .attendance(schedule.id))
         }
     }
 
@@ -521,7 +535,7 @@ public struct ActivityView: View {
                     }.padding(12)
                     ActivityDivider()
                 }
-                if model.feedbackScheduleID == schedule.id, let feedback = model.feedback {
+                if let feedback = model.feedback(in: .review(schedule.id)) {
                     ActivityFeedback(message: feedback, failed: model.feedbackFailed)
                 }
             }.activityPanel()
@@ -556,11 +570,11 @@ private enum Panel: Identifiable {
     case create
     case excuse(String)
     case location(ActivitySchedule)
-    var scheduleID: String? {
+    var feedbackScope: ActivityFeedbackScope {
         switch self {
-        case .create: nil
-        case .location(let schedule): schedule.id
-        case .excuse(let id): id
+        case .create: .scheduleCreation
+        case .location(let schedule): .attendance(schedule.id)
+        case .excuse(let id): .attendance(id)
         }
     }
     var id: String {
@@ -637,10 +651,11 @@ private struct ActivityForm: View {
                         }
                     case .create: EmptyView()
                     }
-                    if let message = model.feedback {
+                    if let message = model.feedback(in: panel.feedbackScope) {
                         ActivityFeedback(message: message, failed: model.feedbackFailed)
                     }
-                }.frame(maxWidth: .infinity, alignment: .leading).padding(24)
+                }.umcTypography(.headlineRegular)
+                    .frame(maxWidth: .infinity, alignment: .leading).padding(24)
             }
             ActivityDivider()
             ActivityFlow(alignment: .trailing) {
@@ -690,7 +705,7 @@ private struct ActivityForm: View {
                         coordinate: coordinate)
                     return "출석을 요청했어요."
                 }
-            }, reload: .attendance, scheduleID: panel.scheduleID)
+            }, reload: .attendance, scope: panel.feedbackScope)
         if saved { dismiss() }
     }
 }

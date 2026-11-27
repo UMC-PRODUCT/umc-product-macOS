@@ -24,15 +24,15 @@ struct ActivityTiming {
     }
     var deadline: Date? { (schedule.onTime ?? now) > now ? schedule.onTime : schedule.closes }
     var minutes: Int { max(0, Int(ceil((deadline?.timeIntervalSince(now) ?? 0) / 60))) }
-    var accessibilitySummary: String {
+    var remainingSummary: String? {
         guard open, minutes > 0, let deadline else {
-            return schedule.startsAt.formatted(date: .abbreviated, time: .shortened)
+            return nil
         }
         let label =
             (schedule.onTime ?? now) > now
             ? AppLocalization.string("정시 마감") : AppLocalization.string("지각 마감")
-        return label + " " + Self.time(deadline, relativeTo: schedule.startsAt)
-            + ", " + String(minutes) + "분 남음"
+        let time = Self.time(deadline, relativeTo: schedule.startsAt)
+        return AppLocalization.string("\(label) \(time), \(minutes)분 남음")
     }
     static func time(_ date: Date, relativeTo start: Date) -> String {
         date.formatted(
@@ -165,4 +165,10 @@ struct ActivityLoadMessage: View {
         }.foregroundStyle(UMCColor.Semantic.textError)
             .fixedSize(horizontal: false, vertical: true)
     }
+}
+
+/// A retry reruns the same read without changing text or touching write actions.
+struct ActivitySearchRequest: Equatable {
+    let keyword: String
+    let retry: UUID
 }

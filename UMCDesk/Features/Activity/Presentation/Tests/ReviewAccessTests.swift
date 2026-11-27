@@ -14,6 +14,7 @@ import UMCFoundation
 private actor ReviewRepository: ActivityRepository {
     var allowed = true
     var denyList = false
+    var denyDecision = false
     var delayed = false
     var continuation: CheckedContinuation<Void, Never>?
     var started: CheckedContinuation<Void, Never>?
@@ -55,7 +56,11 @@ private actor ReviewRepository: ActivityRepository {
                 ])
         ]
     }
-    func decide(scheduleID: String, memberID: String, approve: Bool) async throws { writes += 1 }
+    func denyNextDecision() { denyDecision = true }
+    func decide(scheduleID: String, memberID: String, approve: Bool) async throws {
+        writes += 1
+        if denyDecision { throw NetworkError.requestFailed(statusCode: 403, data: nil) }
+    }
 
     func directory(keyword: String, part: String?, page: Int) async throws -> ActivityMemberPage {
         throw URLError(.unsupportedURL)
@@ -136,12 +141,40 @@ func revokedReviewClearsDataAndConfirmation(permissionChanged: Bool) async {
         {
             attempts += 1
             throw URLError(.timedOut)
-        }, reload: .attendance)
+        }, reload: .attendance, scope: .attendance("701"))
     #expect(!saved)
     #expect(model.feedbackFailed)
     await model.load(.attendance)
     #expect(attempts == 1)
-    let accepted = await model.perform({ "실패라는 단어가 있는 성공 메시지" }, reload: .attendance)
+    let accepted = await model.perform(
+        { "실패라는 단어가 있는 성공 메시지" }, reload: .attendance, scope: .attendance("701"))
     #expect(accepted)
     #expect(!model.feedbackFailed)
+}
+
+@MainActor
+@Test func attendanceAndReviewFeedbackDoNotCrossEvenAfterAccessRevocation() async {
+    let repository = ReviewRepository()
+    let model = ActivityViewModel(repository)
+    _ = await model.perform({ "개인 출석 완료" }, reload: .attendance, scope: .attendance("701"))
+    #expect(model.feedback(in: .attendance("701")) == "개인 출석 완료")
+    #expect(model.feedback(in: .review("701")) == nil)
+    #expect(model.feedback(in: .attendance("702")) == nil)
+    await model.permissions()
+    model.tab = .management
+    await model.load(.management)
+    await repository.denyNextDecision()
+    await model.decide(ReviewDecision(schedule: "701", member: "101", name: "회원", approve: true))
+    #expect(model.tab == .attendance)
+    #expect(!model.canReview)
+    #expect(model.feedbackFailed)
+    #expect(model.feedback(in: .review("701")) != nil)
+    #expect(model.feedback(in: .attendance("701")) == nil)
+    #expect(await repository.writes == 1)
+    _ = await model.perform(
+        { throw URLError(.timedOut) }, reload: .attendance,
+        scope: .scheduleCreation)
+    #expect(model.feedback(in: .scheduleCreation) != nil)
+    #expect(model.feedback(in: .attendance("701")) == nil)
+    #expect(model.feedback(in: .review("701")) == nil)
 }
