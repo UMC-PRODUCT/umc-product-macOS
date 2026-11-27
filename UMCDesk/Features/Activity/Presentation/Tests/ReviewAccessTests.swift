@@ -126,3 +126,22 @@ func revokedReviewClearsDataAndConfirmation(permissionChanged: Bool) async {
     await model.decide(selection)
     #expect(await repository.writes == 0)
 }
+
+@MainActor
+@Test func displayFeedbackDistinguishesFailureWithoutInspectingMessage() async {
+    let repository = ReviewRepository()
+    let model = ActivityViewModel(repository)
+    var attempts = 0
+    let saved = await model.perform(
+        {
+            attempts += 1
+            throw URLError(.timedOut)
+        }, reload: .attendance)
+    #expect(!saved)
+    #expect(model.feedbackFailed)
+    await model.load(.attendance)
+    #expect(attempts == 1)
+    let accepted = await model.perform({ "실패라는 단어가 있는 성공 메시지" }, reload: .attendance)
+    #expect(accepted)
+    #expect(!model.feedbackFailed)
+}

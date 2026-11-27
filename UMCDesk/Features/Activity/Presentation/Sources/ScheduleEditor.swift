@@ -9,6 +9,7 @@ import CoreDesignSystem
 import CoreUIComponents
 import MapKit
 import SwiftUI
+import UMCFoundation
 
 struct ScheduleEditor: View {
     @Environment(\.sampleActivityVenue) private var sampleVenue
@@ -51,8 +52,11 @@ struct ScheduleEditor: View {
             Form {
                 Section("기본 정보") {
                     TextField("일정명", text: $title)
-                    DatePicker("시작", selection: $start)
-                    DatePicker("종료", selection: $end)
+                    let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if trimmed.isEmpty || trimmed.count > 100 {
+                        Text(AppLocalization.string("일정명은 앞뒤 공백을 제외하고 1~100자로 입력해 주세요."))
+                            .umcTypography(.calloutRegular)
+                    }
                     Picker("태그", selection: $tag) {
                         Text("일반").tag("GENERAL")
                         Text("스터디").tag("STUDY")
@@ -61,19 +65,41 @@ struct ScheduleEditor: View {
                         Text("회의").tag("MEETING")
                     }
                     TextField("메모", text: $memo, axis: .vertical)
+                }
+                Section(AppLocalization.string("일정 시간")) {
+                    DatePicker("시작", selection: $start)
+                    DatePicker("종료", selection: $end)
+                    if start >= end {
+                        Text(AppLocalization.string("종료는 시작보다 뒤여야 해요.")).umcTypography(
+                            .calloutRegular)
+                    }
+                }
+                Section(AppLocalization.string("진행 방식·장소")) {
                     Picker("진행 방식", selection: $onsite) {
                         Text("비대면").tag(false)
                         Text("대면").tag(true)
                     }.pickerStyle(.segmented)
                     if onsite {
                         TextField("장소명", text: $venue)
+                        if venue.trimmingCharacters(in: .whitespaces).isEmpty || venue.count > 100
+                        {
+                            Text(AppLocalization.string("장소명은 공백만 입력할 수 없으며 원문 100자 이하여야 해요."))
+                                .umcTypography(.calloutRegular)
+                        }
+                        if point == nil {
+                            Text(AppLocalization.string("장소명과 별도로 지도에서 좌표를 선택해 주세요."))
+                                .umcTypography(.calloutRegular)
+                        }
                         if let sampleVenue {
                             Button {
-                                point = .init(latitude: sampleVenue.latitude, longitude: sampleVenue.longitude)
+                                point = .init(
+                                    latitude: sampleVenue.latitude,
+                                    longitude: sampleVenue.longitude)
                                 if venue.isEmpty { venue = "학생회관 세미나실" }
                             } label: {
-                                Label(point == nil ? "예시 장소 선택" : "예시 장소 선택됨",
-                                      systemImage: point == nil ? "mappin" : "checkmark")
+                                Label(
+                                    point == nil ? "예시 장소 선택" : "예시 장소 선택됨",
+                                    systemImage: point == nil ? "mappin" : "checkmark")
                             }
                         } else {
                             Text("지도를 눌러 일정 장소를 선택해 주세요.").umcTypography(.calloutRegular)
@@ -91,6 +117,12 @@ struct ScheduleEditor: View {
                     Section("출석 인정 시간") {
                         Toggle("출석 체크", isOn: $track).toggleStyle(UMCCheckboxStyle())
                         if track {
+                            if !(opens < start && start < onTime && onTime < closes
+                                && closes < end)
+                            {
+                                Text(AppLocalization.string("출석 시간은 아래 순서대로 서로 다른 시각이어야 해요."))
+                                    .umcTypography(.calloutRegular)
+                            }
                             DatePicker("출석 시작", selection: $opens)
                             DatePicker("정시 인정 마감", selection: $onTime)
                             DatePicker("지각 인정 마감", selection: $closes)
@@ -100,6 +132,10 @@ struct ScheduleEditor: View {
                     }
                 }
                 Section("참여자 · \(selected.count)명 선택") {
+                    if track && selected.isEmpty {
+                        Text(AppLocalization.string("출석 체크 일정은 참여자를 1명 이상 선택해 주세요."))
+                            .umcTypography(.calloutRegular)
+                    }
                     ForEach(selected) { member in
                         HStack {
                             Text(member.title)
@@ -126,15 +162,23 @@ struct ScheduleEditor: View {
                     }
                 }
             }.formStyle(.grouped)
-            if let feedback = model.feedback { Text(feedback).padding(.horizontal) }
-            HStack {
+            if let feedback = model.feedback {
+                ActivityFeedback(message: feedback, failed: model.feedbackFailed).padding(
+                    .horizontal)
+            }
+            ActivityDivider()
+            HStack(spacing: 12) {
+                if model.submitting { ProgressView(AppLocalization.string("일정 만드는 중")) }
                 Spacer()
                 Button("취소", action: dismiss).keyboardShortcut(.cancelAction)
                 Button("일정 만들기") { Task { await save() } }
                     .buttonStyle(.borderedProminent).disabled(!valid)
-            }.padding([.horizontal, .bottom])
+            }.padding(16)
         }
-        .frame(minWidth: 510, idealHeight: 560, maxHeight: 720)
+        .frame(
+            minWidth: 510, idealWidth: 600, maxWidth: 700,
+            minHeight: 360, idealHeight: 560, maxHeight: 620
+        )
         .disabled(model.submitting).interactiveDismissDisabled(model.submitting)
         .onAppear { model.feedback = nil }
         .task(id: keyword) {
