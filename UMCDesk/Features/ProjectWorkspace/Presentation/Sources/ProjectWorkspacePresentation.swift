@@ -7,6 +7,7 @@
 
 import CoreUIComponents
 import CoreDesignSystem
+import CoreRouting
 import Foundation
 import ProjectWorkspaceDomain
 import SwiftUI
@@ -17,6 +18,12 @@ public struct ProjectWorkspaceView: View {
         let initialProjectID: String?
     }
 
+    private enum Location: Equatable {
+        case list
+        case project(String)
+    }
+
+    @Environment(\.windowDetail) private var windowDetail
     private let entry: Entry
     private let loadProjects: @Sendable () async throws -> [WorkspaceProject]
     private let loadGitHub: WorkspaceGitHubLoader?
@@ -38,12 +45,24 @@ public struct ProjectWorkspaceView: View {
     // MARK: - Body
 
     public var body: some View {
-        WorkspaceDirectory(
+        let target = windowDetail?.wrappedValue?.route(as: Location.self)
+        let projectID: String? = switch target {
+        case .project(let id): id
+        case .list: nil
+        case nil: entry.initialProjectID
+        }
+        return WorkspaceDirectory(
             accountID: entry.accountID, loadProjects: loadProjects,
             loadGitHub: loadGitHub, openMatching: openMatching,
-            directory: WorkspaceDirectoryModel(initialProjectID: entry.initialProjectID)
+            directory: WorkspaceDirectoryModel(initialProjectID: projectID),
+            selectProject: windowDetail.map { binding in
+                { id in
+                    binding.wrappedValue = id == entry.initialProjectID
+                        ? nil : WindowDetail(id.map(Location.project) ?? .list)
+                }
+            }
         )
-        .id(entry)
+        .id(Entry(accountID: entry.accountID, initialProjectID: projectID))
     }
 }
 
@@ -53,6 +72,7 @@ struct WorkspaceDirectory: View {
     let loadGitHub: WorkspaceGitHubLoader?
     let openMatching: (() -> Void)?
 
+    private let selectProject: ((String?) -> Void)?
     @AppStorage private var recentProjectID: String
     @State private var directory: WorkspaceDirectoryModel
     @Environment(\.scenePhase) private var scenePhase
@@ -61,8 +81,9 @@ struct WorkspaceDirectory: View {
     init(
         accountID: String, loadProjects: @escaping @Sendable () async throws -> [WorkspaceProject],
         loadGitHub: WorkspaceGitHubLoader?, openMatching: (() -> Void)?,
-        directory: WorkspaceDirectoryModel
+        directory: WorkspaceDirectoryModel, selectProject: ((String?) -> Void)? = nil
     ) {
+        self.selectProject = selectProject
         _directory = State(initialValue: directory)
         self.accountID = accountID
         self.loadProjects = loadProjects
@@ -83,7 +104,9 @@ struct WorkspaceDirectory: View {
                     project: selected, accountID: accountID, sheet: $directory.sheet,
                     loadGitHub: loadGitHub, openMatching: openMatching,
                     membershipFailed: directory.failed,
-                    refreshMembership: directory.requestRefresh, close: directory.close
+                    refreshMembership: directory.requestRefresh, close: {
+                        if let selectProject { selectProject(nil) } else { directory.close() }
+                    }
                 )
                 .id(selected.id)
             } else {
@@ -126,7 +149,7 @@ struct WorkspaceDirectory: View {
                                     Text("이어서 작업").umcTypography(.headlineBold)
                                         .accessibilityAddTraits(.isHeader)
                                     WorkspaceDirectoryRow(project: recent, accountID: accountID) {
-                                        directory.open(recent)
+                                        open(recent)
                                     }
                                     .background(UMCColor.Semantic.surfaceBrandWeak,
                                                 in: .rect(cornerRadius: UMCRadius.value12))
@@ -137,7 +160,7 @@ struct WorkspaceDirectory: View {
                                         WorkspaceDirectoryRow(
                                             project: project, accountID: accountID
                                         ) {
-                                            directory.open(project)
+                                            open(project)
                                         }
                                         if project.id != remaining.last?.id { Divider() }
                                     }
@@ -163,7 +186,7 @@ struct WorkspaceDirectory: View {
                     }) {
                         Button("이어서 작업 · \(recent.name)") {
                             dismiss()
-                            directory.open(recent)
+                            open(recent)
                         }
                     }
                 }
@@ -183,6 +206,10 @@ struct WorkspaceDirectory: View {
         .onChange(of: directory.selected?.id) { _, id in
             if let id { recentProjectID = id }
         }
+    }
+
+    private func open(_ project: WorkspaceProject) {
+        if let selectProject { selectProject(project.id) } else { directory.open(project) }
     }
 
     private var heading: some View {

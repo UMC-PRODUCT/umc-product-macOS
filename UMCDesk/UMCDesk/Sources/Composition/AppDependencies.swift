@@ -249,8 +249,9 @@ final class AppDependencies {
         isSettingsPreview ? nil : settingsViewModel.profile?.id
     }
 
-    func openMatching(_ destination: MatchingDestination = .explore) {
-        navigation.openMatching(destination, memberId: verifiedMatchingMemberId)
+    func openMatching(_ destination: MatchingDestination = .explore, isRestoring: Bool = false) {
+        navigation.openMatching(destination, memberId: verifiedMatchingMemberId,
+                                isRestoring: isRestoring)
     }
 
     func selectSection(_ section: DeskSection?) {

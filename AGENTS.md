@@ -51,6 +51,8 @@ View ←→ ViewModel(@Observable) → UseCase(Protocol) → Repository → Data
    (Request/Encodable DTO는 제외 — Int 그대로 OK)
 4. **모듈 간 노출 타입은 `public`** — Domain Model의 프로퍼티/이니셜라이저에 `public` 필수.
 5. **Mock 데이터는 `#if DEBUG` 가드** — 정식 릴리스 빌드 미포함.
+   일반 앱의 **보기 → 데이터 미리보기**에는 세션 전용 로컬 예시 데이터를 포함한다.
+   이 메뉴의 저장소·권한·위치·네트워크 처리는 실제 계정과 격리한다(#162).
    승인된 인증 디자인·타이포·흐름 프리뷰만 `#if DEBUG || UMC_PRERELEASE`를 사용한다.
    `UMC_PRERELEASE`는 프로젝트 생성 시 `TUIST_PRERELEASE=1`로 켜며 일반 Mock에 확대하지 않는다.
 6. **Network Router에 인라인 딕셔너리 금지** — 파라미터는 Query/Body DTO로 캡슐화.

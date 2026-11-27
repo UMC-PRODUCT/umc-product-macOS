@@ -7,6 +7,7 @@
 
 import CoreUIComponents
 import CoreDesignSystem
+import CoreRouting
 import MatchingDomain
 import SwiftUI
 
@@ -96,6 +97,8 @@ public struct MatchingView: View {
     @State private var canChooseOtherPM = false
 
     private var canCreateOwnDraft: Bool { applicantParts.contains("PLAN") }
+    @Environment(\.windowDetail) private var windowDetail
+    private let initialLocation: Location
     @State private var previous: [Location] = []
     @State private var following: [Location] = []
 
@@ -115,6 +118,7 @@ public struct MatchingView: View {
         self.applicantParts = applicantParts
         self.memberId = memberId
         self.onOpenProject = onOpenProject
+        initialLocation = Location(destination: initialDestination)
         _destination = State(initialValue: initialDestination)
     }
 
@@ -125,6 +129,7 @@ public struct MatchingView: View {
         self.applicantParts = ["WEB"]
         self.memberId = nil
         self.onOpenProject = nil
+        initialLocation = Location(destination: .explore, project: previewProject)
         _destination = State(initialValue: .explore)
         _selectedProject = State(initialValue: previewProject)
     }
@@ -154,20 +159,27 @@ public struct MatchingView: View {
             Button("내 프로젝트") { dismiss(); navigate(.management) }
         }
         .toolbar {
-            ToolbarItemGroup(placement: .navigation) {
-                Button("뒤로", systemImage: "chevron.left") {
-                    guard let target = previous.popLast() else { return }
-                    following.append(current)
-                    restore(target)
+            if windowDetail == nil {
+                ToolbarItemGroup(placement: .navigation) {
+                    Button("뒤로", systemImage: "chevron.left") {
+                        guard let target = previous.popLast() else { return }
+                        following.append(current)
+                        restore(target)
+                    }
+                    .disabled(previous.isEmpty)
+                    Button("앞으로", systemImage: "chevron.right") {
+                        guard let target = following.popLast() else { return }
+                        previous.append(current)
+                        restore(target)
+                    }
+                    .disabled(following.isEmpty)
                 }
-                .disabled(previous.isEmpty)
-                Button("앞으로", systemImage: "chevron.right") {
-                    guard let target = following.popLast() else { return }
-                    previous.append(current)
-                    restore(target)
-                }
-                .disabled(following.isEmpty)
             }
+        }
+        .onChange(of: windowDetail?.wrappedValue, initial: true) {
+            guard let windowDetail else { return }
+            let target = windowDetail.wrappedValue?.route(as: Location.self) ?? initialLocation
+            if current != target { restore(target) }
         }
         .sheet(isPresented: $creating) {
             MatchingDraftComposer(service: repository, gisuId: gisuId,
@@ -356,8 +368,12 @@ public struct MatchingView: View {
 
     private func go(_ target: Location) {
         guard current != target else { return }
-        previous.append(current)
-        following.removeAll()
+        if let windowDetail {
+            windowDetail.wrappedValue = target == initialLocation ? nil : WindowDetail(target)
+        } else {
+            previous.append(current)
+            following.removeAll()
+        }
         restore(target)
     }
 

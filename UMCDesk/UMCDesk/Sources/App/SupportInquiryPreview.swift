@@ -5,7 +5,6 @@
 //  Created by euijjang97 on 11/23/26.
 //
 
-#if DEBUG
 import CoreDesignSystem
 import SwiftUI
 
@@ -260,5 +259,3 @@ struct SupportComposePreview: View {
         .frame(width: 460)
     }
 }
-
-#endif

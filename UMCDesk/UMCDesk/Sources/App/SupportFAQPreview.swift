@@ -5,7 +5,6 @@
 //  Created by euijjang97 on 11/23/26.
 //
 
-#if DEBUG
 import CoreDesignSystem
 import CoreUIComponents
 import SwiftUI
@@ -95,4 +94,3 @@ private struct SupportFAQEditor: View {
         .onChange(of: draft.article) { verified = false }
     }
 }
-#endif

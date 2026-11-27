@@ -5,7 +5,6 @@
 //  Created by euijjang97 on 11/23/26.
 //
 
-#if DEBUG
 import Foundation
 import Observation
 
@@ -131,4 +130,3 @@ final class SupportFixture {
         return ticket.id
     }
 }
-#endif

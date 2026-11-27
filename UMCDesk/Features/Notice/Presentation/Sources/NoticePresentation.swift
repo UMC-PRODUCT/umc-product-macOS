@@ -5,6 +5,7 @@
 
 import CoreUIComponents
 import CoreDesignSystem
+import CoreRouting
 import NoticeDomain
 import SwiftUI
 
@@ -21,7 +22,7 @@ final class NoticeBoardModel {
     var nextPage: Int?
     var isLoading = false
     var error: String?
-    var selection: String?
+    var accessLossRevision = 0
     var readIDs: Set<String> = []
     private var requestID = UUID()
 
@@ -34,7 +35,6 @@ final class NoticeBoardModel {
         isLoading = false
         entries.removeAll { $0.id == id }
         readIDs.remove(id)
-        if selection == id { selection = nil }
         error = NoticeRequestFailure.accessDenied.localizedDescription
     }
 
@@ -67,7 +67,7 @@ final class NoticeBoardModel {
             if case NoticeRequestFailure.accessDenied = error {
                 entries = []
                 canCompose = false
-                selection = nil
+                accessLossRevision += 1
                 readIDs = []
                 nextPage = nil
             }
@@ -78,6 +78,8 @@ final class NoticeBoardModel {
 
 public struct NoticeBoardView: View {
     @State private var model: NoticeBoardModel
+    @Environment(\.invalidateWindowDetail) private var invalidateDetail
+    @WindowDetailSelection private var selection: String?
     @State private var search = ""
     @State private var composing = false
     @State private var checkingWriter = false
@@ -94,7 +96,7 @@ public struct NoticeBoardView: View {
             toolbar
             Divider()
             HStack(spacing: 0) {
-                if let id = model.selection {
+                if let id = selection {
                     if !fullReader {
                         noticeList
                             .frame(minWidth: 168, idealWidth: 280, maxWidth: 340)
@@ -103,8 +105,11 @@ public struct NoticeBoardView: View {
                     NoticeArticleView(
                         repository: model.repository, id: id,
                         confirmed: model.readIDs.contains(id),
-                        onBack: { model.selection = nil },
-                        onAccessLost: { model.revokeArticle(id) },
+                        onDelete: { discardArticle(id) },
+                        onAccessLost: {
+                            model.revokeArticle(id)
+                            discardArticle(id)
+                        },
                         onChanged: { Task { await model.load() } },
                         onRead: { model.readIDs.insert(id) }
                     )
@@ -118,6 +123,9 @@ public struct NoticeBoardView: View {
         .umcTabTools("공지 도구", description: "공지를 검색하고 대상과 파트를 선택하세요.",
                      findShortcut: true) { _ in tools }
         .task(id: model.tab) { await model.load() }
+        .onChange(of: model.accessLossRevision) {
+            if let selection { discardArticle(selection) }
+        }
         .onChange(of: model.part) { _, _ in Task { await model.load() } }
         .onChange(of: model.canCompose) { _, allowed in
             if !allowed { composing = false }
@@ -132,18 +140,23 @@ public struct NoticeBoardView: View {
                 }
             ) { id in
                 composing = false
-                model.selection = id
+                selection = id
                 Task { await model.load() }
             }
         }
     }
 
+    private func discardArticle(_ id: String) {
+        if let invalidateDetail { invalidateDetail(WindowDetail(id)) }
+        else if selection == id { selection = nil }
+    }
+
     private var toolbar: some View {
         HStack {
-            if model.selection == nil {
+            if selection == nil {
                 Text("공지").umcTypography(.title1Bold).accessibilityAddTraits(.isHeader)
             } else {
-                Button("공지 목록", systemImage: "chevron.left") { model.selection = nil }
+                Button("공지 목록", systemImage: "list.bullet") { selection = nil }
                 Button(
                     fullReader ? "분할 보기" : "전체 읽기",
                     systemImage: fullReader ? "sidebar.left" : "arrow.up.left.and.arrow.down.right"
@@ -237,7 +250,7 @@ public struct NoticeBoardView: View {
                 }
             }
         }
-        .padding(model.selection == nil ? UMCSpacing.value24 : UMCSpacing.value12)
+        .padding(selection == nil ? UMCSpacing.value24 : UMCSpacing.value12)
     }
 
     private func searchNotices() {
@@ -247,7 +260,7 @@ public struct NoticeBoardView: View {
 
     private func card(_ entry: NoticeEntry) -> some View {
         Button {
-            model.selection = entry.id
+            selection = entry.id
         } label: {
             VStack(alignment: .leading, spacing: UMCSpacing.value4) {
                 Text(entry.title)
@@ -261,7 +274,7 @@ public struct NoticeBoardView: View {
                     Label("투표 마감 " + String(deadline.prefix(10)), systemImage: "calendar.badge.clock")
                         .umcTypography(.calloutRegular)
                 }
-                if model.selection == nil {
+                if selection == nil {
                     Text(entry.content).lineLimit(2).foregroundStyle(.secondary)
                 }
                 HStack {
@@ -284,7 +297,7 @@ public struct NoticeBoardView: View {
             .padding(.horizontal, UMCSpacing.value20)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(
-                model.selection == entry.id
+                selection == entry.id
                     ? UMCColor.Semantic.fillPrimaryStrong200
                     : (entry.mustRead
                         ? UMCColor.Semantic.surfaceBrandWeak
