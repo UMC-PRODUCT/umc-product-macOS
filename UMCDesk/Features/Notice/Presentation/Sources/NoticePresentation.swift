@@ -92,6 +92,8 @@ final class NoticeBoardModel {
 }
 
 public struct NoticeBoardView: View {
+    @Environment(\.locale) private var locale
+    @Environment(\.timeZone) private var timeZone
     @State private var model: NoticeBoardModel
     @Environment(\.invalidateWindowDetail) private var invalidateDetail
     @WindowDetailSelection private var selection: String?
@@ -313,8 +315,10 @@ public struct NoticeBoardView: View {
                     if entry.mustRead { Label("고정", systemImage: "pin.fill") }
                 }
                 .foregroundStyle(UMCColor.Semantic.textBrandDefault)
-                if let deadline = entry.vote?.endsAtExclusive, !deadline.isEmpty {
-                    Label("투표 마감 " + String(deadline.prefix(10)), systemImage: "calendar.badge.clock")
+                if let deadline = noticeVoteDeadline(
+                    entry.vote?.endsAtExclusive, locale: locale, timeZone: timeZone
+                ) {
+                    Label("투표 마감 " + deadline, systemImage: "calendar.badge.clock")
                         .umcTypography(.calloutRegular)
                 }
                 if selection == nil {

@@ -41,6 +41,17 @@ struct NoticeContractTests {
         #expect(decoded.vote?.options.first?.voteCount == "1")
     }
 
+    @Test("마감 필드가 누락되거나 null이어도 투표를 읽는다", arguments: ["", #""endsAtExclusive":null,"#])
+    func missingVoteDeadline(_ field: String) throws {
+        let json = """
+            {"title":"선택","status":"OPEN","isAnonymous":true,"allowMultipleChoice":false,
+            \(field)"totalParticipants":0,"options":[]}
+            """
+        let vote = try JSONDecoder().decode(NoticeVote.self, from: Data(json.utf8))
+        #expect(vote.endsAtExclusive.isEmpty)
+        #expect(vote.status == "OPEN")
+    }
+
     @Test("읽음 현황의 다음 페이지 커서는 문자열로 보존한다")
     func readers() throws {
         let json =
