@@ -11,6 +11,7 @@ import SwiftUI
 
 struct MatchingProgressPanel: View {
     let controller: MatchingProgressController
+    var onClose: (() -> Void)? = nil
 
     var body: some View {
         TimelineView(.periodic(from: .now, by: 30)) { timeline in
@@ -19,7 +20,7 @@ struct MatchingProgressPanel: View {
                 HStack {
                     Text(controller.round?.name ?? "프로젝트 매칭").font(.caption)
                     Spacer()
-                    Button("닫기  esc") { controller.closeExpanded() }
+                    Button("닫기  esc") { if let onClose { onClose() } else { controller.closeExpanded() } }
                         .buttonStyle(.plain)
                         .keyboardShortcut(.cancelAction)
                 }

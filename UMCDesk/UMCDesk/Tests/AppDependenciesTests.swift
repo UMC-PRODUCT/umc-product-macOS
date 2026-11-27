@@ -18,6 +18,46 @@ import CoreNetwork
 @MainActor
 struct AppDependenciesTests {
     #if DEBUG
+    @Test("미리보기 재진입과 종료는 로그아웃 경로와 로그인한 계정의 토큰·현재 탭을 보존한다")
+    func dataPreviewRestoresOriginalAccount() async throws {
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [LogoutLifecycleProtocol.self]
+        let transport = URLSession(configuration: config)
+        defer { transport.invalidateAndCancel() }
+        let app = AppDependencies(arguments: ["--local-api-port", "19620"], session: transport)
+        let client = app.container.resolve(NetworkClient.self)
+        let tokens = app.container.resolve(TokenStore.self)
+        let preview = DataPreviewMode()
+        app.selectSection(.projects)
+        preview.select(.feature(.threads))
+        preview.end()
+        #expect(preview.session == nil)
+        #expect(app.navigation.pendingSection == .projects)
+        #expect(app.navigation.account == nil)
+        #expect(await tokens.getAccessToken() == nil)
+
+        try await client.signIn { TokenPair(accessToken: "second", refreshToken: "second-refresh") }
+        try await app.refreshAccount()
+        app.selectSection(.activity)
+        preview.select(.settings)
+        let workspace = try #require(preview.session)
+        for destination in DataPreviewDestination.all { preview.select(destination) }
+        let isolated = workspace.settings.preferences
+        let theme = app.settingsPreferences.theme
+        isolated.theme = theme == .dark ? .light : .dark
+        #expect(app.settingsPreferences.theme == theme)
+        #expect(workspace.account.memberID != app.navigation.account?.memberID)
+        await workspace.settings.logout()
+        #expect(preview.session == nil)
+        #expect(app.navigation.account?.memberID == "202")
+        #expect(app.navigation.section == .activity)
+        #expect(await tokens.getAccessToken() == "second")
+        #expect(await tokens.getRefreshToken() == "second-refresh")
+        preview.select(.profile)
+        #expect(preview.session !== workspace)
+        preview.end()
+    }
+
     @Test("로그인 대기 중 탭을 바꾸면 마지막으로 선택한 목적지만 남는다")
     func latestTabReplacesPendingDestination() {
         let navigation = AppNavigation(launchPage: .login)

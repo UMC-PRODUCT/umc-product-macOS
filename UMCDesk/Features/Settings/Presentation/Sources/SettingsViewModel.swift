@@ -81,12 +81,8 @@ public final class SettingsViewModel {
     private(set) var historyIndex = 0
     @ObservationIgnored private var accountGeneration = 0
     @ObservationIgnored private var hasLoaded = false
-    #if DEBUG || UMC_PRERELEASE
     var isDesignPreview = false
     var previewShowsProfileMenu = false
-    #else
-    var isDesignPreview: Bool { false }
-    #endif
 
     public init(
         useCase: any SettingsUseCase,
@@ -98,7 +94,6 @@ public final class SettingsViewModel {
         self.systemActions = systemActions
     }
 
-    #if DEBUG || UMC_PRERELEASE
     func seedDesignProfile(_ value: SettingsProfile) {
         profile = value
         profileState = .loaded(value)
@@ -108,7 +103,6 @@ public final class SettingsViewModel {
             location: .authorized)
         cacheBytes = 128_000_000
     }
-    #endif
 
     var canGoBack: Bool { historyIndex > 0 }
     var canGoForward: Bool { historyIndex + 1 < history.count }

@@ -17,6 +17,12 @@ public enum SettingsPublishedDocument: String, Identifiable {
 }
 
 extension EnvironmentValues {
+    @Entry public var settingsWindowHandler: (@MainActor (String) -> Void)?
+
+    var settingsOpenWindow: @MainActor (String) -> Void {
+        settingsWindowHandler ?? { [openWindow] id in openWindow(id: id) }
+    }
+
     @Entry public var settingsPublishedDocument: (@MainActor (SettingsPublishedDocument, @escaping () -> Void) -> AnyView)?
 }
 
@@ -25,7 +31,7 @@ struct SettingsAboutView: View {
     @State private var selectedDocument: SettingsPublishedDocument?
 
     @Environment(\.settingsAppearancePalette) private var palette
-    @Environment(\.openWindow) private var openWindow
+    @Environment(\.settingsOpenWindow) private var openWindow
     @Bindable var viewModel: SettingsViewModel
     @Environment(\.openURL) private var openURL
 
@@ -57,7 +63,7 @@ struct SettingsAboutView: View {
                     ) {
                         UMCWindowOpeningButton(AppLocalization.string("업데이트 확인"),
                                                cornerRadius: UMCRadius.value12) {
-                            openWindow(id: DeskWindow.updates)
+                            openWindow(DeskWindow.updates)
                         } label: { _ in
                             Text(AppLocalization.string("업데이트 확인"))
                                 .umcTypography(.headlineRegular)
@@ -100,7 +106,7 @@ struct SettingsAboutView: View {
                             UMCWindowOpeningButton(
                                 AppLocalization.string("열기"), identifier: "settings.openSupport",
                                 cornerRadius: UMCRadius.value12,
-                                action: { openWindow(id: DeskWindow.support) }
+                                action: { openWindow(DeskWindow.support) }
                             ) { hovered in
                                 Text(AppLocalization.string("열기"))
                                     .umcTypography(.headlineRegular)

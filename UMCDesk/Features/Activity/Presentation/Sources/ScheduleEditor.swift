@@ -11,6 +11,7 @@ import MapKit
 import SwiftUI
 
 struct ScheduleEditor: View {
+    @Environment(\.sampleActivityVenue) private var sampleVenue
     let model: ActivityViewModel
     let capabilities: ScheduleCapabilities
     let dismiss: () -> Void
@@ -66,14 +67,24 @@ struct ScheduleEditor: View {
                     }.pickerStyle(.segmented)
                     if onsite {
                         TextField("장소명", text: $venue)
-                        Text("지도를 눌러 일정 장소를 선택해 주세요.").umcTypography(.calloutRegular)
-                        MapReader { proxy in
-                            Map {
-                                if let point { Marker(venue, coordinate: point) }
-                            }.onTapGesture { position in
-                                point = proxy.convert(position, from: .local)
+                        if let sampleVenue {
+                            Button {
+                                point = .init(latitude: sampleVenue.latitude, longitude: sampleVenue.longitude)
+                                if venue.isEmpty { venue = "학생회관 세미나실" }
+                            } label: {
+                                Label(point == nil ? "예시 장소 선택" : "예시 장소 선택됨",
+                                      systemImage: point == nil ? "mappin" : "checkmark")
                             }
-                        }.frame(height: 160)
+                        } else {
+                            Text("지도를 눌러 일정 장소를 선택해 주세요.").umcTypography(.calloutRegular)
+                            MapReader { proxy in
+                                Map {
+                                    if let point { Marker(venue, coordinate: point) }
+                                }.onTapGesture { position in
+                                    point = proxy.convert(position, from: .local)
+                                }
+                            }.frame(height: 160)
+                        }
                     }
                 }
                 if capabilities.canTrack {

@@ -68,6 +68,8 @@ final class MatchingProgressController: NSObject {
         }
     }
 
+    func refreshOnce() async { await refresh(ticket: revision) }
+
     private func refresh(ticket: UUID) async {
         do {
             let gisuId = try await repository.activeGisuId()

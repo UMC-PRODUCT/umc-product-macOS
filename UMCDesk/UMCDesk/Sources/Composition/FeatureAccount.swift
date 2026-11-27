@@ -27,16 +27,19 @@ struct FeatureAccount: Sendable {
     let environment: NetworkEnvironment
 
     init(memberID: String, boundClient bound: NetworkClient, environment: NetworkEnvironment,
-         defaults: UserDefaults) {
+         defaults: UserDefaults, journalDirectory: URL? = nil,
+         storeLocalImage: (@Sendable (URL) throws -> String)? = nil) {
         self.memberID = memberID
         self.client = bound
         self.environment = environment
         let adapter = MoyaNetworkAdapter(networkClient: bound)
         home = LiveHomeRepository(client: bound, baseURL: environment.baseURL)
         activity = LiveActivityRepository(
-            client: bound, baseURL: environment.baseURL, memberID: memberID
+            client: bound, baseURL: environment.baseURL, memberID: memberID,
+            journalDirectory: journalDirectory
         )
-        notices = LiveNoticeRepository(adapter: adapter, environment: environment) {
+        notices = LiveNoticeRepository(adapter: adapter, environment: environment,
+                                       journalDirectory: journalDirectory, storeLocalImage: storeLocalImage) {
             _ = try await bound.currentAccessToken()
         }
         posts = LiveCommunityPostRepository(

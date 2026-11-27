@@ -10,6 +10,10 @@ import MapKit
 import SwiftUI
 import UMCFoundation
 
+extension EnvironmentValues {
+    @Entry public var sampleActivityVenue: ActivityCoordinate?
+}
+
 enum ActivityTab: String, CaseIterable, Identifiable {
     case attendance = "출석 체크"
     case study = "스터디/활동"
@@ -509,6 +513,7 @@ private extension View {
 }
 
 private struct ActivityForm: View {
+    @Environment(\.sampleActivityVenue) private var sampleVenue
     let panel: Panel
     let model: ActivityViewModel
     let dismiss: () -> Void
@@ -522,20 +527,25 @@ private struct ActivityForm: View {
             case .location(let schedule):
                 Text("출석 위치 확인").umcTypography(.title2Bold)
                 if let coordinate = schedule.coordinate {
-                    let center = CLLocationCoordinate2D(
-                        latitude: coordinate.latitude,
-                        longitude: coordinate.longitude)
-                    Map(
-                        initialPosition: .region(
-                            MKCoordinateRegion(
-                                center: center, latitudinalMeters: 400, longitudinalMeters: 400
-                            ))
-                    ) {
-                        Marker(schedule.location ?? schedule.name, coordinate: center)
-                        MapCircle(center: center, radius: AttendanceLocation.radius)
-                            .foregroundStyle(UMCColor.Semantic.textBrandDefault.opacity(0.15))
-                    }.frame(height: 180).clipShape(.rect(cornerRadius: 12))
-                    Text("현재 위치가 일정 장소에서 50m 이내이면 좌표를 전송해 출석을 요청해요.")
+                    if sampleVenue != nil {
+                        Label(schedule.location ?? schedule.name, systemImage: "mappin.circle")
+                        Text("미리보기 장소의 좌표로 출석을 요청해요.")
+                    } else {
+                        let center = CLLocationCoordinate2D(
+                            latitude: coordinate.latitude,
+                            longitude: coordinate.longitude)
+                        Map(
+                            initialPosition: .region(
+                                MKCoordinateRegion(
+                                    center: center, latitudinalMeters: 400, longitudinalMeters: 400
+                                ))
+                        ) {
+                            Marker(schedule.location ?? schedule.name, coordinate: center)
+                            MapCircle(center: center, radius: AttendanceLocation.radius)
+                                .foregroundStyle(UMCColor.Semantic.textBrandDefault.opacity(0.15))
+                        }.frame(height: 180).clipShape(.rect(cornerRadius: 12))
+                        Text("현재 위치가 일정 장소에서 50m 이내이면 좌표를 전송해 출석을 요청해요.")
+                    }
                 }
                 Text("위치를 확인하기 어려우면 모바일 앱을 이용하거나 사유를 제출해 주세요.")
                     .foregroundStyle(.secondary)
@@ -576,7 +586,9 @@ private struct ActivityForm: View {
                     guard let venue = schedule.coordinate else {
                         throw AttendanceLocation.Failure.unavailable
                     }
-                    let coordinate = try await AttendanceLocation.verify(venue)
+                    let coordinate: ActivityCoordinate
+                    if sampleVenue != nil { coordinate = venue }
+                    else { coordinate = try await AttendanceLocation.verify(venue) }
                     try Task.checkCancellation()
                     _ = try await model.repository.attend(
                         scheduleID: schedule.id, reason: nil,

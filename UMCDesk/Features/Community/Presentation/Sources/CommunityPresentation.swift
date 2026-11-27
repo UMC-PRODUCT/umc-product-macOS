@@ -43,6 +43,7 @@ private struct ThreadBrowser: View {
     let management: any ThreadManagementRepository
     let defaults: UserDefaults
 
+    @Environment(\.threadNotificationCenter) private var notifications
     @FocusState private var resultsFocused: Bool
     @State private var query = ""
     @State private var filter = ThreadListFilter.all
@@ -135,7 +136,7 @@ private struct ThreadBrowser: View {
             }
             await load(offset: nil)
         }
-        .onReceive(NotificationCenter.default.publisher(for: .threadBrowserChanged)) { notice in
+        .onReceive(notifications.publisher(for: .threadBrowserChanged)) { notice in
             guard let key = notice.object as? ThreadWindowKey, key.accountID == accountID else { return }
             if notice.userInfo?["exit"] as? Bool == true && selection == key.threadID {
                 selection = nil

@@ -13,21 +13,26 @@ import UniformTypeIdentifiers
 public struct LiveNoticeRepository: NoticeRepository {
     private let adapter: MoyaNetworkAdapter
     private let environment: NetworkEnvironment
+    private let storeLocalImage: (@Sendable (URL) throws -> String)?
+    private let journalDirectory: URL?
     private let noticesPath = "/api/v1/notices"
 
     private let validateAccount: @Sendable () async throws -> Void
 
     public init(
         adapter: MoyaNetworkAdapter, environment: NetworkEnvironment,
+        journalDirectory: URL? = nil, storeLocalImage: (@Sendable (URL) throws -> String)? = nil,
         validateAccount: @escaping @Sendable () async throws -> Void
     ) {
+        self.storeLocalImage = storeLocalImage
+        self.journalDirectory = journalDirectory
         self.validateAccount = validateAccount
         self.adapter = adapter
         self.environment = environment
     }
 
     public func openPublicationJournal() async throws -> NoticePublicationJournal {
-        try await openPublicationJournal(root: nil)
+        try await openPublicationJournal(root: journalDirectory)
     }
 
     func openPublicationJournal(root: URL?) async throws -> NoticePublicationJournal {
@@ -112,6 +117,7 @@ public struct LiveNoticeRepository: NoticeRepository {
         else {
             throw ImageUploadError.invalidFile
         }
+        if let storeLocalImage { return try storeLocalImage(file) }
         let body = UploadBody(fileName: file.lastPathComponent, contentType: mime, fileSize: size)
         let ticket: UploadTicket = try await request(
             "/api/v1/storage/prepare-upload",
