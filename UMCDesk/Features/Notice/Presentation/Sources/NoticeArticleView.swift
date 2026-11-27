@@ -81,8 +81,9 @@ struct NoticeArticleView: View {
     let onAccessLost: () -> Void
     let onChanged: () -> Void
     let onRead: () -> Void
-    @State private var busy = false
-    @State private var failure: NoticeArticleFailure?
+    @State private var operation = NoticeArticleOperation()
+    private var busy: Bool { operation.isBusy }
+    private var failure: NoticeArticleFailure? { operation.failure }
 
     private func imageURL(_ image: NoticeAttachment) -> URL? {
         if let localImage { return image.fileId.flatMap(localImage) }
@@ -113,6 +114,10 @@ struct NoticeArticleView: View {
                         Text(article.metadata).umcTypography(.calloutRegular)
                             .foregroundStyle(UMCColor.Semantic.textNeutralMedium600)
                             .fixedSize(horizontal: false, vertical: true)
+                    }
+                    if let failure, failure.action == .delete {
+                        NoticeActionFailure(failure: failure)
+                            .padding(.top, UMCSpacing.value12)
                     }
                     Divider().padding(.vertical, UMCSpacing.value16)
                     VStack(alignment: .leading, spacing: UMCSpacing.value24) {
@@ -220,11 +225,10 @@ struct NoticeArticleView: View {
         .confirmationDialog("이 공지를 삭제할까요?", isPresented: $access.deletePrompt) {
             Button("공지 삭제", role: .destructive) {
                 Task {
-                    await perform {
-                        try await repository.delete(id: id)
-                        onChanged()
-                        onDelete()
-                    }
+                    await operation.delete(
+                        repository: repository, id: id,
+                        hasContent: { access.entry != nil }, onAccessLost: revokeAccess,
+                        onChanged: onChanged, onDelete: onDelete)
                 }
             }
         }
@@ -385,21 +389,11 @@ struct NoticeArticleView: View {
 
     private func perform(
         action: NoticeArticleFailure.Action = .load,
-        _ operation: () async throws -> Void
+        _ actionBody: () async throws -> Void
     ) async {
-        guard !busy else { return }
-        busy = true
-        failure = nil
-        defer { busy = false }
-        do { try await operation() } catch NoticeRequestFailure.accessDenied {
-            if !Task.isCancelled { revokeAccess() }
-        } catch {
-            if !Task.isCancelled {
-                failure = NoticeArticleFailure(
-                    message: error.localizedDescription, hasContent: access.entry != nil,
-                    action: access.entry == nil ? .load : action)
-            }
-        }
+        await operation.perform(
+            action: action, hasContent: { access.entry != nil },
+            onAccessLost: revokeAccess, actionBody)
     }
 }
 

@@ -19,6 +19,7 @@ Touch a marker in that folder to arm a scenario:
   deny-notice-detail-once        next detail returns 403
   fail-notice-read-once          read confirmation returns 503 without changing reads
   fail-notice-vote-once          vote response returns 503 without changing ballots
+  fail-notice-delete-once        delete returns 503 without removing the article
   fail-notice-images-once        image PATCH fails before saving
   fail-notice-links-once         link PATCH fails after any earlier image success
   drop-notice-create-once        create commits but returns 503 (uncertain publication)
@@ -121,6 +122,8 @@ def handle(handler, method, path, query, body, email):
         is_detail = (method == "GET" and path.startswith(ROOT + "/")
                      and path.removeprefix(ROOT + "/").isdigit())
         failures = [
+            (method == "DELETE" and path.removeprefix(ROOT + "/").isdigit(),
+             "fail-notice-delete-once", 503),
             (is_list and query.get("page", ["0"]) != ["0"], "fail-notice-page-once", 503),
             (is_detail, "deny-notice-detail-once", 403),
             (method == "POST" and path.endswith("/read"), "fail-notice-read-once", 503),

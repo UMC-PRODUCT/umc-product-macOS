@@ -17,7 +17,7 @@ struct NoticeReadingLayout {
 }
 
 struct NoticeArticleFailure {
-    enum Action { case load, vote, confirmRead }
+    enum Action { case load, vote, confirmRead, delete }
     let message: String
     let hasContent: Bool
     var action: Action = .load

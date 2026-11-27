@@ -123,6 +123,14 @@ class NoticeDesignFixtureTests(unittest.TestCase):
         self.request("POST", "/21/votes/responses", body={"optionIds": ["1"]})
         self.assertEqual(self.server.notice_state["reads"]["21"], set())
 
+    def test_delete_failure_preserves_article_until_explicit_retry(self):
+        self.arm("fail-notice-delete-once")
+        self.request("DELETE", "/21", status=503)
+        self.assertEqual(self.request(suffix="/21")["id"], "21")
+        self.request("DELETE", "/21")
+        self.assertNotIn("21", self.server.notice_state["entries"])
+        self.assertIn("22", self.server.notice_state["entries"])
+
 
 if __name__ == "__main__":
     unittest.main()

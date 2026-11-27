@@ -12,6 +12,61 @@ import UMCFoundation
 
 @MainActor
 struct NoticeListStateTests {
+    @Test func rejectedDeletionPreservesContentAndDoesNotReload() async throws {
+        let repository = ListRepository()
+        await repository.rejectDeletion(.rejected("삭제를 완료하지 못했습니다."))
+        let operation = NoticeArticleOperation()
+        let access = NoticeAccessState()
+        access.entry = try noticeEntry()
+        var changes = 0
+        var removals = 0
+        await operation.delete(
+            repository: repository, id: "1", hasContent: { access.entry != nil },
+            onAccessLost: { access.revoke() }, onChanged: { changes += 1 },
+            onDelete: { removals += 1 })
+        #expect(operation.failure?.action == .delete)
+        #expect(operation.failure?.isInitialLoad == false)
+        #expect(operation.failure?.message == "삭제를 완료하지 못했습니다.")
+        #expect(access.entry?.id == "1" && changes == 0 && removals == 0)
+        #expect(await repository.deletedIDs == ["1"])
+        #expect(await repository.pages.isEmpty)
+        #expect(!operation.isBusy)
+    }
+
+    @Test func deletionSuccessAndAccessLossKeepExistingCallbacks() async throws {
+        let repository = ListRepository()
+        let operation = NoticeArticleOperation()
+        let access = NoticeAccessState()
+        access.entry = try noticeEntry()
+        var changes = 0
+        var removals = 0
+        await operation.delete(
+            repository: repository, id: "1", hasContent: { access.entry != nil },
+            onAccessLost: { access.revoke() }, onChanged: { changes += 1 },
+            onDelete: { removals += 1 })
+        #expect(changes == 1 && removals == 1 && operation.failure == nil)
+        await repository.rejectDeletion(.accessDenied)
+        await operation.delete(
+            repository: repository, id: "1", hasContent: { access.entry != nil },
+            onAccessLost: { access.revoke() }, onChanged: { changes += 1 },
+            onDelete: { removals += 1 })
+        #expect(access.entry == nil && changes == 1 && removals == 1)
+        #expect(operation.failure == nil && !operation.isBusy)
+    }
+
+    @Test func anotherArticleOperationBlocksDuplicateDeletion() async {
+        let repository = ListRepository()
+        let operation = NoticeArticleOperation()
+        await operation.perform(hasContent: { true }, onAccessLost: {}) {
+            // The same guard protects delete while any article action is pending.
+            await operation.delete(
+                repository: repository, id: "1", hasContent: { true },
+                onAccessLost: {}, onChanged: {}, onDelete: {})
+        }
+        #expect(await repository.deletedIDs.isEmpty)
+        #expect(!operation.isBusy)
+    }
+
     @Test func newSelectionReturnsToSplitAfterFullReader() {
         var layout = NoticeReadingLayout()
         layout.toggle()
@@ -121,6 +176,9 @@ private actor ListRepository: NoticeRepository {
     enum Failure { case connection, denied }
     var pages: [Int] = []
     private var failure: Failure?
+    private var deletionFailure: NoticeRequestFailure?
+    var deletedIDs: [String] = []
+    func rejectDeletion(_ failure: NoticeRequestFailure) { deletionFailure = failure }
     func fail(_ value: Failure?) { failure = value }
     func activeGisu() async throws -> String { "10" }
     func canCompose(gisu: String) async throws -> Bool { true }
@@ -147,7 +205,10 @@ private actor ListRepository: NoticeRepository {
     func vote(options: [String], replacing: Bool, id: String) async throws { throw unused }
     func permissions(id: String) async throws -> Set<String> { throw unused }
     func edit(id: String, title: String, content: String, pinned: Bool) async throws { throw unused }
-    func delete(id: String) async throws { throw unused }
+    func delete(id: String) async throws {
+        deletedIDs.append(id)
+        if let deletionFailure { throw deletionFailure }
+    }
     func remind(id: String, challengers: [String]) async throws { throw unused }
     func replaceImages(_ files: [String], id: String) async throws { throw unused }
     func replaceLinks(_ links: [String], id: String) async throws { throw unused }
