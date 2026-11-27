@@ -1,10 +1,10 @@
 # 문의 채널 Figma 원본 재현 설계
 
-작성일: 2026-11-27  
-작성자: 제옹(euijjang97)  
-대상: UMC Desk · macOS · 1단계 원본 재현  
-현재 구현 기준: `origin/develop` [df02419ecab81b9e4d99aace288db045723e2898](https://github.com/UMC-PRODUCT/umc-product-macOS/tree/df02419ecab81b9e4d99aace288db045723e2898)  
-검토 상태: 동일 문서 커밋에 대한 독립 원본 대조 결과는 [문서 이슈](https://github.com/UMC-PRODUCT/umc-product-macOS/issues/189)에 연결된 PR에서 관리한다.
+- 작성일: 2026-11-27
+- 작성자: 제옹(euijjang97)
+- 대상: UMC Desk · macOS · 1단계 원본 재현
+- 현재 구현 기준: `origin/develop` [df02419ecab81b9e4d99aace288db045723e2898](https://github.com/UMC-PRODUCT/umc-product-macOS/tree/df02419ecab81b9e4d99aace288db045723e2898)
+- 검토 상태: 동일 문서 커밋에 대한 독립 원본 대조 결과는 [문서 이슈](https://github.com/UMC-PRODUCT/umc-product-macOS/issues/189)에 연결된 PR에서 관리한다.
 
 ## 원본 선정과 읽는 법
 
@@ -74,7 +74,7 @@ Q2에서는 대화 카드 안쪽 24, 타임라인 세로 간격 20, 수신 아�
 
 ## 색과 모드 상속
 
-문의 섹션의 explicitVariableModes는 비어 있다. 두 하위 섹션은 UMC Color(701:2261)를 각각 Light(701:0), Dark(746:0)로 지정한다. 34개 프레임은 각 섹션과 같은 UMC Color 모드를 다시 명시하며 87:2 컬렉션에도 Light 쪽 87:0, Dark 쪽 115:0을 지정한다. 자식의 명시적 값이 없으면 상위 모드를 따른다. Q1 Light 기본 CTA와 App Shell에도 701:0이 직접 지정돼 있다. Dark 자식까지 조회한 11개 화면 모두 App Shell은 Light로 강제된다. [Dark Q1-admin 레일](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1101-9962)을 기준으로 확인한다. [Dark 검색어 선택의 출석·과제 버튼](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1112-20294)도 Light 강제이며 stroke 2다. 바로 옆 영수증 버튼은 Dark 명시와 원격 단일 모드 fill을 함께 쓴다. 프레임 이름만 보고 모든 자식을 Dark로 바꾸면 두 버튼 모두 달라진다. 이름이 같은 원격 Color(단일 Mode 1)와 로컬 UMC Color는 별도 컬렉션이다. 단일 모드 색에 임의 Dark 변환을 적용하지 않는다. Q1 순위 행은 디자인 컨텍스트에서 아래 변 1단위 선이 확인된다.
+문의 섹션의 explicitVariableModes는 비어 있다. Q1 루트의 반경은 20이고 넘치는 콘텐츠를 자른다. 두 하위 섹션은 UMC Color(701:2261)를 각각 Light(701:0), Dark(746:0)로 지정한다. 34개 프레임은 각 섹션과 같은 UMC Color 모드를 다시 명시하며 87:2 컬렉션에도 Light 쪽 87:0, Dark 쪽 115:0을 지정한다. 자식의 명시적 값이 없으면 상위 모드를 따른다. Q1 Light 기본 CTA와 App Shell에도 701:0이 직접 지정돼 있다. Dark 자식까지 조회한 11개 화면 모두 App Shell은 Light로 강제된다. [Dark Q1-admin 레일](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1101-9962)을 기준으로 확인한다. [Dark 검색어 선택의 출석·과제 버튼](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1112-20294)도 Light 강제이며 stroke 2다. 바로 옆 영수증 버튼은 Dark 명시와 원격 단일 모드 fill을 함께 쓴다. 프레임 이름만 보고 모든 자식을 Dark로 바꾸면 두 버튼 모두 달라진다. 이름이 같은 원격 Color(단일 Mode 1)와 로컬 UMC Color는 별도 컬렉션이다. 단일 모드 색에 임의 Dark 변환을 적용하지 않는다. Q1 순위 행은 디자인 컨텍스트에서 아래 변 1단위 선이 확인된다.
 
 | 첫 사용 노드 | 원본 컬렉션 / 변수 | Light 해석 | Dark 해석 |
 | --- | --- | --- | --- |
@@ -1258,6 +1258,55 @@ Q5의 처리 정보 위 체크 목록, 적용/취소 → Q5. [Light 원본](http
 | [I1112:20187;879:20075](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=I1112-20187;879-20075) | 다시 검색 | T5 | 148×20 | HEIGHT / DISABLED / — / CENTER |
 
 </details>
+
+### 기본 렌더에서 숨겨진 레이어
+
+같은 이름은 최초 노드를 표시한다. 변수 토글로 드러나는 상태와 구형 레일·대체 입력처럼 기본 화면에서 그리지 않는 레이어가 함께 있다. 숨김 자체는 버튼이 비활성이라는 근거가 아니다.
+
+| 기본 렌더에서 숨김 | 대표 노드 |
+| --- | --- |
+| 아이콘 탐색 레일 | [1100:18966](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-18966) |
+| 이전 · 이동 기록 없음 | [1100:19011](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-19011) |
+| 앞으로 · 이동 기록 없음 | [1100:19014](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-19014) |
+| 질문이나 궁금한 내용을 검색하세요 | [1100:19033](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-19033) |
+| Rank 1 · 갱신 | [1112:20787](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1112-20787) |
+| Rank 2 · 갱신 | [1112:20794](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1112-20794) |
+| Flexible space | [1100:19089](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-19089) |
+| 탭 도구 모음 · 바깥 클릭 닫기 | [1100:19097](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-19097) |
+| 탭 도구 모음 · inquiry | [1100:19098](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-19098) |
+| 라벨/기능 요청 | [1100:19234](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-19234) |
+| 출석 오류 · 정보 확인 | [1100:19236](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-19236) |
+| 내 담당 문의 목록 | [1100:19275](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-19275) |
+| 미배정 문의 목록 | [1100:19294](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-19294) |
+| 미분류 문의 목록 | [1100:19329](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-19329) |
+| 탭 도구 모음 · inquiry_ops | [1100:19356](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-19356) |
+| 진행 중 | [1100:19555](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-19555) |
+| 답변 대기 안내 | [1100:19574](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-19574) |
+| Divider | [1100:19575](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-19575) |
+| 참고한 답변 · 출석 기록이 실제와 다르게 보여요 | [1100:19576](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-19576) |
+| 재문의한 메시지 정렬 | [1100:19577](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-19577) |
+| 메시지 입력 안내 | [1100:19585](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-19585) |
+| Composer actions | [1100:19587](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-19587) |
+| 종료 | [1100:19689](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-19689) |
+| 참고한 답변 | [1100:19841](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-19841) |
+| 받는 팀 선택 / 모달 | [1100:19870](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-19870) |
+| 검증된 답변 | [1100:19993](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-19993) |
+| ✓ 해결 응답을 기록했어요. 문의가 새로 등록되지는 않아요. | [1100:20004](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-20004) |
+| 접수 | [1100:20107](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-20107) |
+| 문의 내용 | [1100:20113](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-20113) |
+| 보낸 답변 정렬 | [1100:20123](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-20123) |
+| 출석 오류 | [1100:20152](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-20152) |
+| 정보 확인 | [1100:20154](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-20154) |
+| Badge/기능 요청 | [1100:20155](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-20155) |
+| Menu/담당자 | [1100:20164](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-20164) |
+| Menu/라벨 | [1100:20172](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-20172) |
+| Menu/대표 질문 | [1100:20190](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-20190) |
+| FAQ record/알림이 오지 않아요 | [1100:20302](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-20302) |
+| FAQ record/이전 버전의 로그인 오류 안내 | [1100:20305](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-20305) |
+| 수정 중 · 기존 발행본 공개 | [1100:20311](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-20311) |
+| FAQ 선택 안내 | [1100:20335](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-20335) |
+| 현재 선택 | [1102:9990](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1102-9990) |
+| ✓ | [1102:10952](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1102-10952) |
 
 ### 조회 범위와 남은 확인
 
