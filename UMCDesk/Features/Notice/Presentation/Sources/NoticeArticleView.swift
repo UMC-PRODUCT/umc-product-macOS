@@ -67,6 +67,8 @@ extension EnvironmentValues {
 }
 
 struct NoticeArticleView: View {
+    @Environment(\.locale) private var locale
+    @Environment(\.timeZone) private var timeZone
     @Environment(\.noticeLocalImage) private var localImage
     @Environment(\.openURL) private var openURL
     let repository: any NoticeRepository
@@ -236,8 +238,9 @@ struct NoticeArticleView: View {
                     [
                         vote.allowMultipleChoice ? "복수 선택" : "단일 선택",
                         vote.isAnonymous ? "익명" : "기명", "참여 \(vote.totalParticipants)명",
-                        "마감 \(vote.endsAtExclusive.prefix(10))",
-                    ].joined(separator: " · ")
+                        noticeVoteDeadline(vote.endsAtExclusive, locale: locale, timeZone: timeZone)
+                            .map { "마감 \($0)" },
+                    ].compactMap { $0 }.joined(separator: " · ")
                 )
                 .foregroundStyle(.secondary)
                 ForEach(vote.options, id: \.optionId) { option in
