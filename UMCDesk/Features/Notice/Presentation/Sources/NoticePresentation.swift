@@ -6,7 +6,6 @@
 import CoreUIComponents
 import CoreDesignSystem
 import CoreRouting
-import CoreUIComponents
 import Network
 import NoticeDomain
 import SwiftUI
@@ -39,6 +38,18 @@ final class NoticeBoardModel {
 
     init(repository: any NoticeRepository) {
         self.repository = repository
+    }
+
+    /// Uses the submitted keyword, never the text field's in-progress IME composition.
+    func filterSummary(pinnedOnly: Bool) -> String {
+        var labels = [noticeTabs.first { $0.value == tab }?.label ?? tab]
+        if tab == "CHALLENGER" {
+            labels.append(noticeParts.first { $0.value == part }?.label
+                          ?? AppLocalization.string("전체 파트"))
+        }
+        labels.append(pinnedOnly ? AppLocalization.string("고정") : AppLocalization.string("전체"))
+        if !keyword.isEmpty { labels.append(AppLocalization.string("검색: \(keyword)")) }
+        return labels.joined(separator: " · ")
     }
 
     func revokeArticle(_ id: String) {
@@ -92,8 +103,6 @@ final class NoticeBoardModel {
 }
 
 public struct NoticeBoardView: View {
-    @Environment(\.locale) private var locale
-    @Environment(\.timeZone) private var timeZone
     @State private var model: NoticeBoardModel
     @Environment(\.invalidateWindowDetail) private var invalidateDetail
     @WindowDetailSelection private var selection: String?
@@ -101,7 +110,7 @@ public struct NoticeBoardView: View {
     @State private var composing = false
     @State private var checkingWriter = false
     @State private var pinnedExpanded = true
-    @State private var fullReader = false
+    @State private var readingLayout = NoticeReadingLayout()
     @State private var pinnedOnly = false
 
     public init(repository: any NoticeRepository) {
@@ -114,9 +123,9 @@ public struct NoticeBoardView: View {
             Divider()
             HStack(spacing: 0) {
                 if let id = selection {
-                    if !fullReader {
+                    if !readingLayout.isFullReader {
                         noticeList
-                            .frame(minWidth: 168, idealWidth: 280, maxWidth: 340)
+                            .frame(minWidth: 280, idealWidth: 300, maxWidth: 340)
                         Divider()
                     }
                     NoticeArticleView(
@@ -186,12 +195,15 @@ public struct NoticeBoardView: View {
             if selection == nil {
                 Text("공지").umcTypography(.title1Bold).accessibilityAddTraits(.isHeader)
             } else {
-                Button("공지 목록", systemImage: "list.bullet") { selection = nil }
+                Button("공지 목록", systemImage: "list.bullet") {
+                    readingLayout.beginSelection()
+                    selection = nil
+                }
                 Button(
-                    fullReader ? "분할 보기" : "전체 읽기",
-                    systemImage: fullReader ? "sidebar.left" : "arrow.up.left.and.arrow.down.right"
+                    readingLayout.isFullReader ? "분할 보기" : "전체 읽기",
+                    systemImage: readingLayout.isFullReader ? "sidebar.left" : "arrow.up.left.and.arrow.down.right"
                 ) {
-                    fullReader.toggle()
+                    readingLayout.toggle()
                 }
             }
             Spacer()
@@ -222,18 +234,9 @@ public struct NoticeBoardView: View {
         VStack(alignment: .leading, spacing: UMCSpacing.value16) {
             HStack {
                 Spacer()
-                Button("초기화") {
-                    search = ""
-                    model.tab = "CHALLENGER"
-                    model.part = nil
-                    pinnedOnly = false
-                    searchNotices()
-                }
+                Button("초기화", action: resetFilters)
             }
-            HStack {
-                TextField("제목, 내용 검색", text: $search).onSubmit(searchNotices)
-                Button("검색", action: searchNotices)
-            }
+            NoticeSearchField(search: $search, submit: searchNotices)
             Picker("빠른 보기", selection: $pinnedOnly) {
                 Text("전체").tag(false)
                 Text("고정").tag(true)
@@ -254,48 +257,96 @@ public struct NoticeBoardView: View {
     }
 
     private var noticeList: some View {
-        ScrollView {
-            LazyVStack(alignment: .leading, spacing: UMCSpacing.value12) {
-                let pinned = model.entries.filter(\.mustRead)
-                if !pinned.isEmpty {
-                    DisclosureGroup("고정 공지 (\(pinned.count))", isExpanded: $pinnedExpanded) {
-                        ForEach(pinned, content: card)
+        VStack(alignment: .leading, spacing: UMCSpacing.value12) {
+            NoticeSearchField(search: $search, submit: searchNotices)
+            Text(model.filterSummary(pinnedOnly: pinnedOnly))
+                .umcTypography(.calloutRegular)
+                .foregroundStyle(UMCColor.Semantic.textNeutralMedium600)
+                .lineLimit(2)
+                .help(model.filterSummary(pinnedOnly: pinnedOnly))
+                .accessibilityLabel(model.filterSummary(pinnedOnly: pinnedOnly))
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: UMCSpacing.value8) {
+                    let pinned = model.entries.filter(\.mustRead)
+                    if !pinned.isEmpty {
+                        DisclosureGroup(isExpanded: $pinnedExpanded) {
+                            VStack(spacing: UMCSpacing.value8) {
+                                ForEach(pinned, content: card)
+                            }
+                        } label: {
+                            Text(AppLocalization.string("고정 공지 · 불러온 \(pinned.count)개"))
+                                .umcTypography(.calloutRegular)
+                        }
+                    }
+                    if !pinnedOnly {
+                        let recent = model.entries.filter { !$0.mustRead }
+                        if !recent.isEmpty { Text("최근 공지").umcTypography(.headlineBold) }
+                        ForEach(recent, content: card)
+                    }
+                    if model.isLoading {
+                        if model.entries.isEmpty { NoticeListPlaceholder() }
+                        else { ProgressView().controlSize(.small).frame(maxWidth: .infinity) }
+                    }
+                    if let error = model.error {
+                        VStack(alignment: .leading, spacing: UMCSpacing.value12) {
+                            if model.entries.isEmpty {
+                                Text(AppLocalization.string("공지를 불러오지 못했습니다")).umcTypography(.title4Bold)
+                            }
+                            Text((error as? UMCFoundation.NetworkError)?.userMessage
+                                 ?? error.localizedDescription)
+                            let retry = AppLocalization.string("다시 시도")
+                            UMCFocusableButton(retry, identifier: "notice.connection.retry") {
+                                Task { await model.load(page: model.failedPage) }
+                            } label: { hovered in
+                                Text(retry)
+                                    .foregroundStyle(UMCColor.Semantic.textBrandDefault)
+                                    .padding(UMCSpacing.value8)
+                                    .background(hovered ? UMCColor.Semantic.fillPrimaryStrong200
+                                                : UMCColor.Semantic.surfaceBrandWeak,
+                                                in: .rect(cornerRadius: UMCRadius.value6))
+                            }
+                            if model.entries.isEmpty, NoticeConnectionFailure.matches(error) {
+                                NoticeLetterRunner()
+                            }
+                        }
+                        .foregroundStyle(UMCColor.Semantic.textNeutralMedium600)
+                        .padding(UMCSpacing.value24)
+                        .frame(maxWidth: 680, alignment: .leading)
+                        .frame(maxWidth: .infinity)
+                    } else {
+                        let empty = NoticeEmptyState(
+                            entries: model.entries, loading: model.isLoading, hasError: false,
+                            keyword: model.keyword, pinnedOnly: pinnedOnly,
+                            hasNext: model.nextPage != nil)
+                        if empty != .none {
+                            VStack(alignment: .leading, spacing: UMCSpacing.value12) {
+                                Text(empty.message).umcTypography(.headlineRegular)
+                                if empty == .search { Button("초기화", action: resetFilters) }
+                            }
+                            .foregroundStyle(UMCColor.Semantic.textNeutralMedium600)
+                            .padding(UMCSpacing.value24)
+                            .frame(maxWidth: 680, alignment: .leading)
+                            .frame(maxWidth: .infinity)
+                        }
+                        if let next = model.nextPage, !model.isLoading {
+                            Button("더 보기") { Task { await model.load(page: next) } }
+                        }
                     }
                 }
-                if !pinnedOnly {
-                    let recent = model.entries.filter { !$0.mustRead }
-                    if !recent.isEmpty { Text("최근 공지").umcTypography(.headlineBold) }
-                    ForEach(recent, content: card)
-                } else if pinned.isEmpty && !model.isLoading && model.error == nil {
-                    Text("고정된 공지가 없습니다.").foregroundStyle(.secondary)
-                }
-                if model.isLoading { ProgressView().frame(maxWidth: .infinity) }
-                if let error = model.error {
-                    Text((error as? UMCFoundation.NetworkError)?.userMessage ?? error.localizedDescription)
-                        .foregroundStyle(.secondary)
-                    let retry = AppLocalization.string("다시 시도")
-                    UMCFocusableButton(retry, identifier: "notice.connection.retry") {
-                        Task { await model.load(page: model.failedPage) }
-                    } label: { hovered in
-                        Text(retry)
-                            .foregroundStyle(UMCColor.Semantic.textBrandDefault)
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 4)
-                            .background(hovered ? UMCColor.Semantic.fillPrimaryStrong200
-                                        : UMCColor.Semantic.surfaceBrandWeak,
-                                        in: .rect(cornerRadius: 5))
-                    }
-                    if model.entries.isEmpty, NoticeConnectionFailure.matches(error) {
-                        NoticeLetterRunner()
-                    }
-                } else if let next = model.nextPage, !model.isLoading {
-                    Button("더 보기") { Task { await model.load(page: next) } }
-                } else if model.entries.isEmpty, !model.isLoading {
-                    ContentUnavailableView("공지가 없습니다", systemImage: "megaphone")
-                }
+                .padding(2) // Leave the native keyboard focus ring room inside the scroll clip.
             }
         }
-        .padding(selection == nil ? UMCSpacing.value24 : UMCSpacing.value12)
+        .padding(UMCSpacing.value12)
+        .frame(maxWidth: selection == nil ? 960 : .infinity)
+        .frame(maxWidth: .infinity)
+    }
+
+    private func resetFilters() {
+        search = ""
+        model.tab = "CHALLENGER"
+        model.part = nil
+        pinnedOnly = false
+        searchNotices()
     }
 
     private func searchNotices() {
@@ -304,67 +355,15 @@ public struct NoticeBoardView: View {
     }
 
     private func card(_ entry: NoticeEntry) -> some View {
-        Button {
+        NoticeListRow(
+            entry: entry, selected: selection == entry.id,
+            confirmed: model.readIDs.contains(entry.id), showsPreview: selection == nil
+        ) {
+            readingLayout.beginSelection()
             selection = entry.id
-        } label: {
-            VStack(alignment: .leading, spacing: UMCSpacing.value4) {
-                Text(entry.title)
-                    .umcTypography(model.readIDs.contains(entry.id) ? .headlineRegular : .title3Bold)
-                HStack {
-                    Text(entry.audienceLabel).umcTypography(.footnoteRegular)
-                    if entry.mustRead { Label("고정", systemImage: "pin.fill") }
-                }
-                .foregroundStyle(UMCColor.Semantic.textBrandDefault)
-                if let deadline = noticeVoteDeadline(
-                    entry.vote?.endsAtExclusive, locale: locale, timeZone: timeZone
-                ) {
-                    Label("투표 마감 " + deadline, systemImage: "calendar.badge.clock")
-                        .umcTypography(.calloutRegular)
-                }
-                if selection == nil {
-                    Text(entry.content).lineLimit(2).foregroundStyle(.secondary)
-                }
-                HStack {
-                    Text(entry.metadata).umcTypography(.captionRegular)
-                    Spacer()
-                    if entry.hasLinks == true {
-                        Image(systemName: "link").accessibilityLabel("링크")
-                    }
-                    if entry.hasImages == true {
-                        Image(systemName: "photo").accessibilityLabel("사진")
-                    }
-                    if entry.hasVote == true {
-                        Image(systemName: "chart.bar").accessibilityLabel("투표")
-                    }
-                    if model.readIDs.contains(entry.id) { Label("읽음", systemImage: "checkmark") }
-                }
-                .foregroundStyle(.secondary)
-            }
-            .padding(.vertical, UMCSpacing.value16)
-            .padding(.horizontal, UMCSpacing.value20)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(
-                selection == entry.id
-                    ? UMCColor.Semantic.fillPrimaryStrong200
-                    : (entry.mustRead
-                        ? UMCColor.Semantic.surfaceBrandWeak
-                        : UMCColor.Custom.backgroundSurface)
-            )
-            .overlay(alignment: .leading) {
-                if entry.mustRead {
-                    Rectangle().fill(UMCColor.Semantic.textBrandDefault).frame(width: 3)
-                }
-            }
-            .clipShape(.rect(cornerRadius: UMCRadius.value16))
-            .overlay {
-                RoundedRectangle(cornerRadius: UMCRadius.value16)
-                    .strokeBorder(UMCColor.Semantic.borderNeutralWeak200)
-            }
-            .contentShape(.rect)
         }
-        .buttonStyle(.plain)
-        .accessibilityIdentifier("notice.row." + entry.id)
     }
+
 }
 
 let noticeTabs = [

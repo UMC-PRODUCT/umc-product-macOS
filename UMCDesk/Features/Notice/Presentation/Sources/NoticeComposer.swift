@@ -144,12 +144,18 @@ struct NoticeComposer: View {
                     }
                 }.frame(maxHeight: 100).disabled(busy)
             }
-            HStack {
+            VStack(alignment: .leading, spacing: UMCSpacing.value8) {
                 if !restored {
                     Button("작성 상태 다시 열기") { Task { await openJournal() } }.disabled(busy)
                 } else if publication.input != nil {
-                    Button("이 작성 시도 버리기") { discarding = true }.disabled(busy)
+                    Button("이 작성 시도 버리기", role: .destructive) { discarding = true }.disabled(busy)
                 }
+                if publication.needsListCheck {
+                    Button("별도 공지로 작성") { confirmingNew = true }.disabled(busy)
+                }
+            }
+            Divider()
+            HStack {
                 Button(publishedID == nil ? "취소" : "게시된 공지 열기") {
                     if let publishedID {
                         onPublished(publishedID)
@@ -162,8 +168,9 @@ struct NoticeComposer: View {
                 Spacer()
                 if busy { ProgressView().controlSize(.small) }
                 if publication.needsListCheck {
-                    Button("별도 공지로 작성") { confirmingNew = true }.disabled(busy)
                     Button("게시 결과 확인") { recover(nil) }
+                        .buttonStyle(.borderedProminent)
+                        .keyboardShortcut(.defaultAction)
                         .disabled(busy)
                 } else {
                     Button(
@@ -177,6 +184,7 @@ struct NoticeComposer: View {
                         }
                     }
                     .keyboardShortcut(.defaultAction)
+                    .buttonStyle(.borderedProminent)
                     .disabled(
                         !restored || publication.input.map { $0.gisu != gisu } == true
                             || (!valid && !publication.needsPollCheck) || busy)

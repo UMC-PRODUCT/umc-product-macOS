@@ -151,3 +151,30 @@ identity를 사용하며 임의의 `.id()` 변경으로 상태를 계속 초기�
 List·Table·Lazy 컨테이너는 화면 요구와 데이터 규모에 맞게 선택하고, row마다 조건으로
 개수가 바뀌거나 여러 View가 생성되는 구조는 비용을 확인한다. Equatable·Container/Presenter
 분리는 필요한 경계에만 적용한다. 자세한 규칙은 Apple `swiftui-specialist` reference를 읽는다.
+
+
+## 콘텐츠 위계와 상태의 공통화 범위
+
+2026-11-27 코드 대조 기준: 공통 컴포넌트는 `9ae10df`, 공지 UI는
+[`a166ee7`](https://github.com/UMC-PRODUCT/umc-product-macOS/commit/a166ee76773c38b1dc549aee4c4193c486c70142)
+및 [PR #180](https://github.com/UMC-PRODUCT/umc-product-macOS/pull/180).
+다른 탭에 적용할 권장 원칙을 기록한 것이며 다른 탭 기능 코드는 변경하지 않았다.
+실제 창의 대비·줄바꿈·입력·VoiceOver는 미검증 상태다.
+
+| 공통 원칙 | 적용할 화면/구조 | 공지 구현 근거 | 다른 탭 적용 시 주의/미적용 여부 |
+| --- | --- | --- | --- |
+| 목적에 맞는 읽기 폭과 제목/본문/메타 위계 | 긴 글·안내·상세 읽기 | `NoticeArticleView`의 가운데 읽기 열과 title1Bold/headlineRegular/calloutRegular | 공지 680pt 읽기·960pt 목록·280/300/340pt 분할·22/14/12pt는 화면별 값이다. 새 전역 토큰으로 승격하지 않는다. 채팅은 메시지 흐름, 캘린더는 시간축, 프로젝트 보드는 열 구조를 우선한다. |
+| 상태를 서로 다른 신호로 표현 | 선택·고정·읽음이 겹치는 목록 | `NoticeListRow`의 선택 테두리·핀·읽음·네이티브 포커스와 전체 제목 AX | 서버가 제공하지 않은 안 읽음·마감·전체 개수를 추정하지 않는다. 목록 플래그 때문에 행별 상세 요청을 추가하지 않는다. |
+| 고정 높이 대신 내용에 맞는 줄바꿈 | 긴 한글 제목·작성자·URL·선택지 | 제목2줄 행, 무제한 상세 제목, 선택지·링크의 세로 확장 | 좁은 창에서 버튼/조건 요약이 결과를 밀어내지 않게 제한한다. 축약한 제목·조건의 전체 값은 AX/help에 남긴다. 사진의 가로 스크롤은 본문 전체 가로 스크롤과 구별한다. |
+| 의미 있는 상태·복구 안내 | 최초 로딩·빈 결과·추가 페이지 실패·응답 오류 | 중립 placeholder3행, 고정의 불러온 범위, 행동 옆 작업 오류 | placeholder는 실제 항목처럼 선택·낭독하지 않는다. 실패한 쓰기를 조회 재시도로 표현하지 않는다. 권한 회수/필터 변경 정책은 UI 공통화와 별도로 검증한다. |
+
+구현 위치: [목록·상태](../../UMCDesk/Features/Notice/Presentation/Sources/NoticeListContent.swift),
+[상세·부속](../../UMCDesk/Features/Notice/Presentation/Sources/NoticeArticleView.swift).
+행동 배치와 상태별 주 버튼은 [탭 버튼 가이드](tab-button-guide.md#공지에서-확인한-원칙의-후속-적용-범위)를 함께 따른다.
+
+같은 구조를 적용한 뒤에는 1040×720/1440×960pt, Light/Dark, 긴 콘텐츠와 글자 확대를 확인한다.
+키보드/IME/VoiceOver, 메뉴·시트 Esc 복귀, 대비 증가·투명도 줄이기·Reduce Motion을 별도 검수한다.
+기존 공통 체크박스의 Reduce Motion 전환과 네이티브 키보드 조작을 유지하며 장식 모션을 추가하지 않는다.
+이 원칙을 적용하려고 `GeometryReader`나 측정값 State/PreferenceKey 환류를 도입하지 않는다.
+공지의 권한 회수 후 복구는 [#181](https://github.com/UMC-PRODUCT/umc-product-macOS/issues/181)에
+남아 있어 모든 상태가 완결된 모범 구현으로 취급하지 않는다.
