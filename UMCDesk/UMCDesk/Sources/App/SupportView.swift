@@ -12,9 +12,7 @@ import UMCFoundation
 struct SupportView: View {
     private enum Page {
         case answers, inquiries
-        #if DEBUG
         case operations
-        #endif
     }
     @State private var page = Page.answers
     @State private var composing = false
@@ -24,28 +22,35 @@ struct SupportView: View {
         switch page {
         case .answers: AppLocalization.string("문의")
         case .inquiries: AppLocalization.string("내 문의")
-        #if DEBUG
         case .operations: "문의 관리"
-        #endif
         }
     }
 
-    #if DEBUG
     @State private var fixture: SupportFixture?
 
     init(
-        designPreview: Bool = ProcessInfo.processInfo.arguments.contains("--support-preview"),
-        emptyInquiries: Bool = ProcessInfo.processInfo.arguments
-            .contains("--support-preview-empty")
+        designPreview: Bool,
+        emptyInquiries: Bool
     ) {
         let preview = designPreview || emptyInquiries
         let initialFixture = preview ? SupportFixture(emptyInquiries: emptyInquiries) : nil
         _fixture = State(initialValue: initialFixture)
         _page = State(initialValue: emptyInquiries ? .inquiries : .answers)
     }
-    #else
-    init() {}
-    #endif
+
+    init(fixture: SupportFixture) {
+        _fixture = State(initialValue: fixture)
+    }
+
+    init() {
+        #if DEBUG
+        let arguments = ProcessInfo.processInfo.arguments
+        self.init(designPreview: arguments.contains("--support-preview"),
+                  emptyInquiries: arguments.contains("--support-preview-empty"))
+        #else
+        self.init(designPreview: false, emptyInquiries: false)
+        #endif
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: UMCSpacing.value20) {
@@ -54,19 +59,15 @@ struct SupportView: View {
                     Text(heading).umcTypography(.largeTitle3Bold).accessibilityAddTraits(.isHeader)
                 }
                 Spacer()
-                #if DEBUG
                 if fixture != nil && page == .answers {
                     Button("문의하기") { composing = true }
                         .buttonStyle(.borderedProminent).modifier(SupportControlFill())
                 }
-                #endif
             }
             Picker(AppLocalization.string("고객센터"), selection: $page) {
                 Text(AppLocalization.string("많이 묻는 질문")).tag(Page.answers)
                 Text(AppLocalization.string("내 문의")).tag(Page.inquiries)
-                #if DEBUG
                 if fixture != nil { Text("운영").tag(Page.operations) }
-                #endif
             }
             .pickerStyle(.segmented).modifier(SupportControlFill())
             .labelsHidden()
@@ -76,12 +77,10 @@ struct SupportView: View {
                 SupportAnswersView(articles: articles, showInquiries: { page = .inquiries })
             case .inquiries:
                 inquiries
-            #if DEBUG
             case .operations:
                 if let fixture {
                     SupportInquiryPreview(fixture: fixture, isOperator: true) { page = .answers }
                 }
-            #endif
             }
         }
         .padding(UMCSpacing.value32)
@@ -89,7 +88,6 @@ struct SupportView: View {
                alignment: .topLeading)
         .background(UMCColor.Custom.backgroundDefault)
         .tint(UMCColor.Semantic.textBrandDefault)
-        #if DEBUG
         .safeAreaInset(edge: .bottom, alignment: .leading, spacing: 0) {
             if fixture != nil {
                 Label("로컬 디자인 프리뷰", systemImage: "hammer")
@@ -104,27 +102,20 @@ struct SupportView: View {
                 composing = false
             }
         }
-        #endif
     }
 
     private var articles: [SupportArticle] {
-        #if DEBUG
         if let fixture { return fixture.publishedArticles + SupportArticle.appGuide }
-        #endif
         return SupportArticle.appGuide
     }
 
     @ViewBuilder private var inquiries: some View {
-        #if DEBUG
         if let fixture {
             SupportInquiryPreview(fixture: fixture, initialTicket: createdTicket) { page = .answers }
                 .onAppear { createdTicket = nil }
         } else {
             serviceStatus
         }
-        #else
-        serviceStatus
-        #endif
     }
 
     private var serviceStatus: some View {
@@ -156,19 +147,11 @@ private struct SupportAnswersView: View {
     }
 
     private var showsRanking: Bool {
-        #if DEBUG
         search.isEmpty && category == nil && articles.contains { $0.dayReaders != nil }
-        #else
-        false
-        #endif
     }
 
     private func readers(_ article: SupportArticle) -> Int? {
-        #if DEBUG
         weekly ? article.weekReaders : article.dayReaders
-        #else
-        nil
-        #endif
     }
 
     private var matches: [SupportArticle] {

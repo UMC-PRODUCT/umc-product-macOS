@@ -14,7 +14,7 @@ import SwiftUI
 
 struct SettingsDialogContent: View {
     @Environment(\.settingsAppearancePalette) private var palette
-    @Environment(\.openWindow) private var openWindow
+    @Environment(\.settingsOpenWindow) private var openWindow
     let dialog: SettingsDialog
     @Bindable var viewModel: SettingsViewModel
     private enum LinkFocus: Hashable {
@@ -274,7 +274,7 @@ struct SettingsDialogContent: View {
                     dialogError
                     Button(AppLocalization.string("담당 운영진에게 문의")) {
                         viewModel.dismissDialog()
-                        openWindow(id: DeskWindow.support)
+                        openWindow(DeskWindow.support)
                     }
                     .buttonStyle(SettingsPlainButtonStyle())
                     .foregroundStyle(palette.textBrandDefault)

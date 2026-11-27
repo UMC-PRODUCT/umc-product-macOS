@@ -8,7 +8,9 @@
 import AppKit
 import CommunityDomain
 import CoreDesignSystem
+import CoreRouting
 import SwiftUI
+import UMCFoundation
 
 public struct CommunityThreadsView: View {
     private let accountID: String
@@ -36,6 +38,59 @@ public struct CommunityThreadsView: View {
     }
 }
 
+/// Restoring a paginated thread fetches its detail independently of the current list.
+@MainActor @Observable
+final class ThreadRestoration {
+    private(set) var state: Loadable<CommunityThread> = .idle
+
+    func load(id: String, repository: any CommunityThreadRepository) async {
+        state = .loading
+        do {
+            let thread = try await repository.thread(id: id)
+            if !Task.isCancelled { state = .loaded(thread) }
+        } catch {
+            if !Task.isCancelled { state = .failed(error) }
+        }
+    }
+}
+
+struct RestoredThreadPane<Content: View>: View {
+    let id: String
+    let listed: CommunityThread?
+    let repository: any CommunityThreadRepository
+    let content: (CommunityThread) -> Content
+    @State private var restoration = ThreadRestoration()
+    @State private var attempt = 0
+
+    private var thread: CommunityThread? {
+        if let listed { return listed }
+        if case .loaded(let restored) = restoration.state { return restored }
+        return nil
+    }
+
+    var body: some View {
+        Group {
+            // Keep the editor at the same SwiftUI identity when pagination supplies this row.
+            if let thread { content(thread) }
+            else if case .failed(let error) = restoration.state {
+                ContentUnavailableView {
+                    Label("스레드를 열지 못했어요", systemImage: "bubble.left")
+                } description: {
+                    Text(error.localizedDescription)
+                } actions: {
+                    Button("다시 시도") { attempt += 1 }
+                }
+            } else {
+                ProgressView("스레드를 불러오는 중")
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .task(id: listed == nil ? attempt : nil) {
+            if thread == nil { await restoration.load(id: id, repository: repository) }
+        }
+    }
+}
+
 private struct ThreadBrowser: View {
     let accountID: String
     let repository: any CommunityThreadRepository
@@ -43,6 +98,7 @@ private struct ThreadBrowser: View {
     let management: any ThreadManagementRepository
     let defaults: UserDefaults
 
+    @Environment(\.threadNotificationCenter) private var notifications
     @FocusState private var resultsFocused: Bool
     @State private var query = ""
     @State private var filter = ThreadListFilter.all
@@ -50,7 +106,7 @@ private struct ThreadBrowser: View {
     @State private var focusRequest = 0
     @State private var threads: [CommunityThread] = []
     @State private var next: String?
-    @State private var selection: String?
+    @WindowDetailSelection private var selection: String?
     @State private var reload = 0
     @State private var loading = false
     @State private var failure: String?
@@ -114,11 +170,10 @@ private struct ThreadBrowser: View {
             .padding(UMCSpacing.value16)
             .frame(minWidth: 220, idealWidth: 344, maxWidth: 344,
                    minHeight: 0, maxHeight: .infinity, alignment: .topLeading)
-            if let item = threads.first(where: { $0.id == selection }) {
-                ThreadDestination(accountID: accountID, thread: item, detached: false,
-                                  repository: repository, conversations: conversations,
-                                  management: management, defaults: defaults)
-                    .id(item.id)
+            if let selection {
+                RestoredThreadPane(id: selection, listed: threads.first { $0.id == selection },
+                                   repository: repository, content: destination)
+                    .id(selection)
             } else {
                 ContentUnavailableView(threads.isEmpty && !loading && failure == nil
                     ? "표시할 스레드가 없어요" : "스레드를 선택하세요",
@@ -130,12 +185,12 @@ private struct ThreadBrowser: View {
         .task(id: search + [String(reload)]) {
             if loadedSearch != search {
                 threads = []
-                selection = nil
+                if loadedSearch != nil { selection = nil }
                 next = nil
             }
             await load(offset: nil)
         }
-        .onReceive(NotificationCenter.default.publisher(for: .threadBrowserChanged)) { notice in
+        .onReceive(notifications.publisher(for: .threadBrowserChanged)) { notice in
             guard let key = notice.object as? ThreadWindowKey, key.accountID == accountID else { return }
             if notice.userInfo?["exit"] as? Bool == true && selection == key.threadID {
                 selection = nil
@@ -205,6 +260,13 @@ private struct ThreadBrowser: View {
             .listRowBackground(UMCColor.Custom.backgroundDefault)
             .tag(item.id)
         }
+    }
+
+    private func destination(for item: CommunityThread) -> some View {
+        ThreadDestination(accountID: accountID, thread: item, detached: false,
+                          repository: repository, conversations: conversations,
+                          management: management, defaults: defaults)
+            .id(item.id)
     }
 
     private func showAll() {

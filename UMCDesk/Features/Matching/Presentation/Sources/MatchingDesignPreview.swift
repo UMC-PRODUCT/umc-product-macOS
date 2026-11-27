@@ -5,13 +5,17 @@
 //  Created by euijjang97 on 11/22/26.
 //
 
-#if DEBUG
 import Foundation
 import MatchingDomain
 import SwiftUI
 
 @MainActor
 public enum MatchingDesignPreview {
+    public static func makeUseCase() -> any MatchingUseCase {
+        DefaultMatchingUseCase(repository: MatchingPreviewRepository())
+    }
+
+    #if DEBUG
     @ViewBuilder public static func view(
         destination: MatchingDestination = .explore, showsDetail: Bool = false
     ) -> some View {
@@ -25,6 +29,7 @@ public enum MatchingDesignPreview {
             MatchingView(repository: useCase, gisuId: "10", initialDestination: destination, applicantParts: ["WEB"])
         }
     }
+    #endif
 }
 
 actor MatchingPreviewRepository: MatchingRepository {
@@ -33,24 +38,34 @@ actor MatchingPreviewRepository: MatchingRepository {
     private let roundId = "101"
     private var savedAnswers: [String: [MatchingAnswer]] = [:]
     private var drafts: Set<String> = ["2"]
-    private var submitted: Set<String> = ["1"]
+    private var submitted: Set<String> = ["1", "3"]
+
+    var names = ["1": "모아", "2": "바로", "3": "사이"]
+    var stages = ["1": "IN_PROGRESS", "2": "PENDING_REVIEW", "3": "DRAFT"]
+    var descriptions = ["1": "취향을 모으고, 나다운 선택을 발견하는 쇼핑.",
+                        "2": "우리 동네의 작은 소식을 더 가깝게.", "3": "함께 고르는 즐거움, 함께하는 소비."]
+    var links: [String: String] = [:]
+    var quotasByProject: [String: [String: Int]] = [:]
+    var forms: [String: EditableMatchingForm] = [:]
+    var decisions: [String: [String: String]] = [:]
+    var teams: [String: OperationsTeam] = [:]
+    var images: [String: [String: String]] = [:]
+    var nextProjectID = 4
+    private var customRounds: [MatchingRound]?
 
     private var projects: [MatchingProject] {
-        let entries = [
-            ("1", "모아", "취향을 모으고, 나다운 선택을 발견하는 쇼핑."),
-            ("2", "바로", "우리 동네의 작은 소식을 더 가깝게."),
-            ("3", "장바구니", "함께 고르는 즐거움, 함께하는 소비.")
-        ]
-        return entries.map { id, name, description in
+        names.keys.sorted().map { id in
+            let name = names[id] ?? ""
+            let description = descriptions[id]
             let quotas = ["MOBILE_PRODUCT_ENGINEER", "WEB_PRODUCT_ENGINEER", "DESIGN"]
                 .enumerated().map { index, part in
                     MatchingQuota(part: part, currentCount: index == 1 ? "0" : "1",
-                                  quota: index == 2 ? "1" : "2",
+                                  quota: String(quotasByProject[id]?[part] ?? (index == 2 ? 1 : 2)),
                                   status: index == 2 ? "COMPLETED" : "RECRUITING")
                 }
             return MatchingProject(id: id, name: name, description: description,
-                thumbnailImageUrl: nil, productOwner: owner, partQuotas: quotas,
-                partQuotaStatus: "RECRUITING", logoImageUrl: nil, externalLink: nil,
+                thumbnailImageUrl: images[id]?["PROJECT_THUMBNAIL"], productOwner: owner, partQuotas: quotas,
+                partQuotaStatus: "RECRUITING", logoImageUrl: images[id]?["PROJECT_LOGO"], externalLink: links[id],
                 applicationFormId: "11")
         }
     }
@@ -82,6 +97,7 @@ actor MatchingPreviewRepository: MatchingRepository {
     }
 
     func rounds(chapterId: String?) async throws -> [MatchingRound] {
+        if let customRounds { return customRounds.filter { chapterId == nil || $0.chapterId == chapterId } }
         func instant(_ offset: TimeInterval) -> String {
             Calendar.current.startOfDay(for: .now).addingTimeInterval(offset).ISO8601Format()
         }
@@ -98,11 +114,11 @@ actor MatchingPreviewRepository: MatchingRepository {
     func myApplications(gisuId: String, drafts: Bool) async throws -> [MatchingApplication] {
         let ids = drafts ? self.drafts : submitted
         return projects.filter { ids.contains($0.id) }.map { project in
-            .init(applicationId: project.id, projectId: project.id,
+            .init(applicationId: project.id == "3" ? nil : project.id, projectId: project.id,
                   project: .init(name: project.name, thumbnailImageUrl: nil,
                                  productOwner: owner, partQuotas: project.partQuotas),
                   matchingRound: .init(id: roundId, type: "PLAN_DEVELOPER", phase: "FIRST"),
-                  status: drafts ? "DRAFT" : nil)
+                  status: drafts ? "DRAFT" : (project.id == "3" ? "APPROVED" : nil))
         }
     }
 
@@ -127,7 +143,7 @@ actor MatchingPreviewRepository: MatchingRepository {
     func application(projectId: String, applicationId: String) async throws -> MatchingApplicationDetail {
         let stamp = Calendar.current.startOfDay(for: .now).addingTimeInterval(-3600).ISO8601Format()
         let draft = drafts.contains(projectId)
-        return .init(applicationId: applicationId, status: draft ? "DRAFT" : nil,
+        return .init(applicationId: applicationId, status: draft ? "DRAFT" : (projectId == "3" ? "APPROVED" : nil),
                      formResponse: .init(sections: sections(for: projectId), lastSavedAt: stamp),
                      submittedAt: draft ? nil : stamp)
     }
@@ -151,23 +167,45 @@ actor MatchingPreviewRepository: MatchingRepository {
         submitted.remove(projectId)
     }
 
-    func canManageSchedule(chapterId: String) async throws -> Bool { false }
-    func saveSchedule(chapterId: String, type: String, rounds: [MatchingRoundChange]) async throws {
-        throw unavailable
+    func canManageSchedule(chapterId: String) async throws -> Bool { chapterId == "1" }
+
+    func saveSchedule(chapterId: String, type: String, rounds changes: [MatchingRoundChange]) async throws {
+        let previous = try await rounds(chapterId: nil)
+        customRounds = previous.filter { $0.chapterId != chapterId || $0.type != type }
+            + changes.enumerated().map { index, change in
+                let old = previous.first { $0.chapterId == chapterId && $0.type == type && $0.phase == change.phase }
+                return MatchingRound(id: old?.id ?? type + "-" + String(index), name: change.name,
+                    type: type, phase: change.phase, chapterId: chapterId, startsAt: change.startsAt,
+                    endsAt: change.endsAt, decisionDeadline: change.decisionDeadline,
+                    resultPublishAt: change.resultPublishAt, description: change.description)
+            }
     }
-    func deleteSchedule(chapterId: String, type: String) async throws { throw unavailable }
-    func autoDecide(roundId: String) async throws { throw unavailable }
+
+    func deleteSchedule(chapterId: String, type: String) async throws {
+        customRounds = try await rounds(chapterId: nil).filter { $0.chapterId != chapterId || $0.type != type }
+    }
+
+    func autoDecide(roundId: String) async throws {
+        customRounds = try await rounds(chapterId: nil).map { round in
+            guard round.id == roundId else { return round }
+            return .init(id: round.id, name: round.name, type: round.type, phase: round.phase,
+                chapterId: round.chapterId, startsAt: round.startsAt, endsAt: round.endsAt,
+                decisionDeadline: round.decisionDeadline, resultPublishAt: round.resultPublishAt,
+                description: round.description, autoDecisionExecutedAt: Date.now.ISO8601Format())
+        }
+    }
 
     func publishedTeam(projectId: String) async throws -> OperationsTeam? {
         try await team(projectId: projectId)
     }
 
     private var unavailable: URLError { URLError(.resourceUnavailable) }
-    func uploadPortfolio(file: URL) async throws -> String { throw unavailable }
+    func uploadPortfolio(file: URL) async throws -> String { UUID().uuidString }
 
 
 }
 
+#if DEBUG
 #Preview("Light") { MatchingDesignPreview.view().preferredColorScheme(.light) }
 #Preview("Dark") { MatchingDesignPreview.view().preferredColorScheme(.dark) }
 #endif

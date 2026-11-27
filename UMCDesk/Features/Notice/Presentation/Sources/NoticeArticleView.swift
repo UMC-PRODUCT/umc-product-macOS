@@ -62,17 +62,28 @@ final class NoticeAccessState {
     }
 }
 
+extension EnvironmentValues {
+    @Entry public var noticeLocalImage: (@Sendable (String) -> URL?)?
+}
+
 struct NoticeArticleView: View {
+    @Environment(\.noticeLocalImage) private var localImage
+    @Environment(\.openURL) private var openURL
     let repository: any NoticeRepository
     @State private var access = NoticeAccessState()
     let id: String
     let confirmed: Bool
-    let onBack: () -> Void
+    let onDelete: () -> Void
     let onAccessLost: () -> Void
     let onChanged: () -> Void
     let onRead: () -> Void
     @State private var busy = false
     @State private var error: String?
+
+    private func imageURL(_ image: NoticeAttachment) -> URL? {
+        if let localImage { return image.fileId.flatMap(localImage) }
+        return noticeWebURL(image.url)
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: UMCSpacing.value16) {
@@ -117,8 +128,9 @@ struct NoticeArticleView: View {
                         .environment(
                             \.openURL,
                             OpenURLAction { url in
-                                noticeWebURL(url.absoluteString) == nil
-                                    ? .discarded : .systemAction
+                                guard noticeWebURL(url.absoluteString) != nil else { return .discarded }
+                                openURL(url)
+                                return .handled
                             })
                         if let images = article.images, !images.isEmpty {
                             GroupBox("사진 \(images.count)") {
@@ -128,7 +140,7 @@ struct NoticeArticleView: View {
                                             Button {
                                                 access.photo = image
                                             } label: {
-                                                AsyncImage(url: noticeWebURL(image.url)) { image in
+                                                AsyncImage(url: imageURL(image)) { image in
                                                     image.resizable().scaledToFill()
                                                 } placeholder: {
                                                     Image(systemName: "photo")
@@ -174,7 +186,7 @@ struct NoticeArticleView: View {
                     await perform {
                         try await repository.delete(id: id)
                         onChanged()
-                        onBack()
+                        onDelete()
                     }
                 }
             }
@@ -201,7 +213,7 @@ struct NoticeArticleView: View {
         }
         .sheet(item: $access.photo) { imageFile in
             VStack {
-                AsyncImage(url: noticeWebURL(imageFile.url)) { phase in
+                AsyncImage(url: imageURL(imageFile)) { phase in
                     if let image = phase.image {
                         image.resizable().scaledToFit()
                     } else if phase.error != nil {

@@ -7,6 +7,7 @@
 
 import CommunityDomain
 import CoreDesignSystem
+import CoreRouting
 import SwiftUI
 
 public struct CommunityPostBoardView: View {
@@ -31,7 +32,7 @@ private struct Board: View {
     @State private var scope = CommunityPostScope.all
     @State private var category: CommunityPostCategory?
     @State private var rows: [CommunityPost] = []
-    @State private var selected: String?
+    @WindowDetailSelection private var selected: String?
     @State private var next: String?
     @State private var failure: String?
     @State private var loading = true
@@ -141,7 +142,7 @@ private struct Board: View {
         .background(UMCColor.Custom.backgroundDefault)
         .task(id: version) {
             if loadedRequest != request {
-                selected = nil
+                if loadedRequest != nil { selected = nil }
                 rows = []
                 next = nil
             }
