@@ -82,7 +82,7 @@ struct NoticeArticleView: View {
     let onChanged: () -> Void
     let onRead: () -> Void
     @State private var busy = false
-    @State private var error: String?
+    @State private var failure: NoticeArticleFailure?
 
     private func imageURL(_ image: NoticeAttachment) -> URL? {
         if let localImage { return image.fileId.flatMap(localImage) }
@@ -90,6 +90,7 @@ struct NoticeArticleView: View {
     }
 
     var body: some View {
+        ScrollViewReader { scroll in
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
                 if let article = access.entry {
@@ -176,26 +177,30 @@ struct NoticeArticleView: View {
                                    systemImage: confirmed ? "checkmark.circle.fill"
                                        : "checkmark.circle") {
                                 Task {
-                                    await perform {
+                                    await perform(action: .confirmRead) {
                                         try await repository.confirmRead(id: id)
                                         onRead()
                                     }
                                 }
                             }
                             .disabled(confirmed || busy)
+                            if let failure, failure.action == .confirmRead {
+                                NoticeActionFailure(failure: failure)
+                            }
                         }
                     }
                 }
-                if let error {
+                if let failure, failure.action == .load {
                     VStack(alignment: .leading, spacing: UMCSpacing.value12) {
-                        Text(AppLocalization.string("공지를 불러오지 못했습니다")).umcTypography(.title4Bold)
-                        Text(error).fixedSize(horizontal: false, vertical: true)
+                        Text(failure.heading).umcTypography(.title4Bold)
+                        Text(failure.message).fixedSize(horizontal: false, vertical: true)
                         Button("다시 불러오기") {
                             Task { await perform { try await reloadWithPermissions() } }
                         }.disabled(busy)
                     }
                     .foregroundStyle(UMCColor.Semantic.textNeutralMedium600)
                     .padding(.vertical, UMCSpacing.value24)
+                    .id("notice.article.failure")
                 } else if access.entry == nil && busy {
                     VStack(alignment: .leading, spacing: UMCSpacing.value12) {
                         Text(AppLocalization.string("공지를 불러오는 중")).umcTypography(.title4Bold)
@@ -206,6 +211,10 @@ struct NoticeArticleView: View {
             .frame(maxWidth: 680, alignment: .leading)
             .padding(UMCSpacing.value24)
             .frame(maxWidth: .infinity)
+        }
+        .onChange(of: failure?.message) { _, message in
+            if message != nil { scroll.scrollTo("notice.article.failure", anchor: .center) }
+        }
         }
         .task { await perform { try await reloadWithPermissions() } }
         .confirmationDialog("이 공지를 삭제할까요?", isPresented: $access.deletePrompt) {
@@ -280,69 +289,72 @@ struct NoticeArticleView: View {
 
     private func poll(_ vote: NoticeVote) -> some View {
         VStack(alignment: .leading, spacing: UMCSpacing.value12) {
-                Label(vote.status == "OPEN" ? "진행 중인 투표" : "투표", systemImage: "chart.bar")
-                    .umcTypography(.calloutRegular)
-                Text(vote.title).umcTypography(.title4Bold)
-                Text(
-                    [
-                        vote.allowMultipleChoice ? "복수 선택" : "단일 선택",
-                        vote.isAnonymous ? "익명" : "기명", "참여 \(vote.totalParticipants)명",
-                    ].compactMap { $0 }.joined(separator: " · ")
-                )
+            Label(vote.status == "OPEN" ? "진행 중인 투표" : "투표", systemImage: "chart.bar")
                 .umcTypography(.calloutRegular)
-                .foregroundStyle(UMCColor.Semantic.textNeutralMedium600)
-                if let deadline = noticeVoteDeadline(
-                    vote.endsAtExclusive, locale: locale, timeZone: timeZone
-                ) {
-                    Label("마감 " + deadline, systemImage: "calendar.badge.clock")
-                        .umcTypography(.calloutRegular)
-                }
-                ForEach(vote.options, id: \.optionId) { option in
-                    Toggle(isOn: Binding {
-                            access.selection.contains(option.optionId)
-                        } set: { enabled in
-                            if enabled {
-                                if !vote.allowMultipleChoice { access.selection.removeAll() }
-                                access.selection.insert(option.optionId)
-                            } else {
-                                access.selection.remove(option.optionId)
-                            }
-                        }
-                    ) {
-                        HStack(alignment: .top, spacing: UMCSpacing.value8) {
-                            Text(option.content).umcTypography(.headlineRegular)
-                                .fixedSize(horizontal: false, vertical: true)
-                            Spacer(minLength: 0)
-                            Text("\(option.voteCount)표").umcTypography(.calloutRegular)
-                                .foregroundStyle(UMCColor.Semantic.textNeutralMedium600)
+            Text(vote.title).umcTypography(.title4Bold)
+            Text(
+                [
+                    vote.allowMultipleChoice ? "복수 선택" : "단일 선택",
+                    vote.isAnonymous ? "익명" : "기명", "참여 \(vote.totalParticipants)명",
+                ].compactMap { $0 }.joined(separator: " · ")
+            )
+            .umcTypography(.calloutRegular)
+            .foregroundStyle(UMCColor.Semantic.textNeutralMedium600)
+            if let deadline = noticeVoteDeadline(
+                vote.endsAtExclusive, locale: locale, timeZone: timeZone
+            ) {
+                Label("마감 " + deadline, systemImage: "calendar.badge.clock")
+                    .umcTypography(.calloutRegular)
+            }
+            ForEach(vote.options, id: \.optionId) { option in
+                Toggle(isOn: Binding {
+                        access.selection.contains(option.optionId)
+                    } set: { enabled in
+                        if enabled {
+                            if !vote.allowMultipleChoice { access.selection.removeAll() }
+                            access.selection.insert(option.optionId)
+                        } else {
+                            access.selection.remove(option.optionId)
                         }
                     }
-                    .toggleStyle(UMCCheckboxStyle())
-                    .disabled(vote.status != "OPEN" || busy)
+                ) {
+                    HStack(alignment: .top, spacing: UMCSpacing.value8) {
+                        Text(option.content).umcTypography(.headlineRegular)
+                            .fixedSize(horizontal: false, vertical: true)
+                        Spacer(minLength: 0)
+                        Text("\(option.voteCount)표").umcTypography(.calloutRegular)
+                            .foregroundStyle(UMCColor.Semantic.textNeutralMedium600)
+                    }
                 }
-                let previous = Set(vote.mySelectedOptionIds)
-                Button(access.selection.isEmpty && !previous.isEmpty ? "투표 취소" : "투표 제출") {
-                    Task {
-                        await perform {
-                            let desired = access.selection
-                            do {
-                                try await repository.vote(
-                                    options: desired.sorted(),
-                                    replacing: !previous.isEmpty, id: id)
-                            } catch let rejection as NoticeRequestFailure {
-                                throw rejection
-                            } catch {
-                                access.entry = nil
-                                try await reloadWithPermissions()
-                                if access.selection == desired { return }
-                                throw NoticeRequestFailure.rejected("현재 투표 결과를 확인한 뒤 다시 선택하세요.")
-                            }
+                .toggleStyle(UMCCheckboxStyle())
+                .disabled(vote.status != "OPEN" || busy)
+            }
+            let previous = Set(vote.mySelectedOptionIds)
+            Button(access.selection.isEmpty && !previous.isEmpty ? "투표 취소" : "투표 제출") {
+                Task {
+                    await perform(action: .vote) {
+                        let desired = access.selection
+                        do {
+                            try await repository.vote(
+                                options: desired.sorted(),
+                                replacing: !previous.isEmpty, id: id)
+                        } catch let rejection as NoticeRequestFailure {
+                            throw rejection
+                        } catch {
                             access.entry = nil
                             try await reloadWithPermissions()
+                            if access.selection == desired { return }
+                            throw NoticeRequestFailure.rejected("현재 투표 결과를 확인한 뒤 다시 선택하세요.")
                         }
+                        access.entry = nil
+                        try await reloadWithPermissions()
                     }
                 }
-                .disabled(vote.status != "OPEN" || busy || previous == access.selection)
+            }
+            .disabled(vote.status != "OPEN" || busy || previous == access.selection)
+            if let failure, failure.action == .vote {
+                NoticeActionFailure(failure: failure)
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(UMCSpacing.value16)
@@ -371,15 +383,22 @@ struct NoticeArticleView: View {
         onAccessLost()
     }
 
-    private func perform(_ operation: () async throws -> Void) async {
+    private func perform(
+        action: NoticeArticleFailure.Action = .load,
+        _ operation: () async throws -> Void
+    ) async {
         guard !busy else { return }
         busy = true
-        error = nil
+        failure = nil
         defer { busy = false }
         do { try await operation() } catch NoticeRequestFailure.accessDenied {
             if !Task.isCancelled { revokeAccess() }
         } catch {
-            if !Task.isCancelled { self.error = error.localizedDescription }
+            if !Task.isCancelled {
+                failure = NoticeArticleFailure(
+                    message: error.localizedDescription, hasContent: access.entry != nil,
+                    action: access.entry == nil ? .load : action)
+            }
         }
     }
 }
@@ -670,5 +689,20 @@ private struct NoticeArticleScope: View {
         }
         .umcTypography(.calloutRegular)
         .foregroundStyle(UMCColor.Semantic.textNeutralMedium600)
+    }
+}
+
+/// Action errors remain adjacent to the original button; reloading is not a write retry.
+private struct NoticeActionFailure: View {
+    let failure: NoticeArticleFailure
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: UMCSpacing.value8) {
+            Text(failure.heading).umcTypography(.headlineBold)
+            Text(failure.message).umcTypography(.headlineRegular)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .foregroundStyle(UMCColor.Semantic.textNeutralMedium600)
+        .id("notice.article.failure")
     }
 }

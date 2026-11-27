@@ -110,7 +110,7 @@ public struct NoticeBoardView: View {
     @State private var composing = false
     @State private var checkingWriter = false
     @State private var pinnedExpanded = true
-    @State private var fullReader = false
+    @State private var readingLayout = NoticeReadingLayout()
     @State private var pinnedOnly = false
 
     public init(repository: any NoticeRepository) {
@@ -123,7 +123,7 @@ public struct NoticeBoardView: View {
             Divider()
             HStack(spacing: 0) {
                 if let id = selection {
-                    if !fullReader {
+                    if !readingLayout.isFullReader {
                         noticeList
                             .frame(minWidth: 280, idealWidth: 300, maxWidth: 340)
                         Divider()
@@ -195,12 +195,15 @@ public struct NoticeBoardView: View {
             if selection == nil {
                 Text("공지").umcTypography(.title1Bold).accessibilityAddTraits(.isHeader)
             } else {
-                Button("공지 목록", systemImage: "list.bullet") { selection = nil }
+                Button("공지 목록", systemImage: "list.bullet") {
+                    readingLayout.beginSelection()
+                    selection = nil
+                }
                 Button(
-                    fullReader ? "분할 보기" : "전체 읽기",
-                    systemImage: fullReader ? "sidebar.left" : "arrow.up.left.and.arrow.down.right"
+                    readingLayout.isFullReader ? "분할 보기" : "전체 읽기",
+                    systemImage: readingLayout.isFullReader ? "sidebar.left" : "arrow.up.left.and.arrow.down.right"
                 ) {
-                    fullReader.toggle()
+                    readingLayout.toggle()
                 }
             }
             Spacer()
@@ -259,7 +262,9 @@ public struct NoticeBoardView: View {
             Text(model.filterSummary(pinnedOnly: pinnedOnly))
                 .umcTypography(.calloutRegular)
                 .foregroundStyle(UMCColor.Semantic.textNeutralMedium600)
-                .fixedSize(horizontal: false, vertical: true)
+                .lineLimit(2)
+                .help(model.filterSummary(pinnedOnly: pinnedOnly))
+                .accessibilityLabel(model.filterSummary(pinnedOnly: pinnedOnly))
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: UMCSpacing.value8) {
                     let pinned = model.entries.filter(\.mustRead)
@@ -353,7 +358,10 @@ public struct NoticeBoardView: View {
         NoticeListRow(
             entry: entry, selected: selection == entry.id,
             confirmed: model.readIDs.contains(entry.id), showsPreview: selection == nil
-        ) { selection = entry.id }
+        ) {
+            readingLayout.beginSelection()
+            selection = entry.id
+        }
     }
 
 }

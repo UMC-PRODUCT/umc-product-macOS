@@ -9,6 +9,25 @@ import NoticeDomain
 import SwiftUI
 import UMCFoundation
 
+/// Reader width is temporary: selecting from the list always starts with the list visible.
+struct NoticeReadingLayout {
+    private(set) var isFullReader = false
+    mutating func toggle() { isFullReader.toggle() }
+    mutating func beginSelection() { isFullReader = false }
+}
+
+struct NoticeArticleFailure {
+    enum Action { case load, vote, confirmRead }
+    let message: String
+    let hasContent: Bool
+    var action: Action = .load
+    var isInitialLoad: Bool { !hasContent }
+    var heading: String {
+        isInitialLoad ? AppLocalization.string("공지를 불러오지 못했습니다")
+            : AppLocalization.string("요청을 완료하지 못했습니다")
+    }
+}
+
 /// Presentation-only classification; pagination and request ownership stay in the board model.
 enum NoticeEmptyState: Equatable {
     case none, empty, search, pinnedPage, pinned

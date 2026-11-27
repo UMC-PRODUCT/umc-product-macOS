@@ -11645,6 +11645,23 @@
           }
         }
       }
+    },
+    "요청을 완료하지 못했습니다": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "요청을 완료하지 못했습니다"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Could not complete the request"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

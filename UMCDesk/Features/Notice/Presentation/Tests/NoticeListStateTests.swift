@@ -12,6 +12,27 @@ import UMCFoundation
 
 @MainActor
 struct NoticeListStateTests {
+    @Test func newSelectionReturnsToSplitAfterFullReader() {
+        var layout = NoticeReadingLayout()
+        layout.toggle()
+        #expect(layout.isFullReader)
+        layout.beginSelection()
+        #expect(!layout.isFullReader)
+        layout.toggle()
+        layout.toggle()
+        #expect(!layout.isFullReader)
+    }
+
+    @Test func loadedArticleFailureDoesNotClaimTheContentFailedToLoad() {
+        let message = "선택한 투표 항목을 확인하세요."
+        let initial = NoticeArticleFailure(message: message, hasContent: false)
+        let action = NoticeArticleFailure(message: message, hasContent: true)
+        #expect(initial.isInitialLoad)
+        #expect(!action.isInitialLoad)
+        #expect(initial.heading != action.heading)
+        #expect(action.message == message)
+    }
+
     @Test func emptyReasonsAreExclusiveAndRespectLoadedPageScope() throws {
         let entry = try noticeEntry()
         func state(_ entries: [NoticeEntry] = [], loading: Bool = false,
