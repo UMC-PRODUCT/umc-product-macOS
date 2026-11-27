@@ -262,6 +262,16 @@ private struct AppRootView: View {
         }
     }
 
+    private enum FeatureLocation: Hashable {
+        case matching(MatchingDestination)
+        case project(String)
+    }
+
+    private var featureLocation: FeatureLocation? {
+        if let matching = dependencies.navigation.matchingDestination { return .matching(matching) }
+        return dependencies.navigation.workspaceProjectID.map(FeatureLocation.project)
+    }
+
     @ViewBuilder private var liveRoot: some View {
         if dependencies.navigation.showsSettings {
             SettingsView(
@@ -274,12 +284,27 @@ private struct AppRootView: View {
                         activities: dependencies.settingsViewModel.profile?.activities ?? [],
                         openWorkspace: dependencies.navigation.openWorkspace
                     )
+                    .id(destination)
                     .id(dependencies.navigation.matchingNavigationID)
                     .id(dependencies.settingsViewModel.profile?.id))
                 } ?? featureContent, matchingSelected: dependencies.navigation.matchingDestination != nil,
                 onOpenMatching: { dependencies.openMatching() },
                 onSelectSection: dependencies.selectSection
             )
+            .windowFeatureNavigation(
+                location: featureLocation,
+                explicitNavigationID: dependencies.navigation.matchingNavigationID
+            ) { location in
+                switch location {
+                case .matching(let destination):
+                    dependencies.openMatching(destination, isRestoring: true)
+                case .project(let id):
+                    if let member = dependencies.navigation.account?.memberID {
+                        dependencies.navigation.openWorkspace(projectID: id, memberID: member)
+                    }
+                }
+            }
+            .id(dependencies.navigation.account?.memberID)
         } else {
             AuthView(login: dependencies.login, repository: dependencies.loginRepository,
                      entry: dependencies.navigation.authEntry, onSignOut: dependencies.signOut,
@@ -405,6 +430,7 @@ private struct SettingsSceneView: View {
             openWindow(id: "main")
             NSApplication.shared.activate()
         })
+            .id(dependencies.navigation.account?.memberID)
             .background(SettingsWindowToolbar())
             .onAppear {
                 dependencies.windowSettingsViewModel.showSettings()
