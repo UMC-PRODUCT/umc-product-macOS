@@ -9,7 +9,11 @@ import Testing
 @testable import NoticePresentation
 
 struct NoticeVoteDeadlineTests {
-    @Test(arguments: ["2026-12-01T16:30:00Z", "2026-12-01T16:30:00.123456789Z"])
+    @Test(arguments: [
+        "2026-12-01T16:30:00Z",
+        "2026-12-01T16:30:00.123456789Z",
+        "2026-12-02T01:30:59.999999999+09:00",
+    ])
     func displaysLocalDateAndTime(_ raw: String) throws {
         let cases = [("Asia/Seoul", "ko_KR", 2, 1), ("UTC", "en_US", 1, 16)]
         for (zone, language, day, hour) in cases {
@@ -25,6 +29,11 @@ struct NoticeVoteDeadlineTests {
             #expect(noticeVoteDeadline(raw, locale: locale, timeZone: timeZone)
                 == expected.formatted(style))
         }
+    }
+
+    @Test(arguments: ["2026-02-30T12:00:00Z", "2026-12-01T16:61:00Z"])
+    func rejectsOutOfRangeComponents(_ raw: String) {
+        #expect(noticeVoteDeadline(raw, locale: .current, timeZone: .gmt) == nil)
     }
 
     @Test(arguments: [nil, "", "잘못된 시각", "2026-12-01", "2026-12-01T16:30:00Zextra"] as [String?])
