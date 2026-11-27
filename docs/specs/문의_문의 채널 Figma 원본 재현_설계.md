@@ -46,7 +46,7 @@ Q1의 Workspace에는 1376×44 상단 도구 행, 1348×1 분리선, (0,45)의 1
 
 Q2에서는 대화 카드 안쪽 24, 타임라인 세로 간격 20, 수신 아바타 32와 본문 사이 12, 말풍선 너비 660·안쪽 14다. 문의자 시점의 내 메시지는 오른쪽, 담당자 메시지는 왼쪽이다. Q5에서는 문의자의 메시지가 왼쪽으로 바뀐다. Q3는 898 너비의 작성 영역과 360 너비의 추천 답변을 나란히 둔다. 받는 팀 모달은 (312,186.5), 816×587, 두 열 네 줄이다. Q5 담당자와 라벨은 **오른쪽 처리 정보 내부**의 각기 다른 위치에서 펼쳐진다. 기본 창 전체를 어둡게 덮는 Q3와 구별한다.
 
-재현 구현에서는 1 Figma 단위를 macOS 논리 1 pt로 대응시키는 것을 전제로 삼는다. 이는 참조 크기에서의 매핑이며 실제 창을 측정한 결과가 아니다. 현재 고객센터 단독 창 기본값은 980×720, SupportView의 하한은 560×420이다. 데이터 미리보기의 1040×720에서도 참조 캔버스보다 너비 400, 높이 240이 작다. 고정된 좌우 분할을 그대로 넣으면 내용이 맞지 않는다. 좁은 창에서의 재배치와 글자 배율은 이 원본의 수용 조건 밖이다.
+재현 구현에서는 1 Figma 단위를 macOS 논리 1 pt로 대응시키는 것을 전제로 삼는다. 이는 참조 크기에서의 매핑이며 실제 창을 측정한 결과가 아니다. 현행 최상위 뷰의 일괄 padding 32도 원본 Content의 가로 40·세로 24와 다르다. 현재 고객센터 단독 창 기본값은 980×720, SupportView의 하한은 560×420이다. 데이터 미리보기의 1040×720에서도 참조 캔버스보다 너비 400, 높이 240이 작다. 고정된 좌우 분할을 그대로 넣으면 내용이 맞지 않는다. 좁은 창에서의 재배치와 글자 배율은 이 원본의 수용 조건 밖이다.
 
 ## 현재 앱의 접근과 보존할 동작
 
@@ -65,16 +65,27 @@ Q2에서는 대화 카드 안쪽 24, 타임라인 세로 간격 20, 수신 아�
 
 앱의 실제 서비스 연동 여부는 위 호출 지점에 한정해 판단했다. [실시간 큐·발신자 이슈](https://github.com/UMC-PRODUCT/umc-product-macOS/issues/157)와 [배정·라벨·FAQ·인기 순위 연동 이슈](https://github.com/UMC-PRODUCT/umc-product-macOS/issues/171)는 별도 작업이다.
 
+### 같은 고객센터로 이어지는 앱 진입점
+
+| 출발점 | 코드 근거 | 현재 동작 |
+| --- | --- | --- |
+| 로그인 화면의 고객센터 링크 | [AuthSupportButton](https://github.com/UMC-PRODUCT/umc-product-macOS/blob/df02419ecab81b9e4d99aace288db045723e2898/UMCDesk/Features/Auth/Presentation/Sources/Views/AuthLoginViews.swift#L216) | 창 ID로 고객센터를 연다. |
+| 오프라인·로그인 실패 | [오프라인](https://github.com/UMC-PRODUCT/umc-product-macOS/blob/df02419ecab81b9e4d99aace288db045723e2898/UMCDesk/Features/Auth/Presentation/Sources/Views/AuthStatusViews.swift#L99) · [로그인 실패](https://github.com/UMC-PRODUCT/umc-product-macOS/blob/df02419ecab81b9e4d99aace288db045723e2898/UMCDesk/Features/Auth/Presentation/Sources/Views/AuthStatusViews.swift#L109) | 재확인과 별도인 고객센터 버튼으로 같은 창을 연다. |
+| 설정 레일 및 앱 정보 | [레일 도움말](https://github.com/UMC-PRODUCT/umc-product-macOS/blob/df02419ecab81b9e4d99aace288db045723e2898/UMCDesk/Features/Settings/Presentation/Sources/SettingsView.swift#L265) · [앱 정보의 열기](https://github.com/UMC-PRODUCT/umc-product-macOS/blob/df02419ecab81b9e4d99aace288db045723e2898/UMCDesk/Features/Settings/Presentation/Sources/Views/SettingsAboutView.swift#L103) | 설정의 openWindow로 같은 목적지에 진입한다. |
+| 프로필·활동 코드 오류 | [프로필 안내](https://github.com/UMC-PRODUCT/umc-product-macOS/blob/df02419ecab81b9e4d99aace288db045723e2898/UMCDesk/Features/Settings/Presentation/Sources/Views/SettingsProfileView.swift#L49) · [활동 코드 오류](https://github.com/UMC-PRODUCT/umc-product-macOS/blob/df02419ecab81b9e4d99aace288db045723e2898/UMCDesk/Features/Settings/Presentation/Sources/Views/SettingsProfileDialogs.swift#L275) | 오류에서 담당 운영진에게 문의를 누르면 대화상자를 먼저 닫고 같은 목적지를 연다. |
+
 ### 입력과 상태의 경계
 
 - **원본 동작**. Q3 ‘문의 보내기’는 받는 팀 선택 여부를 검사한다. 미선택이면 선택창을 열고, 선택했으면 접수·답변 대기 변수를 설정한 뒤 Q2로 이동한다. ‘어느 팀인지 모르겠어요’도 실제 선택지다. Q4 ‘목록으로’는 작성 중 답변 열람 변수에 따라 Q3 또는 Q1로 복귀한다.
 - **운영 처리**. Q5의 ‘내가 맡기’는 담당·이력 변수, ‘라벨 편집’의 각 행은 임시 선택을 바꾼다. ‘적용’에서 세 값을 반영하고 닫는다. 담당자 선택은 선택과 함께 닫힌다. Q2-closed의 전송은 진행 화면으로 돌아간다. Q6은 저장·발행·보관을 구분한다. 부록은 버튼별 실제 연결을 기록한다.
-- **원본에 보이는 상태**. 빈 내 문의, 검색 결과 없음, 접수/진행 중/종료, 답변 대기, 미배정, FAQ 초안/발행/보관과 수정 중 기존 발행본 공개가 있다. 최초 목록 로딩, 통신 실패·재시도, 접근 거절, 업로드 중·실패를 위한 별도 프레임은 34개에 없다. 입력 전반의 호버·포커스 순서·IME·VoiceOver·좁은 폭은 화면 단위 Figma 미정의다. ‘Esc’ 표기는 실제 trigger 정보와 구분한다.
+- **원본에 보이는 상태**. 빈 내 문의, 검색 결과 없음, 접수/진행 중/종료, 답변 대기, 미배정, FAQ 초안/발행/보관과 수정 중 기존 발행본 공개가 있다. 최초 목록 로딩, 통신 실패·재시도, 접근 거절, 업로드 중·실패를 위한 별도 프레임은 34개에 없다. 34개 참조 프레임 중 별도 좁은 폭·IME·VoiceOver 화면은 없다. 호버·포커스와 입력 조합의 컴포넌트 수준 반응은 전체 마스터를 검증하기 전까지 미확인이다. ‘Esc’ 표기는 실제 trigger 정보와 구분한다.
 - **현재 코드에서 보존**. FAQ 검색 Return/↓로 결과에 포커스, Table Return으로 상세, Escape로 목록 복귀, 문의 본문 텍스트 선택, 빈 메시지 전송 차단, 종료 운영 건의 읽기 전용 표시가 있다. [FAQ 검색·포커스](https://github.com/UMC-PRODUCT/umc-product-macOS/blob/df02419ecab81b9e4d99aace288db045723e2898/UMCDesk/UMCDesk/Sources/App/SupportView.swift#L188), [목록 Return](https://github.com/UMC-PRODUCT/umc-product-macOS/blob/df02419ecab81b9e4d99aace288db045723e2898/UMCDesk/UMCDesk/Sources/App/SupportInquiryPreview.swift#L216), [말풍선 접근성](https://github.com/UMC-PRODUCT/umc-product-macOS/blob/df02419ecab81b9e4d99aace288db045723e2898/UMCDesk/UMCDesk/Sources/App/SupportTicketDetail.swift#L89). IME 조합 중 Return, 화면 낭독 순서, 실패 후 포커스는 실제 앱에서 별도 검증해야 한다.
 
 ## 색과 모드 상속
 
-문의 섹션의 explicitVariableModes는 비어 있다. Q1 루트의 반경은 20이고 넘치는 콘텐츠를 자른다. 두 하위 섹션은 UMC Color(701:2261)를 각각 Light(701:0), Dark(746:0)로 지정한다. 34개 프레임은 각 섹션과 같은 UMC Color 모드를 다시 명시하며 87:2 컬렉션에도 Light 쪽 87:0, Dark 쪽 115:0을 지정한다. 자식의 명시적 값이 없으면 상위 모드를 따른다. Q1 Light 기본 CTA와 App Shell에도 701:0이 직접 지정돼 있다. Dark 자식까지 조회한 11개 화면 모두 App Shell은 Light로 강제된다. [Dark Q1-admin 레일](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1101-9962)을 기준으로 확인한다. [Dark 검색어 선택의 출석·과제 버튼](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1112-20294)도 Light 강제이며 stroke 2다. 바로 옆 영수증 버튼은 Dark 명시와 원격 단일 모드 fill을 함께 쓴다. 프레임 이름만 보고 모든 자식을 Dark로 바꾸면 두 버튼 모두 달라진다. 이름이 같은 원격 Color(단일 Mode 1)와 로컬 UMC Color는 별도 컬렉션이다. 단일 모드 색에 임의 Dark 변환을 적용하지 않는다. Q1 순위 행은 디자인 컨텍스트에서 아래 변 1단위 선이 확인된다.
+문의 섹션의 explicitVariableModes는 비어 있다. Q1 루트의 반경은 20이고 넘치는 콘텐츠를 자른다. 두 하위 섹션은 UMC Color(701:2261)를 각각 Light(701:0), Dark(746:0)로 지정한다. 34개 프레임은 각 섹션과 같은 UMC Color 모드를 다시 명시하며 87:2 컬렉션에도 Light 쪽 87:0, Dark 쪽 115:0을 지정한다. 자식의 명시적 값이 없으면 상위 모드를 따른다. Q1 Light 기본 CTA와 App Shell에도 701:0이 직접 지정돼 있다. Dark 자식까지 조회한 11개 화면 모두 App Shell은 Light로 강제된다. [Dark Q1-admin 레일](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1101-9962)을 기준으로 확인한다. [Dark 검색어 선택의 출석·과제 버튼](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1112-20294)도 Light 강제이며 stroke 2다. 바로 옆 영수증 버튼은 Dark 명시와 원격 단일 모드 fill을 함께 쓴다. 프레임 이름만 보고 모든 자식을 Dark로 바꾸면 두 버튼 모두 달라진다. 이름이 같은 원격 Color(단일 Mode 1)와 로컬 UMC Color는 별도 컬렉션이다. 단일 모드 색에 임의 Dark 변환을 적용하지 않는다. 문의 시안 인터랙션(401:5819)의 Light/와 Dark/는 변수명 접두사이고 모드는 401:0 하나다. 인기 문의 순위(1112:20782)도 1112:0 단일 모드다. 구 87:2의 explicit 값은 resolved 목록에 나타나지 않아 구컬렉션 값의 적용 여부는 미확인이다. 실사용 UMC Color 28종의 양 모드 56개 값은 기준 코드의 색 자산 및 semantic→primitive 매핑과 소스 표현 정밀도 내에서 일치했다. 별도 예외인 [영수증](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1112-20295)의 원격 Neutral-Inverse/Strong-600 → TealGrey-600은 단일 모드 6:0에서 RGB(0.376200, 0.383800, 0.383293), α=1이다. 현행 TealGrey-600 Dark는 (0.572549, 0.596078, 0.596078), α=1이다. 이 슬롯에는 원격 모드의 원본값을 유지해야 한다. [현행 TealGrey-600 색 자산](../../UMCDesk/Core/DesignSystem/Resources/UMCColors.xcassets/Primitives/Grey/TealGrey-600.colorset/Contents.json)
+
+Q1 순위 행은 디자인 컨텍스트에서 아래 변 1단위 선이 확인된다.
 
 | 첫 사용 노드 | 원본 컬렉션 / 변수 | Light 해석 | Dark 해석 |
 | --- | --- | --- | --- |
@@ -110,6 +121,24 @@ Q2에서는 대화 카드 안쪽 24, 타임라인 세로 간격 20, 수신 아�
 
 Custom/Background/Default, Surface-White, Surface-Grey(Weaker), Surface-Grey(Weak)는 앱에서 각각 backgroundDefault, backgroundSurfaceWhite, backgroundSurfaceGreyWeaker, backgroundSurfaceGreyWeak 자산을 찾는다. 배경과 표면의 이름이 비슷해도 위 색상표의 두 모드를 따로 대조한다. 의미색은 별칭의 종착점과 앱 Asset Catalog의 양 모드가 일치할 때만 대응시킨다. [UMCColor.swift](../../UMCDesk/Core/DesignSystem/Sources/UMCColor.swift)
 
+### Light와 Dark가 서로 다른 변수를 쓰는 면
+
+회수한 Dark 11개 화면의 가시 레이어를 대응 Light 트리와 순서·이름·치수로 대조했다. 다음 슬롯은 같은 변수를 모드만 바꾸어 쓰지 않는다. 실제 색상값은 위 표에서 각 모드 열을 읽는다.
+
+| 슬롯 | Light 노드 | Light 바인딩 | Dark 노드 | Dark 바인딩 |
+| --- | --- | --- | --- | --- |
+| 문의 내용 | [1100:19216](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-19216) | Semantic/Text/Neutral-Medium-600 | [1100:21133](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-21133) | Semantic/Text/Neutral-Strong-800 |
+| 상태 | [1100:19217](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-19217) | Semantic/Text/Neutral-Medium-600 | [1100:21134](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-21134) | Semantic/Text/Neutral-Strong-800 |
+| 담당자 | [1100:19218](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-19218) | Semantic/Text/Neutral-Medium-600 | [1100:21135](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-21135) | Semantic/Text/Neutral-Strong-800 |
+| 라벨 | [1100:19219](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-19219) | Semantic/Text/Neutral-Medium-600 | [1100:21136](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-21136) | Semantic/Text/Neutral-Strong-800 |
+| 접수일 | [1100:19220](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-19220) | Semantic/Text/Neutral-Medium-600 | [1100:21137](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-21137) | Semantic/Text/Neutral-Strong-800 |
+| 대화 | [1100:19559](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-19559) | Custom/Background/Surface-Grey(Weak) | [1100:21476](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-21476) | Semantic/Fill/Neutral/Strong-200 |
+| 대화 | [1100:19691](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-19691) | Custom/Background/Surface-Grey(Weak) | [1100:21608](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-21608) | Semantic/Fill/Neutral/Strong-200 |
+| 내용과 첨부 자료는 UMC PRODUCT에 전달돼요. | [1100:19828](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-19828) | Semantic/Text/Neutral-Medium-600 | [1100:21745](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-21745) | Semantic/Text/Neutral-Strong-800 |
+| 운영 대화 | [1100:20111](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-20111) | Custom/Background/Surface-Grey(Weak) | [1100:22028](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-22028) | Semantic/Fill/Neutral/Strong-200 |
+| 운영 대화 | [1102:10374](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1102-10374) | Custom/Background/Surface-Grey(Weak) | [1102:10624](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1102-10624) | Semantic/Fill/Neutral/Strong-200 |
+| 운영 대화 | [1102:10874](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1102-10874) | Custom/Background/Surface-Grey(Weak) | [1102:11122](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1102-11122) | Semantic/Fill/Neutral/Strong-200 |
+
 ## 컴포넌트와 에셋
 
 | 마스터 / variant | 컴포넌트 계열 | 사용 예시 | 인스턴스 크기 |
@@ -135,10 +164,10 @@ Q1의 검색 glyph는 magnifyingglass, 레일은 위부터 house, megaphone, cal
 | T1 | Noto Sans KR Medium | 14 / 20 / 0% | [문의 도구](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-19021) |
 | T2 | Noto Sans KR Bold | 28 / 40 / 0% | [문의](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-19026) |
 | T3 | Noto Sans KR Regular | 14 / 21 / 0% | [서비스 이용 중 궁금한 점은 답변을 찾거나 UMC PRODUCT에](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-19027) |
-| T4 | Noto Sans KR Medium | 13 / 20 / -1% | [버튼](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=I1100-19028;879-20081) |
-| T5 | Noto Sans KR Medium | 13 / 20 / -2% | [버튼](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=I1100-19030;879-20075) |
-| T6 | SF Pro Regular | 14 / AUTO / 0 | [Symbol](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=I1102-9763;924-18602) |
-| T7 | Noto Sans KR Regular | 14 / 139.9999976158142% / -1% | [검색](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=I1102-9763;924-18603) |
+| T4 | Noto Sans KR Medium | 13 / 20 / -1% | [문의하기](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=I1100-19028;879-20081) |
+| T5 | Noto Sans KR Medium | 13 / 20 / -2% | [많이 묻는 질문](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=I1100-19030;879-20075) |
+| T6 | SF Pro Regular | 14 / AUTO / 0 | [SF Symbol glyph](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=I1102-9763;924-18602) |
+| T7 | Noto Sans KR Regular | 14 / 140% / -1% | [궁금한 내용을 검색하세요](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=I1102-9763;924-18603) |
 | T8 | Noto Sans KR Bold | 22 / 33 / 0% | [실시간 인기 문의](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-19038) |
 | T9 | Noto Sans KR Medium | 13 / 20 / 0% | [최근 24시간](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-19042) |
 | T10 | Noto Sans KR Regular | 13 / 20 / 0% | [마지막 갱신 14:32](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-19043) |
@@ -147,36 +176,36 @@ Q1의 검색 glyph는 magnifyingglass, 레일은 위부터 house, megaphone, cal
 | T13 | Noto Sans KR Medium | 14 / 21 / 0% | [28명 문의](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-19050) |
 | T14 | Noto Sans KR Bold | 16 / 24 / 0% | [아직 해결되지 않았나요?](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-19091) |
 | T15 | Noto Sans KR Medium | 12 / 18 / 0% | [새 순위가 있어요. 읽던 목록은 그대로 유지했어요.](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-19095) |
-| T16 | SF Pro Medium | 16 / AUTO / 0 | [Symbol](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=I1101-9476;758-14002;758-13652) |
+| T16 | SF Pro Medium | 16 / AUTO / 0 | [SF Symbol glyph](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=I1101-9476;758-14002;758-13652) |
 | T17 | Noto Sans KR Medium | 16 / 24 / 0% | [출석 기록이 실제와 다르게 보여요](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-19225) |
 | T18 | Noto Sans KR Medium | 12 / AUTO / 0% | [출석 오류](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-19231) |
 | T19 | Noto Sans KR Regular | 15 / 23 / 0% | [많이 묻는 질문에서 먼저 답을 찾거나 문의를 남겨주세요.](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-19456) |
-| T20 | Noto Sans KR Regular | 12 / 139.9999976158142% / 0% | [태그](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=I1102-9723;879-21410) |
-| T21 | Noto Sans KR Regular | 13 / AUTO / 0% | [접수한 받는 팀](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-19558) |
+| T20 | Noto Sans KR Regular | 12 / 140% / 0% | [진행 중](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=I1102-9723;879-21410) |
+| T21 | Noto Sans KR Regular | 13 / AUTO / 0% | [Learning & Activity](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-19558) |
 | T22 | Noto Sans KR Regular | 15 / 24 / 0% | [앱에서 출석 기록이 실제와 다르게 표시돼요. 새로고침해도 같아서 ](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-19566) |
-| T23 | Noto Sans KR Bold | 12 / 18 / 0% | [디](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-19569) |
-| T24 | SF Pro Regular | 16 / AUTO / 0 | [Symbol](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=I1102-9739;970-16603) |
-| T25 | SF Pro Medium | 12 / AUTO / 0 | [Symbol](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=I1102-9739;970-16817) |
-| T26 | Noto Sans KR Regular | 14 / AUTO / 0% | [선택한 받는 팀](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-19822) |
-| T27 | Noto Sans KR Regular | 12 / AUTO / 0% | [팀 안내](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-19824) |
-| T28 | Noto Sans KR Regular | 16 / 24 / 0% | [지난 세미나에 참석했는데 결석으로 표시돼요.<br>참석 일시와 확인 ](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-19827) |
+| T23 | Noto Sans KR Bold | 12 / 18 / 0% | [운](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-19569) |
+| T24 | SF Pro Regular | 16 / AUTO / 0 | [SF Symbol glyph](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=I1102-9739;970-16603) |
+| T25 | SF Pro Medium | 12 / AUTO / 0 | [SF Symbol glyph](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=I1102-9739;970-16817) |
+| T26 | Noto Sans KR Regular | 14 / AUTO / 0% | [받는 팀 선택](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-19822) |
+| T27 | Noto Sans KR Regular | 12 / AUTO / 0% | [문의와 가까운 팀을 선택해 주세요. 잘 모르겠다면 UMC PROD](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-19824) |
+| T28 | Noto Sans KR Regular | 16 / 24 / 0% | [앱에서 출석 기록이 실제와 다르게 표시돼요. 새로고침해도 같아서 ](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-19827) |
 | T29 | Noto Sans KR Medium | 15 / 23 / 0% | [출석 기록이 실제와 다르게 보여요](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-20297) |
 | T30 | Noto Sans KR Medium | 18 / 27 / 0% | [출석 기록이 실제와 다르게 보여요](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-20314) |
-| T31 | Noto Sans KR Bold | 16 / 145.00000476837158% / 0% | [문의 도구](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-20505) |
-| T32 | Noto Sans KR Regular | 12 / 145.00000476837158% / 0% | [답을 찾아보고 내 문의를 이어가세요.](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-20508) |
-| T33 | Noto Sans KR Regular | 13 / 145.00000476837158% / 0% | [도움말 검색](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-20511) |
-| T34 | Noto Sans KR Medium | 11 / 145.00000476837158% / 0% | [⌘F](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-20512) |
-| T35 | Noto Sans KR Medium | 12 / 145.00000476837158% / 0% | [도움말과 내 문의](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-20516) |
-| T36 | Noto Sans KR Medium | 13 / 145.00000476837158% / 0% | [많이 묻는 질문](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-20518) |
-| T37 | Noto Sans KR Regular | 11 / 145.00000476837158% / 0% | [상단 도구 버튼으로 다시 열 수 있어요](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-20524) |
-| T38 | Noto Sans KR Bold | 20 / AUTO / 0% | [제목](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1102-9982) |
-| T39 | Noto Sans KR Medium | 14 / AUTO / 0% | [취소 레이블](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1102-9984) |
+| T31 | Noto Sans KR Bold | 16 / 145% / 0% | [문의 도구](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-20505) |
+| T32 | Noto Sans KR Regular | 12 / 145% / 0% | [답을 찾아보고 내 문의를 이어가세요.](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-20508) |
+| T33 | Noto Sans KR Regular | 13 / 145% / 0% | [도움말 검색](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-20511) |
+| T34 | Noto Sans KR Medium | 11 / 145% / 0% | [⌘F](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-20512) |
+| T35 | Noto Sans KR Medium | 12 / 145% / 0% | [도움말과 내 문의](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-20516) |
+| T36 | Noto Sans KR Medium | 13 / 145% / 0% | [많이 묻는 질문](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-20518) |
+| T37 | Noto Sans KR Regular | 11 / 145% / 0% | [상단 도구 버튼으로 다시 열 수 있어요](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-20524) |
+| T38 | Noto Sans KR Bold | 20 / AUTO / 0% | [어느 팀에 문의할까요?](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1102-9982) |
+| T39 | Noto Sans KR Medium | 14 / AUTO / 0% | [취소](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1102-9984) |
 | T40 | Noto Sans KR Bold | 14 / 21 / 0% | [담당자 선택](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1102-10432) |
 | T41 | Noto Sans KR Regular | 13 / 19 / 0% | [출석 오류](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1102-10942) |
-| T42 | Pretendard Variable Regular | 18 / 139.9999976158142% / -1% | [버튼](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=I1112-19913;879-20071) |
-| T43 | Pretendard Variable Medium | 17 / 139.9999976158142% / -2% | [버튼](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=I1112-19914;879-20075) |
+| T42 | Pretendard Variable Regular | 18 / 140% / -1% | [출석·과제](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=I1112-19913;879-20071) |
+| T43 | Pretendard Variable Medium | 17 / 140% / -2% | [영수증](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=I1112-19914;879-20075) |
 
-위 T 번호는 이 문서에서 같은 측정값을 다시 찾기 위한 키다. 원본에는 Noto Sans KR, SF Pro, Pretendard Variable이 함께 쓰인다. 앱의 .umcTypography는 사용자 글꼴·배율 설정을 받으므로 이름이 유사한 토큰만으로 원본과 같다고 판정할 수 없다. 부록 문구의 명시적 개행은 줄바꿈으로 표시한다. 자동 줄바꿈은 표기된 너비와 서체로 대조한다. [UMCTypography.swift](../../UMCDesk/Core/DesignSystem/Sources/UMCTypography.swift)
+행높이·자간의 %는 글자 크기 기준이며 부동소수점 표기 오차는 정수 %로 정리했다. 단위 표시 없는 수치는 Figma 단위다. 위 T 번호는 이 문서에서 같은 측정값을 다시 찾기 위한 키다. 원본에는 Noto Sans KR, SF Pro, Pretendard Variable이 함께 쓰인다. 앱의 .umcTypography는 사용자 글꼴·배율 설정을 받으므로 이름이 유사한 토큰만으로 원본과 같다고 판정할 수 없다. 부록 문구의 명시적 개행은 줄바꿈으로 표시한다. 자동 줄바꿈은 표기된 너비와 서체로 대조한다. [UMCTypography.swift](../../UMCDesk/Core/DesignSystem/Sources/UMCTypography.swift)
 
 ## 수용 검수와 2단계 인계
 
@@ -190,7 +219,7 @@ Q1의 검색 glyph는 magnifyingglass, 레일은 위부터 house, megaphone, cal
 
 ## 화면별 측정 부록
 
-각 항목은 **보이는 순서**를 따른다. 세부 표는 같은 모양의 공통 셸과 앞서 나온 동일 레이어를 한 번만 기록한다. 위치는 부모 기준 x,y(소수점 둘째 자리까지)이고 크기는 w×h다. H/V는 수평·수직 오토레이아웃, 패딩은 좌·우·상·하, 정렬은 주축/교차축 순서다. 텍스트 표의 WIDTH_AND_HEIGHT는 양축 자동, HEIGHT는 고정 너비에서 높이 자동, NONE은 고정이다. DISABLED는 말줄임 해제다. 별도 행 제한이 없으면 —로 둔다.
+각 항목은 **보이는 순서**를 따른다. 세부 표는 같은 모양의 공통 셸과 앞서 나온 동일 레이어를 한 번만 기록한다. 위치는 부모 기준 x,y(소수점 둘째 자리까지)이고 크기는 w×h다. H/V는 수평·수직 오토레이아웃, 패딩은 좌·우·상·하, 정렬은 주축/교차축 순서다. 문구 표는 TEXT 레이어의 name 대신 characters를 따른다. [1100:19573](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-19573)은 앱 버전·오류 화면을 요청한다. [1100:19999](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-19999)의 실제 FAQ 문구는 표시·동기화 오류와 출석 인정·학사 판단의 경계를 명시한다. 텍스트 표의 WIDTH_AND_HEIGHT는 양축 자동, HEIGHT는 고정 너비에서 높이 자동, NONE은 고정이다. DISABLED는 말줄임 해제다. 별도 행 제한이 없으면 —로 둔다.
 
 ### Q1 · 많이 묻는 질문
 
@@ -880,7 +909,7 @@ Q1 위 도구 팝오버, 닫기·검색·새 문의·바로가기. [Light 원본
 | 노드 | 레이어 | 위치 · 크기 | 방향·간격 / 패딩 / 정렬 · 가로/세로 크기 | 표면 |
 | --- | --- | --- | --- | --- |
 | [1100:20502](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-20502) | 탭 도구 모음 · 바깥 클릭 닫기 | 0,52 · 1348×884 | — · FIXED/FIXED | 면 ffffff@0.0010000000474974513 |
-| [1100:20503](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-20503) | 탭 도구 모음 · inquiry | 938,63 · 390×371 | V 14 / 20,20,20,20 / MIN,MIN · FIXED/HUG | r16 · 선 1 Semantic/Border/Neutral/Weaker-100 · 면 Custom/Background/Surface-White · DROP_SHADOW {'x': 0, 'y': 8} blur 24 spread 0 α13% |
+| [1100:20503](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-20503) | 탭 도구 모음 · inquiry | 938,63 · 390×371 | V 14 / 20,20,20,20 / MIN,MIN · FIXED/HUG | r16 · 선 1 Semantic/Border/Neutral/Weaker-100 · 면 Custom/Background/Surface-White · 그림자 #000000 / 13%, offset (0,8), blur 24, spread 0, NORMAL, showShadowBehindNode=true |
 | [1100:20504](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-20504) | 도구 제목과 닫기 | 20,20 · 348×32 | H 8 / 0,0,0,0 / MIN,CENTER · FIXED/HUG | — |
 | [1100:20506](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-20506) | 도구 모음 닫기 · Esc | 316,0 · 32×32 | H 0 / 8,8,8,8 / CENTER,CENTER · FIXED/FIXED | r8 · 면 Custom/Background/Surface-Grey(Weaker) |
 | [1100:20507](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-20507) | 닫기 | 8,8 · 16×16 | — · FIXED/FIXED | 선 1.600000023841858 Semantic/Text/Neutral-Medium-600 |
@@ -948,7 +977,7 @@ Q1-admin 위 운영 도구 팝오버, FAQ·목록·선택 문의. [Light 원본]
 
 | 노드 | 레이어 | 위치 · 크기 | 방향·간격 / 패딩 / 정렬 · 가로/세로 크기 | 표면 |
 | --- | --- | --- | --- | --- |
-| [1100:20762](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-20762) | 탭 도구 모음 · inquiry_ops | 938,63 · 390×359 | V 14 / 20,20,20,20 / MIN,MIN · FIXED/HUG | r16 · 선 1 Semantic/Border/Neutral/Weaker-100 · 면 Custom/Background/Surface-White · DROP_SHADOW {'x': 0, 'y': 8} blur 24 spread 0 α13% |
+| [1100:20762](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-20762) | 탭 도구 모음 · inquiry_ops | 938,63 · 390×359 | V 14 / 20,20,20,20 / MIN,MIN · FIXED/HUG | r16 · 선 1 Semantic/Border/Neutral/Weaker-100 · 면 Custom/Background/Surface-White · 그림자 #000000 / 13%, offset (0,8), blur 24, spread 0, NORMAL, showShadowBehindNode=true |
 | [1100:20768](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-20768) | 동작 · FAQ 작성 · 관리 | 20,97 · 348×40 | H 0 / 16,16,4,4 / CENTER,CENTER · FIXED/FIXED | r8 · 면 Semantic/Fill/Primary-Inverse/Stronger-600 |
 | [1100:20769](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-20769) | 도구 구분선 | 20,151 · 348×1 | — · FIXED/FIXED | 면 Semantic/Border/Neutral/Weaker-100 |
 | [1100:20770](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-20770) | 도구 그룹 · UMC PRODUCT 전용 | 20,166 · 348×143 | V 2 / 0,0,0,0 / MIN,MIN · FIXED/HUG | — |
@@ -1311,3 +1340,66 @@ Q5의 처리 정보 위 체크 목록, 적용/취소 → Q5. [Light 원본](http
 ### 조회 범위와 남은 확인
 
 34개 전체 렌더와 두 모드의 프레임 지정은 확인했다. 위 레이어별 상세 수치는 Light 17개 기준이다. Q5 담당자 선택 프레임의 타이틀바는 Light [1102:10487](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1102-10487)의 x=4, Dark [1102:10737](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1102-10737)의 x=0으로 다르다. Dark의 Q1·Q4·Q6·두 도구 펼침·팀 선택 여섯 화면은 공식 도구의 응답량·플랜 한도 때문에 전체 자식 속성의 일괄 교차 검증이 남아 있다. 나머지 11개의 Dark 트리는 회수했다. 일부 텍스트 스타일 이름·개별 constraints와 모든 숨김 레이어의 자식·원격 마스터 내부 모드도 미확인이다. 이들은 **조회 미확인**이며, 최초 로딩 전용 프레임처럼 **원본에서 독립 상태가 정의되지 않은 경우**와 구별한다. 후속 설계의 기준 SHA는 독립 검토가 통과한 뒤 기록한다.
+
+#### Dark 상세 대조가 남은 여섯 화면
+
+독립 조회와 보존 렌더에서 여섯 화면의 존재·순서·1440×960 루트, Workspace 1376×908, App Shell 44×908, 타이틀바 1440×40, UMC Color 746:0을 확인했다. 팀 선택의 전체 오버레이 1440×960과 두 열도 확인했다. 다음 열의 속성은 렌더만으로 값이나 상속 경로를 복원할 수 없어 원본 보강이 필요하다.
+
+| 화면 | Dark frame | 최소 자식 노드 | 원본이 필요한 속성과 재현 영향 |
+| --- | --- | --- | --- |
+| Q1 FAQ | [1100:20882](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-20882) | [1100:20926](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-20926) | 검색·순위·도움 영역의 폭/패딩, 폰트·페인트·내부 강제 모드. 레일 1101:9928의 내부 상속 |
+| Q4 FAQ 상세 | [1100:21843](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-21843) | [1100:21887](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-21887) | 본문과 답변 정보·하단 액션의 열 너비, 서체·색·모드와 긴 문구의 clip |
+| Q6 FAQ 관리 | [1100:22142](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-22142) | [1100:22186](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-22186) | 대표 질문 목록·편집 열·공개 상태의 크기, 서체·색·모드 |
+| 사용자 도구 펼침 | [1100:22287](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-22287) | [1100:22331](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-22331) | 도구 팝오버의 원점·너비·패딩·서체·페인트·그림자·강제 모드와 뒤쪽 Q1 |
+| 운영 도구 펼침 | [1100:22456](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-22456) | [1100:22500](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-22500) | 운영 도구 팝오버의 같은 속성, 배경 운영 표와의 중첩·상속 |
+| 받는 팀 선택 | [1102:10080](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1102-10080) | [1102:10202](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1102-10202) | 화면 전체 딤의 불투명도, 대화상자 효과·두 열 여덟 선택지의 bounds·폰트·색·모드 |
+
+#### 동작 뒤에 나타나는 기존 상태
+
+| 시점 | Light / Dark 레이어 | 확인한 동작과 바인딩 | 원본 보강 범위 |
+| --- | --- | --- | --- |
+| Q3 접수 → Q2 답변 대기 | [1100:19574](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-19574) / [1100:21491](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-21491) | 팀 선택 후 전송 시 접수와 답변 대기를 설정한다. 가시성 변수 Light 1077:10030 / Dark 1077:10269, 기본값 false. | 참 상태에서 안내가 차지하는 위치·크기·실제 문구·서체·색과 타임라인 밀림 |
+| Q4 해결 응답 | [1100:20004](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-20004) / [1100:21921](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-21921) | ‘해결됐어요’가 Light 401:5824 / Dark 401:6212를 true로 바꾼다. 레이어 이름은 ‘✓ 해결 응답을 기록했어요. 문의가 새로 등록되지는 않아요.’다. | 표시 시 characters·줄바꿈·색·폰트와 하단 액션 간격 |
+| Q4에서 Q3 작성으로 진입 | [1100:19841](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-19841) / [1100:21758](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-21758) | ‘FAQ에서 문의’ 변수로 참고한 답변을 드러낸다. Light 레이어의 가시성 바인딩은 401:5822, 기본값 false. | 참고 답변 자식·배치·색·타이포와 입력 영역 높이 변화 |
+
+위 상태는 이미 원본에 정의되어 있다. 가시성 전환 후의 렌더 또는 부모와 자식의 전체 속성이 확보돼야 숨김 상태의 재현을 판정할 수 있다. 독립 검토에서 일반 배치·크기 270행과 표시 문구·타이포 264행은 보존된 노드값과 일치했다. 위 두 범위의 원본 보강은 1단계 완료 조건으로 남는다.
+
+독립 조사에서 확인한 사용 변수 142개 중 111개는 ID·이름을 값 응답과 대조했다. 아래 31개는 사용 ID와 이름까지만 확인했다. 레이어의 실제 수치와 Variables의 valuesByMode·alias 최종값은 서로 다른 근거다. 이 목록의 이름에서 정의값을 역산하지 않는다.
+
+<details><summary>값 응답이 없는 변수 31개</summary>
+
+| 사용 변수 ID | Figma 변수 이름 |
+| --- | --- |
+| `VariableID:123:6815` | Spacing/16 |
+| `VariableID:123:6812` | Spacing/4 |
+| `VariableID:123:6813` | Spacing/8 |
+| `VariableID:72fdfb742d40b1750dee13820c4af8410e00415a/2860:106` | Typography/Base/FontWeight/Medium |
+| `VariableID:123:6814` | Spacing/12 |
+| `VariableID:612:17032` | Radius/12 |
+| `VariableID:123:6817` | Spacing/24 |
+| `VariableID:612:17031` | Radius/8 |
+| `VariableID:3ef7f6e3e7db2b9e7de1321ba9229531dd00a85d/4311:72` | Mode |
+| `VariableID:123:6819` | Spacing/40 |
+| `VariableID:4f4098ebf2175fb4f25682799a336040a3e08a99/2860:209` | Spacing/Semantic/Padding/Padding 6 |
+| `VariableID:d0a0eb63f55135cabd2806e402f173914b2453fc/2860:605` | Spacing/Semantic/Padding/Padding 0 |
+| `VariableID:612:17030` | Radius/6 |
+| `VariableID:123:6816` | Spacing/20 |
+| `VariableID:612:17033` | Radius/16 |
+| `VariableID:409:3211` | Light/대표 질문 |
+| `VariableID:ae02948c7f89f269323de7f3622375789cba8a85/2860:57` | Spacing/Semantic/Padding/Padding 16 |
+| `VariableID:a40be7b7525d8cf7d01ba4f54d83aadc9fc68a6d/2860:153` | Typography/Base/FontFamily/Brand |
+| `VariableID:401:6208` | Dark/기간 |
+| `VariableID:401:6209` | Dark/갱신 시각 |
+| `VariableID:1112:20785` | Dark/기존 순위 |
+| `VariableID:401:6246` | Dark/문의자 1 |
+| `VariableID:401:6254` | Dark/문의자 2 |
+| `VariableID:401:6262` | Dark/문의자 3 |
+| `VariableID:401:6270` | Dark/문의자 4 |
+| `VariableID:401:6278` | Dark/문의자 5 |
+| `VariableID:428:2927` | Dark/새 순위 안내 표시 |
+| `VariableID:1077:10185` | Dark/문의 팀 및 처리/문의 받는 팀 / 작성 중 |
+| `VariableID:409:3780` | Dark/대표 질문 |
+| `VariableID:527:10594` | Dark/문의 도구 펼침 예시/사용자 |
+| `VariableID:527:10850` | Dark/문의 도구 펼침 예시/PRODUCT |
+
+</details>
