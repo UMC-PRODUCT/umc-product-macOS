@@ -4,9 +4,11 @@
 //  Created by euijjang97 on 11/23/26.
 
 import CoreDesignSystem
+import CoreUIComponents
 import NoticeDomain
 import SwiftUI
 import UniformTypeIdentifiers
+import UMCFoundation
 
 @MainActor
 @Observable
@@ -88,37 +90,31 @@ struct NoticeArticleView: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: UMCSpacing.value16) {
-            HStack {
-                Text("공지 / " + (access.entry?.mustRead == true ? "고정" : "상세")).foregroundStyle(
-                    .secondary)
-                Spacer()
-                if access.permissions.contains("CHECK") {
-                    Button("읽음 현황") { access.showReaders = true }
-                }
-                if access.permissions.contains("EDIT") {
-                    Button("수정") { access.editSheet = true }
-                }
-                if access.permissions.contains("DELETE") {
-                    Button("삭제", role: .destructive) { access.deletePrompt = true }
-                }
-            }
-            if let error {
-                HStack {
-                    Text(error).foregroundStyle(.secondary)
-                    Button("다시 불러오기") {
-                        Task { await perform { try await reloadWithPermissions() } }
+        ScrollView {
+            VStack(alignment: .leading, spacing: 0) {
+                if let article = access.entry {
+                    VStack(alignment: .leading, spacing: UMCSpacing.value8) {
+                        ViewThatFits(in: .horizontal) {
+                            HStack(alignment: .top) {
+                                NoticeArticleScope(article: article)
+                                Spacer()
+                                management
+                            }
+                            VStack(alignment: .leading, spacing: UMCSpacing.value8) {
+                                NoticeArticleScope(article: article)
+                                management
+                            }
+                        }
+                        Text(article.title).umcTypography(.title1Bold)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .textSelection(.enabled)
+                            .accessibilityAddTraits(.isHeader)
+                        Text(article.metadata).umcTypography(.calloutRegular)
+                            .foregroundStyle(UMCColor.Semantic.textNeutralMedium600)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
-                }
-            }
-            if let article = access.entry {
-                ScrollView {
-                    VStack(alignment: .leading, spacing: UMCSpacing.value16) {
-                        Text(article.audienceLabel).foregroundStyle(.secondary)
-                        Text(article.title).umcTypography(.largeTitle2Bold)
-                        Label(article.metadata, systemImage: "person.crop.circle")
-                            .foregroundStyle(.secondary)
-                        Divider()
+                    Divider().padding(.vertical, UMCSpacing.value16)
+                    VStack(alignment: .leading, spacing: UMCSpacing.value24) {
                         Text(
                             (try? AttributedString(
                                 markdown: article.content,
@@ -126,18 +122,22 @@ struct NoticeArticleView: View {
                                     interpretedSyntax: .inlineOnlyPreservingWhitespace)))
                                 ?? AttributedString(article.content)
                         )
-                        .umcTypography(.bodyRegular).textSelection(.enabled)
+                        .umcTypography(.headlineRegular).textSelection(.enabled)
+                        .fixedSize(horizontal: false, vertical: true)
                         .environment(
                             \.openURL,
                             OpenURLAction { url in
-                                guard noticeWebURL(url.absoluteString) != nil else { return .discarded }
+                                guard noticeWebURL(url.absoluteString) != nil else {
+                                    return .discarded
+                                }
                                 openURL(url)
                                 return .handled
                             })
                         if let images = article.images, !images.isEmpty {
-                            GroupBox("사진 \(images.count)") {
+                            VStack(alignment: .leading, spacing: UMCSpacing.value8) {
+                                Text("사진 \(images.count)").umcTypography(.headlineBold)
                                 ScrollView(.horizontal) {
-                                    HStack {
+                                    HStack(spacing: UMCSpacing.value8) {
                                         ForEach(images) { image in
                                             Button {
                                                 access.photo = image
@@ -157,30 +157,56 @@ struct NoticeArticleView: View {
                             }
                         }
                         if let vote = article.vote { poll(vote) }
-                        ForEach(article.links ?? []) { link in
-                            if let url = noticeWebURL(link.url) {
-                                Link(destination: url) { Label(link.url, systemImage: "link") }
-                            }
+                        if let links = article.links, !links.isEmpty {
+                            VStack(alignment: .leading, spacing: UMCSpacing.value12) {
+                                ForEach(links) { link in
+                                    if let url = noticeWebURL(link.url) {
+                                        Link(destination: url) {
+                                            Label(link.url, systemImage: "link")
+                                                .fixedSize(horizontal: false, vertical: true)
+                                                .multilineTextAlignment(.leading)
+                                        }
+                                    }
+                                }
+                            }.umcTypography(.headlineRegular)
                         }
-                        Button(confirmed ? "읽음 확인 완료" : "읽음 확인", systemImage: "checkmark.circle") {
-                            Task {
-                                await perform {
-                                    try await repository.confirmRead(id: id)
-                                    onRead()
+                        VStack(alignment: .leading, spacing: UMCSpacing.value16) {
+                            Divider()
+                            Button(confirmed ? "읽음 확인 완료" : "읽음 확인",
+                                   systemImage: confirmed ? "checkmark.circle.fill"
+                                       : "checkmark.circle") {
+                                Task {
+                                    await perform {
+                                        try await repository.confirmRead(id: id)
+                                        onRead()
+                                    }
                                 }
                             }
+                            .disabled(confirmed || busy)
                         }
-                        .disabled(confirmed || busy)
                     }
-                    .frame(maxWidth: 980, alignment: .leading)
-                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
-            } else if busy {
-                ProgressView()
+                if let error {
+                    VStack(alignment: .leading, spacing: UMCSpacing.value12) {
+                        Text(AppLocalization.string("공지를 불러오지 못했습니다")).umcTypography(.title4Bold)
+                        Text(error).fixedSize(horizontal: false, vertical: true)
+                        Button("다시 불러오기") {
+                            Task { await perform { try await reloadWithPermissions() } }
+                        }.disabled(busy)
+                    }
+                    .foregroundStyle(UMCColor.Semantic.textNeutralMedium600)
+                    .padding(.vertical, UMCSpacing.value24)
+                } else if access.entry == nil && busy {
+                    VStack(alignment: .leading, spacing: UMCSpacing.value12) {
+                        Text(AppLocalization.string("공지를 불러오는 중")).umcTypography(.title4Bold)
+                        ProgressView().controlSize(.small)
+                    }.padding(.vertical, UMCSpacing.value24)
+                }
             }
-            Spacer(minLength: 0)
+            .frame(maxWidth: 680, alignment: .leading)
+            .padding(UMCSpacing.value24)
+            .frame(maxWidth: .infinity)
         }
-        .padding(UMCSpacing.value32)
         .task { await perform { try await reloadWithPermissions() } }
         .confirmationDialog("이 공지를 삭제할까요?", isPresented: $access.deletePrompt) {
             Button("공지 삭제", role: .destructive) {
@@ -230,23 +256,49 @@ struct NoticeArticleView: View {
         }
     }
 
+    private var management: some View {
+        HStack(spacing: UMCSpacing.value8) {
+            if access.permissions.contains("CHECK") {
+                Button("읽음 현황") { access.showReaders = true }
+            }
+            if access.permissions.contains("EDIT") || access.permissions.contains("DELETE") {
+                Menu {
+                    if access.permissions.contains("EDIT") {
+                        Button("수정") { access.editSheet = true }
+                    }
+                    if access.permissions.contains("DELETE") {
+                        Button("삭제", role: .destructive) { access.deletePrompt = true }
+                    }
+                } label: {
+                    Label("더보기", systemImage: "ellipsis")
+                }
+                .menuStyle(.borderlessButton)
+                .fixedSize()
+            }
+        }
+    }
+
     private func poll(_ vote: NoticeVote) -> some View {
-        GroupBox {
-            VStack(alignment: .leading, spacing: UMCSpacing.value12) {
-                Text(vote.title).umcTypography(.headlineBold)
+        VStack(alignment: .leading, spacing: UMCSpacing.value12) {
+                Label(vote.status == "OPEN" ? "진행 중인 투표" : "투표", systemImage: "chart.bar")
+                    .umcTypography(.calloutRegular)
+                Text(vote.title).umcTypography(.title4Bold)
                 Text(
                     [
                         vote.allowMultipleChoice ? "복수 선택" : "단일 선택",
                         vote.isAnonymous ? "익명" : "기명", "참여 \(vote.totalParticipants)명",
-                        noticeVoteDeadline(vote.endsAtExclusive, locale: locale, timeZone: timeZone)
-                            .map { "마감 \($0)" },
                     ].compactMap { $0 }.joined(separator: " · ")
                 )
-                .foregroundStyle(.secondary)
+                .umcTypography(.calloutRegular)
+                .foregroundStyle(UMCColor.Semantic.textNeutralMedium600)
+                if let deadline = noticeVoteDeadline(
+                    vote.endsAtExclusive, locale: locale, timeZone: timeZone
+                ) {
+                    Label("마감 " + deadline, systemImage: "calendar.badge.clock")
+                        .umcTypography(.calloutRegular)
+                }
                 ForEach(vote.options, id: \.optionId) { option in
-                    Toggle(
-                        "\(option.content) (\(option.voteCount)표)",
-                        isOn: Binding {
+                    Toggle(isOn: Binding {
                             access.selection.contains(option.optionId)
                         } set: { enabled in
                             if enabled {
@@ -256,7 +308,16 @@ struct NoticeArticleView: View {
                                 access.selection.remove(option.optionId)
                             }
                         }
-                    )
+                    ) {
+                        HStack(alignment: .top, spacing: UMCSpacing.value8) {
+                            Text(option.content).umcTypography(.headlineRegular)
+                                .fixedSize(horizontal: false, vertical: true)
+                            Spacer(minLength: 0)
+                            Text("\(option.voteCount)표").umcTypography(.calloutRegular)
+                                .foregroundStyle(UMCColor.Semantic.textNeutralMedium600)
+                        }
+                    }
+                    .toggleStyle(UMCCheckboxStyle())
                     .disabled(vote.status != "OPEN" || busy)
                 }
                 let previous = Set(vote.mySelectedOptionIds)
@@ -282,9 +343,14 @@ struct NoticeArticleView: View {
                     }
                 }
                 .disabled(vote.status != "OPEN" || busy || previous == access.selection)
-            }.frame(maxWidth: .infinity, alignment: .leading).padding(8)
-        } label: {
-            Label(vote.status == "OPEN" ? "진행 중인 투표" : "투표", systemImage: "chart.bar")
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(UMCSpacing.value16)
+        .background(UMCColor.Custom.backgroundSurface,
+                    in: .rect(cornerRadius: UMCRadius.value12))
+        .overlay {
+            RoundedRectangle(cornerRadius: UMCRadius.value12)
+                .strokeBorder(UMCColor.Semantic.borderNeutralWeak200)
         }
     }
 
@@ -371,14 +437,22 @@ private struct NoticeReadersView: View {
             } else if let next = access.cursor {
                 Button("더 보기") { Task { await load(after: next) } }.disabled(busy)
             }
+            if access.reminderSent { Text("리마인드를 발송했습니다.") }
             if status == "UNREAD" {
-                Button("선택한 대상에게 리마인드 발송") { access.confirmReminder = true }
-                    .disabled(access.targets.isEmpty || busy)
-                if access.reminderSent { Text("리마인드를 발송했습니다.") }
+                Text(AppLocalization.string("선택한 대상 \(access.targets.count)명"))
+                    .umcTypography(.calloutRegular)
             }
-            Button("닫기") { dismiss() }.keyboardShortcut(.cancelAction)
+            Divider()
+            HStack {
+                Button("닫기") { dismiss() }.keyboardShortcut(.cancelAction)
+                Spacer()
+                if status == "UNREAD" {
+                    Button("선택한 대상에게 리마인드 발송") { access.confirmReminder = true }
+                        .disabled(access.targets.isEmpty || busy)
+                }
+            }
         }
-        .padding(24).frame(minWidth: 360, minHeight: 340)
+        .padding(UMCSpacing.value24).frame(minWidth: 460, minHeight: 420)
         .onDisappear {
             reminderTask?.cancel()
             access.clearReaders()
@@ -514,6 +588,7 @@ private struct NoticeEditView: View {
                 }
             }.formStyle(.grouped)
             if let failure { Text(failure) }
+            Divider()
             HStack {
                 Button("취소") { dismiss() }.keyboardShortcut(.cancelAction)
                 Spacer()
@@ -534,6 +609,7 @@ private struct NoticeEditView: View {
                     }
                 }
                 .keyboardShortcut(.defaultAction)
+                .buttonStyle(.borderedProminent)
                 .disabled(
                     title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                         || content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -581,5 +657,18 @@ private struct NoticeEditView: View {
                 id: entry.id)
         }
         if removePoll { try await repository.removePoll(id: entry.id) }
+    }
+}
+
+private struct NoticeArticleScope: View {
+    let article: NoticeEntry
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: UMCSpacing.value4) {
+            Text(article.audienceLabel)
+            if article.mustRead { Label("고정", systemImage: "pin.fill") }
+        }
+        .umcTypography(.calloutRegular)
+        .foregroundStyle(UMCColor.Semantic.textNeutralMedium600)
     }
 }
