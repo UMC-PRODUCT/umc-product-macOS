@@ -83,7 +83,7 @@ Q2에서는 대화 카드 안쪽 24, 타임라인 세로 간격 20, 수신 아�
 
 ## 색과 모드 상속
 
-문의 섹션의 explicitVariableModes는 비어 있다. Q1 루트의 반경은 20이고 넘치는 콘텐츠를 자른다. 두 하위 섹션은 UMC Color(701:2261)를 각각 Light(701:0), Dark(746:0)로 지정한다. 34개 프레임은 각 섹션과 같은 UMC Color 모드를 다시 명시하며 87:2 컬렉션에도 Light 쪽 87:0, Dark 쪽 115:0을 지정한다. 자식의 명시적 값이 없으면 상위 모드를 따른다. Q1 Light 기본 CTA와 App Shell에도 701:0이 직접 지정돼 있다. Dark 자식까지 조회한 11개 화면 모두 App Shell은 Light로 강제된다. [Dark Q1-admin 레일](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1101-9962)을 기준으로 확인한다. [Dark 검색어 선택의 출석·과제 버튼](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1112-20294)도 Light 강제이며 stroke 2다. 바로 옆 영수증 버튼은 Dark 명시와 원격 단일 모드 fill을 함께 쓴다. 프레임 이름만 보고 모든 자식을 Dark로 바꾸면 두 버튼 모두 달라진다. 이름이 같은 원격 Color(단일 Mode 1)와 로컬 UMC Color는 별도 컬렉션이다. 단일 모드 색에 임의 Dark 변환을 적용하지 않는다. 문의 시안 인터랙션(401:5819)의 Light/와 Dark/는 변수명 접두사이고 모드는 401:0 하나다. 인기 문의 순위(1112:20782)도 1112:0 단일 모드다. 구 87:2의 explicit 값은 resolved 목록에 나타나지 않아 구컬렉션 값의 적용 여부는 미확인이다. 실사용 UMC Color 28종의 양 모드 56개 값은 기준 코드의 색 자산 및 semantic→primitive 매핑과 소스 표현 정밀도 내에서 일치했다. 별도 예외인 [영수증](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1112-20295)의 원격 Neutral-Inverse/Strong-600 → TealGrey-600은 단일 모드 6:0에서 RGB(0.376200, 0.383800, 0.383293), α=1이다. 현행 TealGrey-600 Dark는 (0.572549, 0.596078, 0.596078), α=1이다. 이 슬롯에는 원격 모드의 원본값을 유지해야 한다. [현행 TealGrey-600 색 자산](../../UMCDesk/Core/DesignSystem/Resources/UMCColors.xcassets/Primitives/Grey/TealGrey-600.colorset/Contents.json)
+문의 섹션의 explicitVariableModes는 비어 있다. Q1 루트의 반경은 20이고 넘치는 콘텐츠를 자른다. 두 하위 섹션은 UMC Color(701:2261)를 각각 Light(701:0), Dark(746:0)로 지정한다. 34개 프레임은 각 섹션과 같은 UMC Color 모드를 다시 명시하며 87:2 컬렉션에도 Light 쪽 87:0, Dark 쪽 115:0을 지정한다. 자식의 명시적 값이 없으면 상위 모드를 따른다. Q1 Light 기본 CTA와 App Shell에도 701:0이 직접 지정돼 있다. Dark 17개 화면의 App Shell은 Light로 강제된다. [Dark Q1-admin 레일](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1101-9962)을 기준으로 확인한다. [Dark 검색어 선택의 출석·과제 버튼](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1112-20294)도 Light 강제이며 stroke 2다. 바로 옆 영수증 버튼은 Dark 명시와 원격 단일 모드 fill을 함께 쓴다. 프레임 이름만 보고 모든 자식을 Dark로 바꾸면 두 버튼 모두 달라진다. 이름이 같은 원격 Color(단일 Mode 1)와 로컬 UMC Color는 별도 컬렉션이다. 단일 모드 색에 임의 Dark 변환을 적용하지 않는다. 문의 시안 인터랙션(401:5819)의 Light/와 Dark/는 변수명 접두사이고 모드는 401:0 하나다. 인기 문의 순위(1112:20782)도 1112:0 단일 모드다. 87:2는 UMC Color · Mi-fi 컬렉션이다. 프레임에 지정된 구컬렉션 모드와 각 paint가 실제 참조하는 변수는 별도로 확인한다. 실사용 UMC Color 28종의 양 모드 56개 값은 기준 코드의 색 자산 및 semantic→primitive 매핑과 소스 표현 정밀도 내에서 일치했다. 별도 예외인 [영수증](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1112-20295)의 원격 Neutral-Inverse/Strong-600 → TealGrey-600은 단일 모드 6:0에서 RGB(0.376200, 0.383800, 0.383293), α=1이다. 현행 TealGrey-600 Dark는 (0.572549, 0.596078, 0.596078), α=1이다. 이 슬롯에는 원격 모드의 원본값을 유지해야 한다. [현행 TealGrey-600 색 자산](../../UMCDesk/Core/DesignSystem/Resources/UMCColors.xcassets/Primitives/Grey/TealGrey-600.colorset/Contents.json)
 
 Q1 순위 행은 디자인 컨텍스트에서 아래 변 1단위 선이 확인된다.
 
@@ -1337,69 +1337,133 @@ Q5의 처리 정보 위 체크 목록, 적용/취소 → Q5. [Light 원본](http
 | 현재 선택 | [1102:9990](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1102-9990) |
 | ✓ | [1102:10952](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1102-10952) |
 
-### 조회 범위와 남은 확인
+### 원본 사본 대조와 검수 기준
 
-34개 전체 렌더와 두 모드의 프레임 지정은 확인했다. 위 레이어별 상세 수치는 Light 17개 기준이다. Q5 담당자 선택 프레임의 타이틀바는 Light [1102:10487](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1102-10487)의 x=4, Dark [1102:10737](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1102-10737)의 x=0으로 다르다. Dark의 Q1·Q4·Q6·두 도구 펼침·팀 선택 여섯 화면은 공식 도구의 응답량·플랜 한도 때문에 전체 자식 속성의 일괄 교차 검증이 남아 있다. 나머지 11개의 Dark 트리는 회수했다. 일부 텍스트 스타일 이름·개별 constraints와 모든 숨김 레이어의 자식·원격 마스터 내부 모드도 미확인이다. 이들은 **조회 미확인**이며, 최초 로딩 전용 프레임처럼 **원본에서 독립 상태가 정의되지 않은 경우**와 구별한다. 후속 설계의 기준 SHA는 독립 검토가 통과한 뒤 기록한다.
+2026-11-27 16:14:25 KST에 Figma Desktop에서 저장한 원본 사본의 SHA-256은 `3bd0634212fc72d84e5956ae9bf97d2d533b5bdd06dff98c02d715aead7161cc`다. 이 시점의 사본을 아래 표의 기준으로 삼는다. canvas.fig에 포함된 Kiwi 스키마로 노드를 읽고 기존 조회에서 받은 28개 트리와 대조했다. 직접 노드 1,781건의 부모 기준 좌표·크기는 조회 응답의 소수점 표기 자릿수에서 일치했고 텍스트 523건의 characters가 일치했다. 이 대조는 버전 ID나 파일 전체의 동일성을 보증하지 않는다. 저장소 밖의 native/nodes.json에는 문의 섹션과 참조 마스터, variables.json에는 모드와 별칭, focus.json에는 아래 노드별 근거가 있다.
 
-#### Dark 상세 대조가 남은 여섯 화면
+#### Dark 여섯 화면의 직접 대조
 
-독립 조회와 보존 렌더에서 여섯 화면의 존재·순서·1440×960 루트, Workspace 1376×908, App Shell 44×908, 타이틀바 1440×40, UMC Color 746:0을 확인했다. 팀 선택의 전체 오버레이 1440×960과 두 열도 확인했다. 다음 열의 속성은 렌더만으로 값이나 상속 경로를 복원할 수 없어 원본 보강이 필요하다.
+모든 루트는 1440×960이고, 기본 창의 Workspace는 (52,40) 1376×908이다. 타이틀바는 1440×40, 레일은 44×908이다. 아래 직접 레이어 수는 숨김 레이어와 루트를 포함하며 인스턴스 내부의 가상 자식은 별도다. 여섯 화면에서 Light와 Dark의 직접 노드 순서·이름·종류를 맞춰 두 원본의 속성을 대조했다. 서체 family/style, 크기, 행간, 자간, 텍스트 자동 크기 속성은 각 대응 텍스트에서 일치했다. 부모 좌표·크기도 Q1의 숨김 ‘새 문의 작성’ 한 곳을 제외하고 일치했다. Light 17개 상세표의 해당 화면에서 텍스트와 슬롯 순서를 읽고, Dark 표와 모드별 색·예외를 적용한다.
 
-| 화면 | Dark frame | 최소 자식 노드 | 원본이 필요한 속성과 재현 영향 |
-| --- | --- | --- | --- |
-| Q1 FAQ | [1100:20882](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-20882) | [1100:20926](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-20926) | 검색·순위·도움 영역의 폭/패딩, 폰트·페인트·내부 강제 모드. 레일 1101:9928의 내부 상속 |
-| Q4 FAQ 상세 | [1100:21843](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-21843) | [1100:21887](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-21887) | 본문과 답변 정보·하단 액션의 열 너비, 서체·색·모드와 긴 문구의 clip |
-| Q6 FAQ 관리 | [1100:22142](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-22142) | [1100:22186](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-22186) | 대표 질문 목록·편집 열·공개 상태의 크기, 서체·색·모드 |
-| 사용자 도구 펼침 | [1100:22287](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-22287) | [1100:22331](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-22331) | 도구 팝오버의 원점·너비·패딩·서체·페인트·그림자·강제 모드와 뒤쪽 Q1 |
-| 운영 도구 펼침 | [1100:22456](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-22456) | [1100:22500](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-22500) | 운영 도구 팝오버의 같은 속성, 배경 운영 표와의 중첩·상속 |
-| 받는 팀 선택 | [1102:10080](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1102-10080) | [1102:10202](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1102-10202) | 화면 전체 딤의 불투명도, 대화상자 효과·두 열 여덟 선택지의 bounds·폰트·색·모드 |
+| Dark 화면 | 루트 | Workspace 또는 overlay | Light 강제 레일 | 직접 레이어 |
+| --- | --- | --- | --- | --- |
+| Hi-fi · Q1 · 많이 묻는 질문 | [1100:20882](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-20882) | [1100:20926](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-20926) | [1101:9928](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1101-9928) | 181 |
+| Hi-fi · Q4 · FAQ 상세 | [1100:21843](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-21843) | [1100:21887](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-21887) | [1101:10132](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1101-10132) | 123 |
+| Hi-fi · Q6 · FAQ 관리 | [1100:22142](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-22142) | [1100:22186](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-22186) | [1101:10200](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1101-10200) | 147 |
+| Hi-fi · 문의 도구 · 사용자 · 펼침 | [1100:22287](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-22287) | [1100:22331](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-22331) | [1101:10234](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1101-10234) | 181 |
+| Hi-fi · 문의 도구 · UMC PRODUCT · 펼침 | [1100:22456](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-22456) | [1100:22500](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-22500) | [1101:10268](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1101-10268) | 255 |
+| Hi-fi · Q3 · 받는 팀 선택 · 열린 상태 | [1102:10080](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1102-10080) | [1102:10202](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1102-10202) | [1102:10253](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1102-10253) | 183 |
 
-#### 동작 뒤에 나타나는 기존 상태
+각 루트는 UMC Color 701:2261에 Dark 746:0, 구컬렉션 87:2에 Dark 115:0을 지정한다. 컬렉션별 가장 가까운 조상의 명시 모드를 따른다. 표의 레일은 모두 701:0을 직접 지정하며 마스터 758:13998 대상 오버라이드에도 같은 모드가 있다. 인스턴스 내부는 symbolID의 마스터와 guidPath의 symbolOverrides, 저장된 derivedSymbolData를 함께 읽는다. 가상 자식의 속성이 최상위 인스턴스에 없다는 이유로 기본값을 덮어쓰지 않는다.
 
-| 시점 | Light / Dark 레이어 | 확인한 동작과 바인딩 | 원본 보강 범위 |
-| --- | --- | --- | --- |
-| Q3 접수 → Q2 답변 대기 | [1100:19574](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-19574) / [1100:21491](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-21491) | 두 모드 모두 팀 선택 후 전송하면 답변 대기 변수를 true로 설정하고 Q2로 이동한다. Light 1077:10030과 Dark 1077:10269의 기본값은 false다. Light 안내의 visibility 연결은 확인했다. Dark 안내의 실제 visibility 연결은 미확인이다. | 참 상태에서 안내가 차지하는 위치·크기·실제 문구·서체·색과 타임라인 밀림 |
-| Q4 해결 응답 | [1100:20004](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-20004) / [1100:21921](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-21921) | 양쪽 안내의 visibility는 Light 401:5824 / Dark 401:6212에 연결돼 있고 기본값은 false다. Light ‘해결됐어요’의 클릭이 401:5824를 true로 설정한다. Dark 버튼의 클릭 반응은 미확인이다. 레이어 이름은 ‘✓ 해결 응답을 기록했어요. 문의가 새로 등록되지는 않아요.’다. | 표시 시 characters·줄바꿈·색·폰트와 하단 액션 간격 |
-| Q4에서 Q3 작성으로 진입 | [1100:19841](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-19841) / [1100:21758](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-21758) | ‘FAQ에서 문의’ 변수로 참고한 답변을 드러낸다. Light 레이어의 가시성 바인딩은 401:5822, 기본값 false다. Dark 401:6210의 기본값 false와 숨김 레이어의 존재를 확인했고, 해당 레이어와 변수의 직접 연결은 미확인이다. | 참고 답변 자식·배치·색·타이포와 입력 영역 높이 변화 |
+다음 좌표는 각 부모 기준 Figma 단위다. 가로/세로는 직접 레이어의 stackMode·primary/counter sizing·grow·alignSelf·부모 방향이 같은 대응 노드를 공식 조회의 sizing 결과와 맞춘 값이다. 페인트는 저장 RGB·opacity와 colorVar의 바인딩을 읽었다. 패딩은 좌·우·상·하 순서다.
 
-위 상태는 이미 원본에 정의되어 있다. 가시성 전환 후의 렌더 또는 부모와 자식의 전체 속성이 확보돼야 숨김 상태의 재현을 판정할 수 있다. 독립 검토에서 일반 배치·크기 270행과 표시 문구·타이포 264행은 보존된 노드값과 일치했다. 위 두 범위의 원본 보강은 1단계 완료 조건으로 남는다.
+| Dark 원본 노드 | 슬롯 | 부모 좌표 · 크기 | 가로/세로 | 방향 / 간격 / 패딩 좌우상하 | 면 · 바인딩 | 반경 · 선 바인딩 |
+| --- | --- | --- | --- | --- | --- | --- |
+| [1100:20926](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-20926) | Workspace | 52,40 · 1376×908 | FIXED/FIXED | VERTICAL / 0 / 0,0,0,0 | Custom/Background/Surface-White #1D2020 | r16 · Semantic/Border/Neutral/Weaker-100 #1D2020 |
+| [1101:9928](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1101-9928) | App Shell · 문의 | 4,40 · 44×908 | FIXED/FIXED | VERTICAL / 20 / 4,4,0,16 | Primitives/Grey/TealGrey-900 #0F1010 | — |
+| [1100:20940](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-20940) | Content | 0,45 · 1376×851 | FIXED/FIXED | VERTICAL / 16 / 40,40,24,24 | Custom/Background/Surface-White #1D2020 | — |
+| [1100:20949](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-20949) | FAQ 검색 | 40,169 · 1282×52 | FIXED/FIXED | HORIZONTAL / 12 / 16,16,8,8 | Custom/Background/Surface-White #1D2020 | r12 · Semantic/Border/Neutral/Weaker-100 #1D2020 |
+| [1100:20952](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-20952) | FAQ 탐색 | 40,237 · 1282×526 | FIXED/FILL | HORIZONTAL / 24 / 0,0,0,0 | — | — |
+| [1100:20953](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-20953) | 실시간 인기 문의 | 0,0 · 898×526 | FIXED/FILL | VERTICAL / 8 / 0,0,0,0 | — | — |
+| [1100:20997](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-20997) | 답변 탐색 | 922,0 · 360×526 | FIXED/FILL | VERTICAL / 16 / 24,24,24,24 | Custom/Background/Surface-Grey(Weak) #383B3B | r16 · — |
+| [1100:21907](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-21907) | FAQ Detail | 40,105 · 1282×722 | FIXED/FILL | HORIZONTAL / 24 / 0,0,0,0 | — | — |
+| [1100:21908](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-21908) | 검증된 답변 | 0,0 · 902×722 | FIXED/FILL | VERTICAL / 16 / 24,24,24,24 | Custom/Background/Surface-White #1D2020 | r16 · Semantic/Border/Neutral/Weaker-100 #1D2020 |
+| [1100:21918](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-21918) | FAQ Actions | 24,650 · 854×48 | FIXED/HUG | HORIZONTAL / 12 / 0,0,0,0 | — | — |
+| [1100:21922](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-21922) | 답변 정보 | 926,0 · 356×722 | FIXED/FILL | VERTICAL / 24 / 24,24,24,24 | Custom/Background/Surface-White #1D2020 | r16 · Semantic/Border/Neutral/Weaker-100 #1D2020 |
+| [1100:22210](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-22210) | FAQ 관리 작업 공간 | 40,169 · 1282×658 | FIXED/FILL | HORIZONTAL / 24 / 0,0,0,0 | — | — |
+| [1100:22211](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-22211) | FAQ 목록 | 0,0 · 330×658 | FIXED/FILL | VERTICAL / 12 / 20,20,20,20 | Custom/Background/Surface-White #1D2020 | r16 · Semantic/Border/Neutral/Weaker-100 #1D2020 |
+| [1100:22225](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-22225) | FAQ 편집 영역 | 354,0 · 928×658 | FIXED/FILL | VERTICAL / 0 / 0,0,0,0 | — | — |
+| [1100:22226](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-22226) | 공개용 FAQ 편집 | 0,0 · 928×658 | FIXED/FILL | VERTICAL / 12 / 24,24,24,24 | Custom/Background/Surface-White #1D2020 | r16 · Semantic/Border/Neutral/Weaker-100 #1D2020 |
+| [1100:22247](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-22247) | FAQ Publish Actions | 24,586 · 880×48 | FIXED/HUG | HORIZONTAL / 12 / 0,0,0,0 | — | — |
+| [1100:22331](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-22331) | Workspace | 52,40 · 1376×908 | FIXED/FIXED | VERTICAL / 0 / 0,0,0,0 | Custom/Background/Surface-White #1D2020 | r16 · Semantic/Border/Neutral/Weaker-100 #1D2020 |
+| [1100:22420](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-22420) | 탭 도구 모음 · inquiry | 938,63 · 390×371 | FIXED/HUG | VERTICAL / 14 / 20,20,20,20 | Custom/Background/Surface-White #1D2020 | r16 · Semantic/Border/Neutral/Weaker-100 #1D2020 |
+| [1100:22500](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-22500) | Workspace | 52,40 · 1376×908 | FIXED/FIXED | VERTICAL / 0 / 0,0,0,0 | Custom/Background/Surface-White #1D2020 | r16 · Semantic/Border/Neutral/Weaker-100 #1D2020 |
+| [1100:22671](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-22671) | 답변 준비 필요 | 984,0 · 298×594 | FIXED/FILL | VERTICAL / 16 / 24,24,24,24 | Custom/Background/Surface-White #1D2020 | r16 · Semantic/Border/Neutral/Weaker-100 #1D2020 |
+| [1100:22679](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-22679) | 탭 도구 모음 · inquiry_ops | 938,63 · 390×359 | FIXED/HUG | VERTICAL / 14 / 20,20,20,20 | Custom/Background/Surface-White #1D2020 | r16 · Semantic/Border/Neutral/Weaker-100 #1D2020 |
+| [1102:10202](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1102-10202) | 받는 팀 선택 / 모달 | 0,0 · 1440×960 | FIXED/FIXED | VERTICAL / 0 / 0,0,0,0 | Custom/Background/Dimmed #000000/40% | — |
+| [1102:10203](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1102-10203) | 받는 팀 선택 | 312,186.5 · 816×587 | FIXED/HUG | VERTICAL / 20 / 24,24,24,24 | Custom/Background/Surface-White #1D2020 | r16 · Semantic/Border/Neutral/Medium-300 #383B3B |
+| [1102:10209](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1102-10209) | 팀 선택 행 1 | 25,118 · 766×96 | FILL/HUG | HORIZONTAL / 12 / 0,0,0,0 | — | — |
+| [1102:10210](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1102-10210) | Brand & Growth | 0,0 · 377×96 | FILL/FIXED | VERTICAL / 8 / 14,14,14,14 | Custom/Background/Surface-Grey(Weaker) #1D2020 | r10 · Semantic/Border/Neutral/Medium-300 #383B3B |
+| [1102:10215](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1102-10215) | Learning & Activity | 389,0 · 377×96 | FILL/FIXED | VERTICAL / 8 / 14,14,14,14 | Custom/Background/Surface-Grey(Weaker) #1D2020 | r10 · Semantic/Border/Neutral/Medium-300 #383B3B |
+| [1102:10221](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1102-10221) | Community & Connection | 0,0 · 377×96 | FILL/FIXED | VERTICAL / 8 / 14,14,14,14 | Custom/Background/Surface-Grey(Weaker) #1D2020 | r10 · Semantic/Border/Neutral/Medium-300 #383B3B |
+| [1102:10226](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1102-10226) | Operations Enablement | 389,0 · 377×96 | FILL/FIXED | VERTICAL / 8 / 14,14,14,14 | Custom/Background/Surface-Grey(Weaker) #1D2020 | r10 · Semantic/Border/Neutral/Medium-300 #383B3B |
+| [1102:10232](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1102-10232) | Platform | 0,0 · 377×96 | FILL/FIXED | VERTICAL / 8 / 14,14,14,14 | Custom/Background/Surface-Grey(Weaker) #1D2020 | r10 · Semantic/Border/Neutral/Medium-300 #383B3B |
+| [1102:10237](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1102-10237) | Design Platform | 389,0 · 377×96 | FILL/FIXED | VERTICAL / 8 / 14,14,14,14 | Custom/Background/Surface-Grey(Weaker) #1D2020 | r10 · Semantic/Border/Neutral/Medium-300 #383B3B |
+| [1102:10243](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1102-10243) | Infrastructure | 0,0 · 377×96 | FILL/FIXED | VERTICAL / 8 / 14,14,14,14 | Custom/Background/Surface-Grey(Weaker) #1D2020 | r10 · Semantic/Border/Neutral/Medium-300 #383B3B |
+| [1102:10248](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1102-10248) | 어느 팀인지 모르겠어요 | 389,0 · 377×96 | FILL/FIXED | VERTICAL / 8 / 14,14,14,14 | Custom/Background/Surface-Grey(Weaker) #1D2020 | r10 · Semantic/Border/Neutral/Medium-300 #383B3B |
 
-독립 조사에서 확인한 사용 변수 142개 중 111개는 ID·이름을 값 응답과 대조했다. 아래 31개는 사용 ID와 이름까지만 확인했다. 레이어의 실제 수치와 Variables의 valuesByMode·alias 최종값은 서로 다른 근거다. 이 목록의 이름에서 정의값을 역산하지 않는다.
+두 열린 도구 패널은 반경 16, 간격 14, 각 변 패딩 20이다. 두 원본 모두 검정 #000000, 불투명도 13%, NORMAL, offset (0,8), blur 24, spread 0, showShadowBehindNode=true인 DROP_SHADOW를 쓴다. Q1 기본 상태에서 숨겨진 Dark 새 문의 버튼 1100:21025의 저장 폭은 97이다. 대응 Light 노드는 348이며 펼침 패널의 버튼과 구별한다. Q5 담당자 선택 타이틀바도 Light 1102:10487의 x=4와 Dark 1102:10737의 x=0이 다르다.
 
-<details><summary>값 응답이 없는 변수 31개</summary>
+팀 선택 overlay 1102:10202는 911:18277을 참조하며 검정 40%다. 1102:10203의 저장 효과 목록에는 대화상자 자체 그림자가 없다. 선택지는 두 열에 네 줄이며 각각 377×96이다. Q4 FAQ 본문과 답변 정보 열의 폭은 902·356, Q6 목록과 편집 열의 폭은 330·928이다. 열 사이 간격은 두 화면 모두 24다. Q4 본문 1100:21915는 폭 854에서 높이 자동, 저장 높이 120이다. 부모 1100:21908과 하단 액션 1100:21918은 frameMaskDisabled=false로 프레임 밖을 자른다.
 
-| 사용 변수 ID | Figma 변수 이름 |
-| --- | --- |
-| `VariableID:123:6815` | Spacing/16 |
-| `VariableID:123:6812` | Spacing/4 |
-| `VariableID:123:6813` | Spacing/8 |
-| `VariableID:72fdfb742d40b1750dee13820c4af8410e00415a/2860:106` | Typography/Base/FontWeight/Medium |
-| `VariableID:123:6814` | Spacing/12 |
-| `VariableID:612:17032` | Radius/12 |
-| `VariableID:123:6817` | Spacing/24 |
-| `VariableID:612:17031` | Radius/8 |
-| `VariableID:3ef7f6e3e7db2b9e7de1321ba9229531dd00a85d/4311:72` | Mode |
-| `VariableID:123:6819` | Spacing/40 |
-| `VariableID:4f4098ebf2175fb4f25682799a336040a3e08a99/2860:209` | Spacing/Semantic/Padding/Padding 6 |
-| `VariableID:d0a0eb63f55135cabd2806e402f173914b2453fc/2860:605` | Spacing/Semantic/Padding/Padding 0 |
-| `VariableID:612:17030` | Radius/6 |
-| `VariableID:123:6816` | Spacing/20 |
-| `VariableID:612:17033` | Radius/16 |
-| `VariableID:409:3211` | Light/대표 질문 |
-| `VariableID:ae02948c7f89f269323de7f3622375789cba8a85/2860:57` | Spacing/Semantic/Padding/Padding 16 |
-| `VariableID:a40be7b7525d8cf7d01ba4f54d83aadc9fc68a6d/2860:153` | Typography/Base/FontFamily/Brand |
-| `VariableID:401:6208` | Dark/기간 |
-| `VariableID:401:6209` | Dark/갱신 시각 |
-| `VariableID:1112:20785` | Dark/기존 순위 |
-| `VariableID:401:6246` | Dark/문의자 1 |
-| `VariableID:401:6254` | Dark/문의자 2 |
-| `VariableID:401:6262` | Dark/문의자 3 |
-| `VariableID:401:6270` | Dark/문의자 4 |
-| `VariableID:401:6278` | Dark/문의자 5 |
-| `VariableID:428:2927` | Dark/새 순위 안내 표시 |
-| `VariableID:1077:10185` | Dark/문의 팀 및 처리/문의 받는 팀 / 작성 중 |
-| `VariableID:409:3780` | Dark/대표 질문 |
-| `VariableID:527:10594` | Dark/문의 도구 펼침 예시/사용자 |
-| `VariableID:527:10850` | Dark/문의 도구 펼침 예시/PRODUCT |
+Dark Q1과 펼침 배경의 설명 1100:20999·21009·22404·22414, 운영 목록 머리글 1100:22539~22543, 팀 선택 뒤쪽 1102:10160은 Light 대응 슬롯의 701:2342에서 Dark 701:2343(#D4DADA)으로 바인딩이 바뀐다. 아래는 직접 읽은 글자 속성이다. 행간 단위는 사본 표기를 따른다.
 
-</details>
+| Dark 텍스트 | 저장 예시 첫 줄 | 폰트 | 행간 | 텍스트 크기 | 페인트 |
+| --- | --- | --- | --- | --- | --- |
+| [1100:20999](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-20999) | UMC PRODUCT가 확인한 서비스 이용 답변을 보여요. | Noto Sans KR Regular 14 | 21 PIXELS | HEIGHT | Semantic/Text/Neutral-Strong-800 #D4DADA |
+| [1100:21915](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-21915) | 1. 활동 메뉴를 새로고침하고 해당 일정의 출석 상태를 확인해 주세요. | Noto Sans KR Regular 16 | 24 PIXELS | HEIGHT | Semantic/Text/Neutral-Default #F2F5F5 |
+| [1100:21923](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-21923) | 답변 정보 | Noto Sans KR Bold 18 | 27 PIXELS | HEIGHT | Semantic/Text/Neutral-Default #F2F5F5 |
+| [1100:22203](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-22203) | FAQ 관리 | Noto Sans KR Bold 28 | 40 PIXELS | HEIGHT | Semantic/Text/Neutral-Default #F2F5F5 |
+| [1100:22425](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-22425) | 답을 찾아보고 내 문의를 이어가세요. | Noto Sans KR Regular 12 | 1.45 RAW | HEIGHT | Semantic/Text/Neutral-Medium-600 #929898 |
+| [1100:22672](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-22672) | 답변 준비 필요 | Noto Sans KR Bold 18 | 27 PIXELS | HEIGHT | Semantic/Text/Neutral-Default #F2F5F5 |
+| [1102:10205](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1102-10205) | 어느 팀에 문의할까요? | Noto Sans KR Bold 20 | 100 PERCENT | WIDTH_AND_HEIGHT | Semantic/Text/Neutral-Default #F2F5F5 |
+| [1102:10212](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1102-10212) | Brand & Growth | Noto Sans KR Medium 14 | 100 PERCENT | WIDTH_AND_HEIGHT | Semantic/Text/Neutral-Default #F2F5F5 |
+
+#### 상태가 바뀔 때 보이는 안내와 참고 카드
+
+여섯 레이어의 VISIBLE 바인딩과 변수 기본값(false)을 사본에서 읽었다. 아래 좌표와 크기는 숨김 상태에 저장된 값이다. 표시 시에는 부모의 오토레이아웃이 가시 자식의 순서·간격과 가변 공간을 다시 계산한다. 따라서 저장 좌표를 활성 상태의 절대 좌표로 고정하지 않는다. 다음은 파일이 지정한 동작과 레이아웃이며 활성 프로토타입을 실행해 측정한 결과는 아니다.
+
+**Q2 답변 대기** · [1100:19574](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-19574) / [1100:21491](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-21491)
+
+팀 선택 후 전송(Light 1100:19835 / Dark 1100:21752)하면 대기 변수 1077:10030 / 1077:10269를 true로 설정하고 Q2로 이동한다. 두 안내의 VISIBLE이 각각 이 변수에 연결된다. “문의가 접수됐어요. 이 대화에서 답변을 확인할 수 있어요.”는 Noto Sans KR Regular 13, 자간 0%, 저장 행간 100%·한 줄 높이 16, WIDTH_AND_HEIGHT다. 저장 (0,224) 303×16이며 701:2342의 Light #606262 / Dark #929898을 쓴다. 부모 타임라인 1100:19560 / 1100:21477은 카드 안 (24,24) 1234×482, 세로 간격 20, grow=1이다. 사용자 메시지 → 수신 메시지 → 대기 안내 → 구분선 → 참고 답변 → 재문의 메시지 순으로 배치한다. 접수 시 답변 있음이 false로 바뀌므로 수신 메시지의 자리를 비워 두지 않는다.
+
+**Q4 해결 응답** · [1100:20004](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-20004) / [1100:21921](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-21921)
+
+해결됐어요(Light 1100:20002 / Dark 1100:21919)의 ON_CLICK은 각 안내의 VISIBLE과 연결된 401:5824 / 401:6212를 true로 설정한다. Dark 인스턴스 루트와 마스터 879:20074 대상 오버라이드에 같은 동작이 기록돼 있다. “✓ 해결 응답을 기록했어요. 문의가 새로 등록되지는 않아요.”는 Noto Sans KR Medium 13, 자간 0%, 행간 20, 저장 한 줄 (25,391) 854×19, 701:2346의 Light #02746C / Dark #62CCC4다. 부모 1100:19991 / 1100:21908은 902×722, 세로 간격 16, 각 변 패딩 24다. 본문 뒤 가변 공간, FAQ Actions, 피드백 순서이므로 피드백을 표시하면 가변 공간이 줄고 버튼 아래에 안내가 들어간다.
+
+**Q3 참고한 답변** · [1100:19841](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-19841) / [1100:21758](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-21758)
+
+Q4 담당자에게 문의하기(Light 1100:20003 / Dark 1100:21920)의 FAQ 선택값·작성 상태 조건 분기가 401:5822 / 401:6210을 true로 설정하고 Q3로 연결한다. 두 카드의 VISIBLE이 각각 이 변수에 연결된다. 부모 관련 FAQ(1100:19836 / 1100:21753)는 (922,0) 360×270, 세로 간격 16, 패딩 24다. 답변 확인하기 다음에 참고 카드, 가변 공간, 마지막 안내 순이다. 카드가 나타날 때 우측 열의 가시 자식이 재배치된다. 좌측 작성 필드는 다른 열이다.
+
+카드의 저장 상자는 (25,200) 312×34, 세로 간격 8, 패딩 16, 반경 12, frameMaskDisabled=false, 테두리 공간 포함이다. 면은 701:2295의 Light #DDF4F1 / Dark #0D3B37이다. 자식들의 저장 좌표는 카드 기준이다. 첫 줄 1100:19842 / 1100:21759 “참고한 답변”은 (17,17) 280×20, Medium 13/20, #02746C / #62CCC4다. 다음 줄 1100:19843 / 1100:21760의 저장 예시는 “출석 기록이 실제와 다르게 보여요”이며 (17,43) 280×21, Regular 14/21, #0F1010 / #F2F5F5다. 둘 다 Noto Sans KR, HEIGHT, 자간 0%다. 둘째 줄은 선택한 답변 제목에 바인딩된다. 숨김 저장 높이 34를 활성 카드의 고정 높이로 사용하면 둘째 줄을 잘라낸다. 활성 높이는 자식의 실제 텍스트 높이와 부모 레이아웃으로 정한다.
+
+#### 기존 조회에서 값이 빠졌던 변수
+
+사용 변수 142개 중 기존 응답으로 값을 대조한 111개에 더해, 나머지 31개는 사본의 variableDataValues에서 모드 ID와 값을 확인했다. 게시 라이브러리의 참조는 key/version으로 연결했다. 아래 문자열과 불리언은 시안 예시의 기본값이다.
+
+| 변수 ID | 이름 | 모드별 값 · 별칭 경로 |
+| --- | --- | --- |
+| 123:6815 | Spacing/16 | 123:1 = 16 |
+| 123:6812 | Spacing/4 | 123:1 = 4 |
+| 123:6813 | Spacing/8 | 123:1 = 8 |
+| 72fdfb742d40b1750dee13820c4af8410e00415a/2860:106 | Typography/Base/FontWeight/Medium | 2066:2 = Medium |
+| 123:6814 | Spacing/12 | 123:1 = 12 |
+| 612:17032 | Radius/12 | 123:1 = 12 |
+| 123:6817 | Spacing/24 | 123:1 = 24 |
+| 612:17031 | Radius/8 | 123:1 = 8 |
+| 3ef7f6e3e7db2b9e7de1321ba9229531dd00a85d/4311:72 | Mode | 1:0 = Light, 207:0 = Dark |
+| 123:6819 | Spacing/40 | 123:1 = 40 |
+| 4f4098ebf2175fb4f25682799a336040a3e08a99/2860:209 | Spacing/Semantic/Padding/Padding 6 | 2066:2 = Spacing/Primitive/6 → 2066:2 = 6 |
+| d0a0eb63f55135cabd2806e402f173914b2453fc/2860:605 | Spacing/Semantic/Padding/Padding 0 | 2066:2 = Spacing/Primitive/0 → 2066:2 = 0 |
+| 612:17030 | Radius/6 | 123:1 = 6 |
+| 123:6816 | Spacing/20 | 123:1 = 20 |
+| 612:17033 | Radius/16 | 123:1 = 16 |
+| 409:3211 | Light/대표 질문 | 401:0 = 미분류 |
+| ae02948c7f89f269323de7f3622375789cba8a85/2860:57 | Spacing/Semantic/Padding/Padding 16 | 2066:2 = Spacing/Primitive/16 → 2066:2 = 16 |
+| a40be7b7525d8cf7d01ba4f54d83aadc9fc68a6d/2860:153 | Typography/Base/FontFamily/Brand | 2066:2 = Pretendard Variable |
+| 401:6208 | Dark/기간 | 401:0 = 최근 24시간 |
+| 401:6209 | Dark/갱신 시각 | 401:0 = 마지막 갱신 14:32 |
+| 1112:20785 | Dark/기존 순위 | 1112:0 = True |
+| 401:6246 | Dark/문의자 1 | 401:0 = 28명 문의 |
+| 401:6254 | Dark/문의자 2 | 401:0 = 21명 문의 |
+| 401:6262 | Dark/문의자 3 | 401:0 = 16명 문의 |
+| 401:6270 | Dark/문의자 4 | 401:0 = 11명 문의 |
+| 401:6278 | Dark/문의자 5 | 401:0 = 7명 문의 |
+| 428:2927 | Dark/새 순위 안내 표시 | 401:0 = True |
+| 1077:10185 | Dark/문의 팀 및 처리/문의 받는 팀 / 작성 중 | 401:0 = 받는 팀 선택 |
+| 409:3780 | Dark/대표 질문 | 401:0 = 미분류 |
+| 527:10594 | Dark/문의 도구 펼침 예시/사용자 | 401:0 = True |
+| 527:10850 | Dark/문의 도구 펼침 예시/PRODUCT | 401:0 = True |
+
+독립 검토는 이 문서와 같은 커밋에서 여섯 Dark 트리, 세 상태의 부모·자식·동작과 두 Light 그림자를 대조한다. 실제 앱 창, 활성 상태의 픽셀 위치, 키보드·IME·VoiceOver와 실서비스 권한 검수는 구현 단계에서 수행한다. 2단계는 독립 검토를 통과한 커밋을 기준으로 삼는다.
