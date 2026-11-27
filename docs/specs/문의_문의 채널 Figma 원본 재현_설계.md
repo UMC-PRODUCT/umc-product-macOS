@@ -1358,9 +1358,9 @@ Q5의 처리 정보 위 체크 목록, 적용/취소 → Q5. [Light 원본](http
 
 | 시점 | Light / Dark 레이어 | 확인한 동작과 바인딩 | 원본 보강 범위 |
 | --- | --- | --- | --- |
-| Q3 접수 → Q2 답변 대기 | [1100:19574](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-19574) / [1100:21491](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-21491) | 팀 선택 후 전송 시 접수와 답변 대기를 설정한다. 가시성 변수 Light 1077:10030 / Dark 1077:10269, 기본값 false. | 참 상태에서 안내가 차지하는 위치·크기·실제 문구·서체·색과 타임라인 밀림 |
-| Q4 해결 응답 | [1100:20004](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-20004) / [1100:21921](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-21921) | ‘해결됐어요’가 Light 401:5824 / Dark 401:6212를 true로 바꾼다. 레이어 이름은 ‘✓ 해결 응답을 기록했어요. 문의가 새로 등록되지는 않아요.’다. | 표시 시 characters·줄바꿈·색·폰트와 하단 액션 간격 |
-| Q4에서 Q3 작성으로 진입 | [1100:19841](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-19841) / [1100:21758](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-21758) | ‘FAQ에서 문의’ 변수로 참고한 답변을 드러낸다. Light 레이어의 가시성 바인딩은 401:5822, 기본값 false. | 참고 답변 자식·배치·색·타이포와 입력 영역 높이 변화 |
+| Q3 접수 → Q2 답변 대기 | [1100:19574](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-19574) / [1100:21491](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-21491) | 두 모드 모두 팀 선택 후 전송하면 답변 대기 변수를 true로 설정하고 Q2로 이동한다. Light 1077:10030과 Dark 1077:10269의 기본값은 false다. Light 안내의 visibility 연결은 확인했다. Dark 안내의 실제 visibility 연결은 미확인이다. | 참 상태에서 안내가 차지하는 위치·크기·실제 문구·서체·색과 타임라인 밀림 |
+| Q4 해결 응답 | [1100:20004](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-20004) / [1100:21921](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-21921) | 양쪽 안내의 visibility는 Light 401:5824 / Dark 401:6212에 연결돼 있고 기본값은 false다. Light ‘해결됐어요’의 클릭이 401:5824를 true로 설정한다. Dark 버튼의 클릭 반응은 미확인이다. 레이어 이름은 ‘✓ 해결 응답을 기록했어요. 문의가 새로 등록되지는 않아요.’다. | 표시 시 characters·줄바꿈·색·폰트와 하단 액션 간격 |
+| Q4에서 Q3 작성으로 진입 | [1100:19841](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-19841) / [1100:21758](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1100-21758) | ‘FAQ에서 문의’ 변수로 참고한 답변을 드러낸다. Light 레이어의 가시성 바인딩은 401:5822, 기본값 false다. Dark 401:6210의 기본값 false와 숨김 레이어의 존재를 확인했고, 해당 레이어와 변수의 직접 연결은 미확인이다. | 참고 답변 자식·배치·색·타이포와 입력 영역 높이 변화 |
 
 위 상태는 이미 원본에 정의되어 있다. 가시성 전환 후의 렌더 또는 부모와 자식의 전체 속성이 확보돼야 숨김 상태의 재현을 판정할 수 있다. 독립 검토에서 일반 배치·크기 270행과 표시 문구·타이포 264행은 보존된 노드값과 일치했다. 위 두 범위의 원본 보강은 1단계 완료 조건으로 남는다.
 
