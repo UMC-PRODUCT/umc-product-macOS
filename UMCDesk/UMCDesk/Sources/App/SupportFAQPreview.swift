@@ -12,6 +12,7 @@ import SwiftUI
 struct SupportFAQPreview: View {
     @Bindable var fixture: SupportFixture
     let back: () -> Void
+    @State private var filter = "발행"
     @State private var editing: SupportDraft?
 
     init(fixture: SupportFixture, initialDraft: SupportDraft? = nil, back: @escaping () -> Void) {
@@ -31,29 +32,45 @@ struct SupportFAQPreview: View {
             }
         }
         Text("FAQ 관리").umcTypography(.title2Bold).accessibilityAddTraits(.isHeader)
-        Table(fixture.drafts) {
-            TableColumn("대표 질문") { draft in
-                Button(draft.article.question) { editing = draft }.buttonStyle(.link)
+        Picker("공개 상태", selection: $filter) {
+            ForEach(["초안", "발행", "보관"], id: \.self) { Text($0).tag($0) }
+        }.pickerStyle(.segmented).fixedSize().onChange(of: filter) { editing = nil }
+        HStack(alignment: .top, spacing: 24) {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("대표 질문").umcTypography(.headlineBold)
+                    ForEach(fixture.drafts.filter { ($0.published != nil ? "발행" : $0.status) == filter }) { draft in
+                        Button {
+                            editing = draft
+                        } label: {
+                            VStack(alignment: .leading) {
+                                Text(draft.article.question)
+                                Text(draft.status).umcTypography(.captionRegular)
+                            }.frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                    }
+                }.padding(20)
+            }.frame(width: 330)
+            if let draft = editing {
+                SupportFAQEditor(draft: draft, close: { editing = nil }) { result in
+                    if let index = fixture.drafts.firstIndex(where: { $0.id == result.id }) {
+                        fixture.drafts[index] = result
+                    } else {
+                        fixture.drafts.append(result)
+                    }
+                    editing = nil
+                }.id(draft.id)
+            } else {
+                ContentUnavailableView("편집할 FAQ를 선택하세요", systemImage: "list.bullet")
             }
-            TableColumn("상태") { Text($0.status) }
         }
-        .alternatingRowBackgrounds(.disabled)
-        .sheet(item: $editing) { draft in
-            SupportFAQEditor(draft: draft) { result in
-                if let index = fixture.drafts.firstIndex(where: { $0.id == result.id }) {
-                    fixture.drafts[index] = result
-                } else {
-                    fixture.drafts.append(result)
-                }
-                editing = nil
-            }
-        }
+
     }
 }
 
 private struct SupportFAQEditor: View {
-    @Environment(\.dismiss) private var dismiss
     @State var draft: SupportDraft
+    let close: () -> Void
     let save: (SupportDraft) -> Void
     @State private var verified = false
 
@@ -68,7 +85,7 @@ private struct SupportFAQEditor: View {
                     .toggleStyle(UMCCheckboxStyle())
             }
             HStack {
-                Button("취소") { dismiss() }.keyboardShortcut(.cancelAction)
+                Button("취소") { close() }.keyboardShortcut(.cancelAction)
                 if draft.published != nil {
                     Button("보관") {
                         draft.archive()
@@ -90,7 +107,7 @@ private struct SupportFAQEditor: View {
             }
         }
         .padding(UMCSpacing.value24)
-        .frame(width: 500)
+        .frame(maxWidth: .infinity)
         .onChange(of: draft.article) { verified = false }
     }
 }

@@ -12,6 +12,8 @@ struct SupportTicketDetail: View {
     @Binding var ticket: SupportTicket
     let isOperator: Bool
     let back: () -> Void
+    @State private var editingLabel = false
+    @State private var pendingLabel = ""
     @State private var message = ""
     @FocusState private var inputFocused: Bool
 
@@ -34,11 +36,14 @@ struct SupportTicketDetail: View {
                     }
                 }
             }
+            HStack(alignment: .top, spacing: 24) {
             VStack(alignment: .leading, spacing: UMCSpacing.value16) {
                 ScrollViewReader { scroll in
                     ScrollView {
                         VStack(alignment: .leading, spacing: UMCSpacing.value16) {
-                            if isOperator { operations }
+                            if ticket.status == .received && !ticket.replies.contains(where: { $0.author == .agent }) {
+                                Label("답변 대기 · 담당자가 문의를 확인하고 있어요.", systemImage: "clock")
+                            }
                             bubble(ticket.content, author: .requester, date: ticket.createdAt)
                             ForEach(ticket.replies) { reply in
                                 bubble(reply.text, author: reply.author, date: reply.sentAt)
@@ -82,6 +87,8 @@ struct SupportTicketDetail: View {
             .padding(UMCSpacing.value16)
             .background(UMCColor.Custom.backgroundSurfaceGreyWeak,
                         in: .rect(cornerRadius: UMCRadius.value16))
+            if isOperator { operations.frame(width: 360) }
+            }
         }
         .onAppear { inputFocused = ticket.status != .closed }
     }
@@ -114,8 +121,21 @@ struct SupportTicketDetail: View {
                     Text("미배정").tag("미배정")
                     Text("예시 담당자").tag("예시 담당자")
                 }
-                Picker("라벨", selection: $ticket.label) {
-                    ForEach(["미분류", "화면 오류", "이용 방법"], id: \.self) { Text($0).tag($0) }
+                Button("라벨 · " + ticket.label) {
+                    pendingLabel = ticket.label
+                    editingLabel = true
+                }
+                .popover(isPresented: $editingLabel) {
+                    VStack(alignment: .leading, spacing: 12) {
+                        Picker("라벨 편집", selection: $pendingLabel) {
+                            ForEach(["미분류", "화면 오류", "출석 오류", "정보 확인", "기능 요청", "이용 방법"],
+                                    id: \.self) { Text($0).tag($0) }
+                        }.pickerStyle(.radioGroup)
+                        HStack {
+                            Button("취소") { editingLabel = false }.keyboardShortcut(.cancelAction)
+                            Button("적용") { ticket.label = pendingLabel; editingLabel = false }
+                        }
+                    }.padding(20)
                 }
             }
             .padding(UMCSpacing.value12)

@@ -9,8 +9,27 @@ import Foundation
 import Observation
 
 enum SupportTeam: String, CaseIterable {
-    case product = "UMC PRODUCT"
-    case operations = "운영팀"
+    case brand = "Brand & Growth"
+    case learning = "Learning & Activity"
+    case community = "Community & Connection"
+    case operations = "Operations Enablement"
+    case platform = "Platform"
+    case design = "Design Platform"
+    case infrastructure = "Infrastructure"
+    case product = "어느 팀인지 모르겠어요"
+
+    var summary: String {
+        switch self {
+        case .brand: "모집·선발, 공식 홈페이지, 테크 블로그"
+        case .learning: "워크북·미션, 활동 참여, 출석·수료, UPMS"
+        case .community: "커뮤니티·Connect, 프로필·전자명함, 채팅 이용"
+        case .operations: "기수·조직·역할 관리, 공지, 출석·운영 승인"
+        case .platform: "로그인·인증, 알림·채팅 전달 오류, 공통 폼"
+        case .design: "디자인 시스템, Figma 라이브러리·토큰"
+        case .infrastructure: "배포·실행 환경, 장애·모니터링"
+        case .product: "UMC PRODUCT에서 담당 팀을 확인해 드려요."
+        }
+    }
 }
 
 enum SupportInquiryStatus: String, CaseIterable {
@@ -84,7 +103,7 @@ struct SupportDraft: Identifiable {
 final class SupportFixture {
     var tickets = [
         SupportTicket(subject: "출석 화면 오류 문의", content: "예시 일정의 출석 기록을 확인해 주세요.",
-                      team: .product, category: "출석·과제", assignee: "예시 담당자", label: "화면 오류", status: .active,
+                      team: .learning, category: "출석·과제", assignee: "예시 담당자", label: "화면 오류", status: .active,
                       replies: [.init(author: .agent, text: "확인해 볼게요. 사용 중인 앱 버전을 알려 주세요.")]),
         SupportTicket(subject: "종료된 예시 문의", content: "앱 언어 설정을 확인했어요.",
                       team: .operations, category: "앱 설정", status: .closed,

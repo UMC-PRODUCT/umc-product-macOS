@@ -18,6 +18,9 @@ struct SupportView: View {
     @State private var composing = false
     @State private var createdTicket: UUID?
 
+    @State private var toolsOpen = false
+    @State private var reference: SupportArticle?
+
     private var heading: String {
         switch page {
         case .answers: AppLocalization.string("문의")
@@ -54,13 +57,39 @@ struct SupportView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: UMCSpacing.value20) {
+            HStack {
+                Spacer()
+                Button("문의 도구", systemImage: "slider.horizontal.3") { toolsOpen.toggle() }
+                    .popover(isPresented: $toolsOpen) {
+                        VStack(alignment: .leading, spacing: 14) {
+                            Text("문의 도구").umcTypography(.title2Bold)
+                            Button("많이 묻는 질문") { navigate(.answers) }
+                            Button("내 문의") { navigate(.inquiries) }
+                            if fixture != nil {
+                                Button("문의하기") { toolsOpen = false; reference = nil; composing = true }
+                                Button("문의 관리") { navigate(.operations) }
+                            }
+                        }.padding(20).frame(width: 390, alignment: .leading)
+                    }
+            }
+            if composing, let fixture {
+                SupportComposePreview(articles: articles, cancel: { composing = false },
+                                      submit: { subject, content, team in
+                    createdTicket = fixture.create(subject: subject, content: content, team: team)
+                    navigate(.inquiries)
+                }, reference: reference)
+            } else {
             HStack(alignment: .center) {
                 VStack(alignment: .leading, spacing: UMCSpacing.value4) {
                     Text(heading).umcTypography(.largeTitle3Bold).accessibilityAddTraits(.isHeader)
+                    if page == .answers {
+                        Text("서비스 이용 중 궁금한 점은 답변을 찾거나 UMC PRODUCT에 문의해 주세요.")
+                            .foregroundStyle(UMCColor.Semantic.textNeutralStrong800)
+                    }
                 }
                 Spacer()
                 if fixture != nil && page == .answers {
-                    Button("문의하기") { composing = true }
+                    Button("문의하기") { reference = nil; composing = true }
                         .buttonStyle(.borderedProminent).modifier(SupportControlFill())
                 }
             }
@@ -74,7 +103,11 @@ struct SupportView: View {
             .frame(maxWidth: 300)
             switch page {
             case .answers:
-                SupportAnswersView(articles: articles, showInquiries: { page = .inquiries })
+                SupportAnswersView(articles: articles, showInquiries: { page = .inquiries },
+                                   compose: fixture == nil ? nil : { article in
+                    reference = article
+                    composing = true
+                })
             case .inquiries:
                 inquiries
             case .operations:
@@ -83,7 +116,7 @@ struct SupportView: View {
                 }
             }
         }
-        .padding(UMCSpacing.value32)
+        }.padding(.horizontal, 40).padding(.vertical, 24)
         .frame(minWidth: 560, maxWidth: .infinity, minHeight: 420, maxHeight: .infinity,
                alignment: .topLeading)
         .background(UMCColor.Custom.backgroundDefault)
@@ -95,13 +128,12 @@ struct SupportView: View {
                     .padding(.horizontal, UMCSpacing.value32).padding(.bottom, UMCSpacing.value8)
             }
         }
-        .sheet(isPresented: $composing) {
-            SupportComposePreview { subject, content, team in
-                createdTicket = fixture?.create(subject: subject, content: content, team: team)
-                page = .inquiries
-                composing = false
-            }
-        }
+    }
+
+    private func navigate(_ next: Page) {
+        toolsOpen = false
+        composing = false
+        page = next
     }
 
     private var articles: [SupportArticle] {
@@ -133,6 +165,7 @@ private struct SupportAnswersView: View {
     private enum Focus { case search, table, back }
     let articles: [SupportArticle]
     let showInquiries: () -> Void
+    let compose: ((SupportArticle?) -> Void)?
     @State private var category: String?
     @State private var weekly = false
     @State private var search = ""
@@ -164,27 +197,8 @@ private struct SupportAnswersView: View {
 
     var body: some View {
         if let detail {
-            Button {
-                focus = nil
-                self.detail = nil
-            } label: {
-                Label(AppLocalization.string("목록으로"), systemImage: "chevron.left")
-            }
-            .focused($focus, equals: .back)
-            .keyboardShortcut(.cancelAction)
-            .onAppear { focus = .back }
-            ScrollView {
-                VStack(alignment: .leading, spacing: UMCSpacing.value16) {
-                    Text(detail.question).umcTypography(.title2Bold)
-                        .accessibilityAddTraits(.isHeader)
-                    Text(detail.answer).umcTypography(.bodyRegular).textSelection(.enabled)
-                }
-                .padding(UMCSpacing.value24)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(
-                    UMCColor.Custom.backgroundSurface, in: .rect(cornerRadius: UMCRadius.value12)
-                )
-            }
+            SupportAnswerDetail(article: detail, back: { self.detail = nil },
+                                inquire: compose.map { action in { action(detail) } })
         } else {
             TextField(AppLocalization.string("궁금한 내용을 검색하세요"), text: $search)
                 .textFieldStyle(.roundedBorder)
@@ -196,8 +210,23 @@ private struct SupportAnswersView: View {
                     focusResults()
                     return .handled
                 }
-                .onAppear { if selectedID == nil { focus = .search } }
+                .frame(minHeight: 44)
                 .onChange(of: search) { selectedID = nil }
+            if focus == .search && search.isEmpty {
+                HStack {
+                    Button("출석·과제") { search = "출석·과제" }
+                        .buttonStyle(.plain).padding(8)
+                        .foregroundStyle(UMCColor.Semantic.textNeutralDefault)
+                        .background(UMCColor.Primitives.teal500, in: .rect(cornerRadius: 8))
+                        .overlay { RoundedRectangle(cornerRadius: 8).strokeBorder(lineWidth: 2) }
+                        .environment(\.colorScheme, .light)
+                    Button("영수증") { search = "영수증" }
+                        .buttonStyle(.plain).padding(8)
+                        .foregroundStyle(UMCColor.Semantic.textInverse)
+                        .background(Color(red: 96/255, green: 98/255, blue: 98/255),
+                                    in: .rect(cornerRadius: 8))
+                }
+            }
             if let category {
                 Button { self.category = nil } label: {
                     Label(category, systemImage: "xmark.circle")
@@ -217,12 +246,13 @@ private struct SupportAnswersView: View {
             }
             if matches.isEmpty {
                 ContentUnavailableView.search(text: search)
+                if let compose { Button("문의하기") { compose(nil) } }
             } else {
                 HStack(alignment: .top, spacing: UMCSpacing.value16) {
                     results
                     helpPanel
                         .containerRelativeFrame(.horizontal) { width, _ in
-                            min(230, width * 0.24)
+                            min(360, width * 0.28)
                         }
                 }
 
@@ -234,9 +264,13 @@ private struct SupportAnswersView: View {
         VStack(alignment: .leading, spacing: UMCSpacing.value12) {
             Text(AppLocalization.string("카테고리별 답변"))
                 .umcTypography(.headlineBold).accessibilityAddTraits(.isHeader)
-            categoryButtons
+            if compose != nil { Text("UMC PRODUCT가 확인한 서비스 이용 답변을 보여요.") }
+            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
+                categoryButtons
+            }
             Divider()
             Text(AppLocalization.string("아직 해결되지 않았나요?")).umcTypography(.headlineBold)
+            if let compose { Button("문의하기") { compose(nil) } }
             Button(action: showInquiries) {
                 Label(AppLocalization.string("내 문의"), systemImage: "bubble.left.and.bubble.right")
             }
@@ -271,25 +305,29 @@ private struct SupportAnswersView: View {
                     }.pickerStyle(.segmented).modifier(SupportControlFill()).labelsHidden().fixedSize()
                 }
             }
-            Table(matches, selection: $selectedID) {
-                TableColumn(AppLocalization.string("많이 묻는 질문")) { article in
+            List(selection: $selectedID) {
+                ForEach(Array(matches.enumerated()), id: \.element.id) { index, article in
                     Button { open(article) } label: {
-                        VStack(alignment: .leading, spacing: UMCSpacing.value4) {
-                            Text(article.question).umcTypography(.headlineBold)
-                            Text(article.category).umcTypography(.captionRegular)
-                        }
-                        .multilineTextAlignment(.leading)
-                        .padding(.vertical, UMCSpacing.value4)
+                        HStack(spacing: 20) {
+                            if showsRanking {
+                                Text(String(index + 1)).umcTypography(.headlineBold)
+                                    .frame(width: 40, height: 40)
+                                    .background(UMCColor.Custom.backgroundSurfaceGreyWeak,
+                                                in: .rect(cornerRadius: 8))
+                            }
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(article.question).umcTypography(.headlineBold)
+                                Text(article.category).umcTypography(.captionRegular)
+                                if !search.isEmpty { Text(article.answer).lineLimit(2) }
+                            }
+                            Spacer()
+                            if showsRanking, let count = readers(article) { Text("\(count)명 문의") }
+                        }.padding(.vertical, 12).contentShape(Rectangle())
                     }
-                    .buttonStyle(.plain)
-                }
-                if showsRanking {
-                    TableColumn("문의 인원") { article in
-                        if let count = readers(article) { Text("\(count)명").monospacedDigit() }
-                    }.width(65)
+                    .buttonStyle(.plain).tag(article.id)
                 }
             }
-            .alternatingRowBackgrounds(.disabled)
+            .listStyle(.plain)
             .accessibilityIdentifier("support.faq.table")
             .focused($focus, equals: .table)
             .task {
@@ -331,5 +369,37 @@ struct SupportControlFill: ViewModifier {
     func body(content: Content) -> some View {
         content.tint(colorScheme == .dark
                   ? UMCColor.Semantic.fillPrimaryStrong200 : UMCColor.Semantic.textBrandDefault)
+    }
+}
+
+struct SupportAnswerDetail: View {
+    let article: SupportArticle
+    let back: () -> Void
+    let inquire: (() -> Void)?
+    @State private var resolved = false
+
+    var body: some View {
+        Button("목록으로", action: back).keyboardShortcut(.cancelAction)
+        ScrollView {
+            HStack(alignment: .top, spacing: 24) {
+                VStack(alignment: .leading, spacing: 16) {
+                    Text(article.question).umcTypography(.title2Bold)
+                    Text(article.category)
+                    Text(article.answer).umcTypography(.bodyRegular).textSelection(.enabled)
+                    if let inquire {
+                        HStack {
+                            Button("해결됐어요") { resolved = true }.disabled(resolved)
+                            Button("담당자에게 문의하기", action: inquire)
+                        }
+                        if resolved { Text("✓ 해결 응답을 기록했어요. 문의가 새로 등록되지는 않아요.") }
+                    }
+                }.padding(24).frame(maxWidth: .infinity, alignment: .leading)
+                VStack(alignment: .leading, spacing: 16) {
+                    Text("답변 정보").umcTypography(.headlineBold)
+                    Text(article.category)
+                    Text(inquire == nil ? "앱 이용 안내" : "검증된 답변 · UMC PRODUCT")
+                }.padding(24).frame(width: 356, alignment: .leading)
+            }
+        }
     }
 }
