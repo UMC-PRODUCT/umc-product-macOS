@@ -340,7 +340,8 @@ private struct AppRootView: View {
     private func feature(_ section: DeskSection, account: FeatureAccount) -> some View {
         switch section {
         case .home:
-            HomeView(repository: account.home) { destination in
+            HomeView(repository: account.home, memberID: account.memberID,
+                     defaults: dependencies.featureDefaults) { destination in
                 switch destination {
                 case .activity: dependencies.selectSection(.activity)
                 case .notice: dependencies.selectSection(.notice)

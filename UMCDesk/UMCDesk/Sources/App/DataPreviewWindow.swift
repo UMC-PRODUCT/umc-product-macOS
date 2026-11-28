@@ -271,7 +271,8 @@ struct DataPreviewWindow: View {
         let account = session.account
         switch section {
         case .home:
-            HomeView(repository: account.home) {
+            HomeView(repository: account.home, memberID: account.memberID,
+                     defaults: session.defaults) {
                 switch $0 {
                 case .activity: session.select(.feature(.activity))
                 case .notice: session.select(.feature(.notice))

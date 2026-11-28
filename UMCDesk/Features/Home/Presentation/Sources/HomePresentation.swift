@@ -73,6 +73,10 @@ final class HomeViewModel {
 
 public struct HomeView: View {
     @State private var model: HomeViewModel
+    @State private var dockOwner: DockRecordStore?
+    @State private var dockRecords = DockRecords()
+    @FocusState private var dockFocused: Bool
+    private let recordStore: DockRecordStore
     @State private var reload = UUID()
     @Environment(\.colorScheme) private var scheme
     @Environment(\.colorSchemeContrast) private var contrast
@@ -82,24 +86,27 @@ public struct HomeView: View {
     private let onOpen: ((HomeDestination) -> Void)?
 
     public init(
-        repository: any HomeRepository,
+        repository: any HomeRepository, memberID: String? = nil,
+        defaults: UserDefaults = .standard,
         onOpen: ((HomeDestination) -> Void)? = nil
     ) {
         _model = State(initialValue: HomeViewModel(repository))
+        recordStore = DockRecordStore(defaults: defaults, memberID: memberID)
         self.onOpen = onOpen
     }
 
     public var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: UMCSpacing.value24) {
-                homeHeader
-                workSummary
-            }
-            .frame(maxWidth: 1120)
-            .padding(narrowPage ? UMCSpacing.value20 : UMCSpacing.value32)
-            .frame(maxWidth: .infinity)
-            .transformEnvironment(\.umcFontDesign) { design in
-                if design == nil { design = .default }
+        Group {
+            if let dockOwner, dockOwner == recordStore {
+                DockSessionView(record: { score in
+                    guard self.dockOwner == recordStore else { return }
+                    dockRecords = dockOwner.record(score)
+                }, close: {
+                    self.dockOwner = nil
+                    Task { @MainActor in dockFocused = true }
+                })
+            } else {
+                home
             }
         }
         .umcTabTools(AppLocalization.string("홈 도구")) { dismiss in
@@ -128,13 +135,33 @@ public struct HomeView: View {
                 reload = UUID()
             }
         }
-        .onGeometryChange(for: Bool.self) { $0.size.width < 684 } action: {
-            narrowPage = $0
-        }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(paper.background)
         .tint(UMCColor.Semantic.textBrandDefault)
         .task(id: reload) { await model.load() }
+        .onChange(of: recordStore, initial: true) { _, store in
+            if dockOwner != store { dockOwner = nil }
+            dockRecords = store.load()
+        }
+    }
+
+    private var home: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: UMCSpacing.value24) {
+                homeHeader
+                workSummary
+                dockCard
+            }
+            .frame(maxWidth: 1120)
+            .padding(narrowPage ? UMCSpacing.value20 : UMCSpacing.value32)
+            .frame(maxWidth: .infinity)
+            .transformEnvironment(\.umcFontDesign) { design in
+                if design == nil { design = .default }
+            }
+        }
+        .onGeometryChange(for: Bool.self) { $0.size.width < 684 } action: {
+            narrowPage = $0
+        }
     }
 
     private var homeHeader: some View {
@@ -289,6 +316,25 @@ public struct HomeView: View {
         } else {
             card.accessibilityElement(children: .combine)
         }
+    }
+
+    private var dockCard: some View {
+        VStack(alignment: .leading, spacing: UMCSpacing.value8) {
+            Label("소인이 찍겠습니다!", systemImage: "ferry.fill").umcTypography(.title2Bold)
+            Text("꾹이의 접지부두 · 소인기 세 면 펼치기").umcTypography(.headlineRegular)
+            Text("WASD 이동 · ← → 회전 · F 소인").umcTypography(.calloutRegular)
+            Text("최고 \(dockRecords.best)점 · 누적 \(dockRecords.total)점")
+            if !dockRecords.recent.isEmpty {
+                Text("최근 플레이 · " + dockRecords.recent.map { "\($0)점" }.joined(separator: " / "))
+            }
+            Button("한 판 하기") { dockOwner = recordStore }
+                .buttonStyle(.borderedProminent)
+                .focused($dockFocused)
+                .accessibilityLabel("소인이 찍겠습니다! 한 판 하기")
+        }
+        .padding(UMCSpacing.value20)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background { panelSurface }
     }
 
     private var panelSurface: some View {
