@@ -6,6 +6,7 @@
 //
 
 import Testing
+
 @testable import UMCDesk
 
 struct SupportFlowTests {
@@ -18,6 +19,42 @@ struct SupportFlowTests {
     }
 
     #if DEBUG
+    @Test func ordinaryPreviewQueueAndSuggestedDraftUseSharedRecords() throws {
+        let preview = SupportFixture()
+        var selectedQueue = SupportQueue.all
+        #expect(preview.tickets.filter(selectedQueue.includes).count == 5)
+        #expect(preview.tickets.filter(SupportQueue.unassigned.includes).count == 3)
+        let first = try #require(preview.tickets.first)
+        #expect(first.status == .received && first.assignee == "미배정" && first.replies.isEmpty)
+        selectedQueue = .mine
+        #expect(preview.tickets.filter(selectedQueue.includes).count == 2)
+        selectedQueue = .unclassified
+        #expect(preview.tickets.filter(selectedQueue.includes).count == 3)
+        let recommendation = try #require(preview.suggestedDraft)
+        #expect(recommendation.article.question == "알림이 오지 않아요")
+        #expect(recommendation.isValid && recommendation.status == "초안")
+        #expect(preview.drafts.contains { $0.archived })
+        #expect(preview.drafts.contains { $0.status == "수정 중" })
+        preview.apply(.publish, draft: recommendation)
+        #expect(preview.suggestedDraft == nil)
+        #expect(preview.publishedArticle(id: recommendation.id) == recommendation.article)
+    }
+
+    @Test func archivedArticleDisappearsFromOpenDetailAndNewReferences() throws {
+        let preview = SupportFixture()
+        let editor = try #require(preview.drafts.first)
+        let detailID = editor.id
+        let opened = try #require(preview.publishedArticle(id: detailID))
+        let previous = try #require(
+            preview.create(subject: "기존", content: "본문", team: .platform, reference: opened))
+        preview.apply(.archive, draft: editor)
+        #expect(preview.publishedArticle(id: detailID) == nil)
+        let next = try #require(
+            preview.create(subject: "이후", content: "본문", team: .platform, reference: opened))
+        #expect(preview.tickets.first { $0.id == next }?.reference == nil)
+        #expect(preview.tickets.first { $0.id == previous }?.reference == opened)
+    }
+
     @Test func staleEditorCannotRestoreArchivedPublication() throws {
         let fixture = SupportFixture()
         var older = try #require(fixture.drafts.first)

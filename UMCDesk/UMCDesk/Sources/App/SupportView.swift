@@ -6,10 +6,12 @@
 //
 
 import CoreDesignSystem
+import CoreUIComponents
 import SwiftUI
 import UMCFoundation
 
 struct SupportView: View {
+    @Environment(\.tabToolsDismissalRequest) private var dismissTools
     private var scene = SupportScene.home
     @State private var operatorTicket: UUID?
     @State private var operatorEntry = UUID()
@@ -122,7 +124,7 @@ struct SupportView: View {
                             createdTicket = fixture.create(
                                 subject: subject, content: content, team: team, category: category,
                                 reference: reference, attachmentName: attachment)
-                            navigate(.inquiries)
+                            if createdTicket != nil { navigate(.inquiries) }
                         }, reference: reference)
                 } else {
                     switch page {
@@ -166,6 +168,8 @@ struct SupportView: View {
         .tint(UMCColor.Semantic.textBrandDefault)
         .overlay(alignment: .topTrailing) {
             if toolsOpen {
+                Color.clear.contentShape(Rectangle()).onTapGesture { toolsOpen = false }
+                    .accessibilityHidden(true)
                 toolsPanel
                     .background(
                         UMCColor.Custom.backgroundSurfaceWhite, in: .rect(cornerRadius: 16)
@@ -174,6 +178,7 @@ struct SupportView: View {
                     .padding(.trailing, 48).padding(.top, 63)
             }
         }
+        .onChange(of: dismissTools) { toolsOpen = false }
         .disabled(recipient.isOpen)
         .accessibilityHidden(recipient.isOpen)
         .overlay { if recipient.isOpen { SupportTeamOptions(recipient: recipient) } }
@@ -298,7 +303,8 @@ private struct SupportAnswersView: View {
     @State private var refreshed = false
     @State private var search = ""
     @State private var selectedID: String?
-    @State private var detail: SupportArticle?
+    @State private var detailID: String?
+    private var detail: SupportArticle? { articles.first { $0.id == detailID } }
     @FocusState private var focus: Focus?
 
     private var categories: [String] {
@@ -332,7 +338,7 @@ private struct SupportAnswersView: View {
             if let detail {
                 SupportAnswerDetail(
                     article: detail, initiallyResolved: scene == .resolved,
-                    back: { self.detail = nil },
+                    back: { detailID = nil },
                     inquire: compose.map { action in { action(detail) } })
             } else {
                 if !choosingSearch && search.isEmpty {
@@ -364,7 +370,8 @@ private struct SupportAnswersView: View {
                     HStack {
                         VStack(alignment: .leading) {
                             Text("FAQ 검색").inquiryFont(28, weight: .bold)
-                            Text("서비스 이용 중 궁금한 내용을 찾아보세요.")
+                            Text(search.isEmpty ? "서비스 이용 중 궁금한 내용을 찾아보세요." : "검색어 · " + search)
+                                .inquiryFont(14)
                         }
                         Spacer()
                         Button("많이 묻는 질문") {
@@ -375,28 +382,38 @@ private struct SupportAnswersView: View {
                 }
                 if !choosingSearch || typingSearch {
                     HStack(spacing: 12) {
-                        Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
-                        TextField(AppLocalization.string("궁금한 내용을 검색하세요"), text: $search)
-                            .textFieldStyle(.plain)
-                            .accessibilityIdentifier("support.search")
-                            .focused($focus, equals: .search)
-                            .onChange(of: focus) {
-                                if focus == .search && search.isEmpty && !typingSearch {
-                                    choosingSearch = true
+                        HStack(spacing: 8) {
+                            Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
+                            TextField(AppLocalization.string("궁금한 내용을 검색하세요"), text: $search)
+                                .textFieldStyle(.plain)
+                                .accessibilityIdentifier("support.search")
+                                .focused($focus, equals: .search)
+                                .onChange(of: focus) {
+                                    if focus == .search && search.isEmpty && !typingSearch {
+                                        typingSearch = true
+                                        choosingSearch = true
+                                    }
                                 }
-                            }
-                            .onSubmit {
-                                if search.isEmpty { choosingSearch = true } else { focusResults() }
-                            }
-                            .onKeyPress(.downArrow) {
-                                guard !matches.isEmpty else { return .ignored }
-                                focusResults()
-                                return .handled
-                            }
-                            .onChange(of: searchRequest, initial: true) {
-                                if searchRequest > 0 { focus = .search }
-                            }
-                            .onChange(of: search) { selectedID = nil }
+                                .onSubmit {
+                                    if search.isEmpty {
+                                        choosingSearch = true
+                                    } else {
+                                        focusResults()
+                                    }
+                                }
+                                .onKeyPress(.downArrow) {
+                                    guard !matches.isEmpty else { return .ignored }
+                                    focusResults()
+                                    return .handled
+                                }
+                                .onChange(of: searchRequest, initial: true) {
+                                    if searchRequest > 0 { focus = .search }
+                                }
+                                .onChange(of: search) { selectedID = nil }
+                        }.padding(.horizontal, 12).frame(height: 40)
+                            .background(
+                                UMCColor.Custom.backgroundSurfaceGreyWeak,
+                                in: .rect(cornerRadius: 8))
                         Button("검색") {
                             if search.isEmpty {
                                 choosingSearch = true
@@ -405,9 +422,9 @@ private struct SupportAnswersView: View {
                                 focusResults()
                             }
                         }
-                    }.padding(.horizontal, 16).frame(minHeight: 52)
+                    }.padding(.horizontal, 6).frame(minHeight: 52)
                         .background(
-                            UMCColor.Custom.backgroundSurfaceGreyWeak, in: .rect(cornerRadius: 12))
+                            UMCColor.Custom.backgroundSurfaceWhite, in: .rect(cornerRadius: 12))
                 }
                 if choosingSearch && search.isEmpty {
                     Spacer()
@@ -416,6 +433,7 @@ private struct SupportAnswersView: View {
                     Text("예시 검색어를 선택해 FAQ를 찾아보세요.").frame(maxWidth: .infinity)
                     HStack {
                         Button {
+                            typingSearch = false
                             search = "출석·과제"
                         } label: {
                             Text("출석·과제").frame(width: 144, height: 48)
@@ -429,6 +447,7 @@ private struct SupportAnswersView: View {
                         }
                         .environment(\.colorScheme, .light)
                         Button {
+                            typingSearch = false
                             search = "영수증"
                         } label: {
                             Text("영수증").frame(width: 144, height: 48)
@@ -503,8 +522,13 @@ private struct SupportAnswersView: View {
                     }
                 }
             }
+        }.onChange(of: articles) {
+            if detailID != nil && detail == nil {
+                detailID = nil
+                selectedID = nil
+            }
         }.onAppear {
-            if [.detail, .resolved].contains(scene) { detail = articles.first }
+            if [.detail, .resolved].contains(scene) { detailID = articles.first?.id }
             if scene == .results {
                 choosingSearch = true
                 search = "출석·과제"
@@ -528,12 +552,10 @@ private struct SupportAnswersView: View {
                 categoryButtons
             }
             Divider()
-            Text(AppLocalization.string("아직 해결되지 않았나요?")).inquiryFont(18, weight: .bold)
+            Text(AppLocalization.string("아직 해결되지 않았나요?")).inquiryFont(16, weight: .bold)
             if let compose {
+                Text("해결되지 않는 문제는 UMC PRODUCT 담당자가 도와드려요.").inquiryFont(13)
                 Button("문의하기") { compose(nil) }.buttonStyle(SupportActionStyle(prominent: true))
-            }
-            Button(action: showInquiries) {
-                Label(AppLocalization.string("내 문의"), systemImage: "bubble.left.and.bubble.right")
             }
             Spacer(minLength: 0)
         }
@@ -559,11 +581,17 @@ private struct SupportAnswersView: View {
                     Text("실시간 인기 문의").inquiryFont(22, weight: .bold)
                         .accessibilityAddTraits(.isHeader)
                     Spacer()
-                    Picker("집계 기간", selection: $weekly) {
-                        Text("최근 24시간").tag(false)
-                        Text("최근 7일").tag(true)
-                    }.pickerStyle(.segmented).modifier(SupportControlFill()).labelsHidden()
-                        .fixedSize()
+                    HStack(spacing: 8) {
+                        ForEach([false, true], id: \.self) { week in
+                            Button {
+                                weekly = week
+                            } label: {
+                                Text((week == weekly ? "✓ " : "") + (week ? "최근 7일" : "최근 24시간"))
+                                    .frame(minHeight: 44)
+                            }
+                            .accessibilityAddTraits(week == weekly ? .isSelected : [])
+                        }
+                    }
                 }
             }
             if showsRanking {
@@ -583,7 +611,9 @@ private struct SupportAnswersView: View {
                                 Text(String(index + 1)).inquiryFont(18, weight: .bold)
                                     .frame(width: 40, height: 40)
                                     .background(
-                                        UMCColor.Custom.backgroundSurfaceGreyWeak,
+                                        index == 0
+                                            ? UMCColor.Semantic.surfaceBrandWeak
+                                            : UMCColor.Custom.backgroundSurfaceGreyWeak,
                                         in: .rect(cornerRadius: 8))
                             }
                             VStack(alignment: .leading, spacing: 4) {
@@ -632,7 +662,7 @@ private struct SupportAnswersView: View {
 
     private func open(_ article: SupportArticle) {
         selectedID = article.id
-        detail = article
+        detailID = article.id
     }
 }
 
@@ -676,7 +706,7 @@ struct SupportAnswerDetail: View {
                 Text(article.category + (inquire == nil ? "" : " · UMC 서비스")).inquiryFont(13)
                 Divider()
                 ScrollView {
-                    Text(article.answer).inquiryFont(16).lineSpacing(5).textSelection(.enabled)
+                    Text(article.answer).inquiryFont(16).textSelection(.enabled)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 if let inquire {
@@ -694,7 +724,7 @@ struct SupportAnswerDetail: View {
             }.supportCard()
             VStack(alignment: .leading, spacing: 24) {
                 Text("답변 정보").inquiryFont(18, weight: .bold)
-                Text("적용 대상\nUMC 서비스 사용자")
+                Text("적용 대상\n" + article.audience)
                 if inquire != nil {
                     Text("검증한 조직\nUMC PRODUCT")
                     Text("수정일\n2026.09.30")
@@ -722,7 +752,7 @@ struct SupportActionStyle: ButtonStyle {
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .inquiryFont(13, weight: .medium)
+            .inquiryFont(13, weight: .medium).tracking(-0.13)
             .padding(.horizontal, 16)
             .frame(minWidth: prominent ? 144 : nil, minHeight: prominent ? 40 : 36)
             .foregroundStyle(

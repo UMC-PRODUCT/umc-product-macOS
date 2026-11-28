@@ -16,21 +16,7 @@ struct SupportInquiryPreview: View {
     let showAnswers: () -> Void
     let beginCompose: () -> Void
     @State private var status: SupportInquiryStatus?
-    private enum Assignment: String, CaseIterable {
-        case all = "전체"
-        case mine = "내 담당"
-        case unassigned = "미배정"
-
-        func includes(_ ticket: SupportTicket) -> Bool {
-            switch self {
-            case .all: true
-            case .mine: ticket.assignee == "이지원"
-            case .unassigned: ticket.assignee == "미배정"
-            }
-        }
-    }
-
-    @State private var assignment = Assignment.all
+    @State private var assignment = SupportQueue.all
     @State private var category: String?
     @State private var label: String?
     @State private var initialDraft: SupportDraft?
@@ -48,8 +34,11 @@ struct SupportInquiryPreview: View {
         self.showAnswers = showAnswers
         _selectedID = State(initialValue: initialTicket)
         _assignment = State(
-            initialValue: scene == .mine ? .mine : scene == .unassigned ? .unassigned : .all)
-        _label = State(initialValue: scene == .unclassified ? "미분류" : nil)
+            initialValue: scene == .mine
+                ? .mine
+                : scene == .unassigned
+                    ? .unassigned : scene == .unclassified ? .unclassified : .all
+        )
     }
 
     private var tickets: [SupportTicket] {
@@ -103,7 +92,7 @@ struct SupportInquiryPreview: View {
                 Spacer()
                 if isOperator {
                     Button("FAQ 관리") { managingFAQ = true }
-                } else {
+                } else if !fixture.myTickets.isEmpty {
                     Button("문의하기", action: beginCompose).buttonStyle(
                         SupportActionStyle(prominent: true))
                 }
@@ -116,16 +105,14 @@ struct SupportInquiryPreview: View {
                 }
             }
             if isOperator { operatorFilters }
-            HStack {
+            if isOperator || !fixture.myTickets.isEmpty {
                 Text(isOperator ? "접수된 문의" : "내 문의 현황")
                     .inquiryFont(20, weight: .bold).accessibilityAddTraits(.isHeader)
-                Spacer()
-
             }
             Group {
                 if !isOperator && fixture.myTickets.isEmpty {
                     ContentUnavailableView {
-                        Text("아직 등록한 문의가 없어요").inquiryFont(20, weight: .bold)
+                        Text("아직 등록한 문의가 없어요").inquiryFont(28, weight: .bold)
                     } description: {
                         Text("많이 묻는 질문에서 먼저 답을 찾거나 문의를 남겨주세요.")
                     } actions: {
@@ -161,21 +148,18 @@ struct SupportInquiryPreview: View {
                                     }
                                 }
                             }
-                        if isOperator, let suggestion = tickets.first {
+                        if isOperator, let suggestion = fixture.suggestedDraft {
                             VStack(alignment: .leading, spacing: 16) {
                                 VStack(alignment: .leading, spacing: UMCSpacing.value4) {
                                     Text("답변 준비 필요").inquiryFont(18, weight: .bold)
-                                    Text("알림이 오지 않아요").inquiryFont(14)
+                                    Text("문의는 늘고 있지만 아직 발행 답변이 없는 질문이에요.").inquiryFont(13)
+                                    Text(suggestion.article.question).inquiryFont(16)
                                     Text("최근 24시간 · 6명 문의")
+                                    Text("PRODUCT 내부 집계\n공개 인기 순위에는 표시하지 않아요.").inquiryFont(13)
                                 }
                                 Spacer()
                                 Button("FAQ 초안 작성") {
-                                    // Operators edit a public question before publication.
-                                    initialDraft = SupportDraft(
-                                        article: SupportArticle(
-                                            id: UUID().uuidString, question: "", answer: "",
-                                            category: suggestion.category
-                                        ))
+                                    initialDraft = suggestion
                                     managingFAQ = true
                                 }
                             }
@@ -192,7 +176,10 @@ struct SupportInquiryPreview: View {
     private var operatorFilters: some View {
         VStack(alignment: .leading, spacing: UMCSpacing.value8) {
             Picker("담당 범위", selection: $assignment) {
-                ForEach(Assignment.allCases, id: \.self) { scope in
+                ForEach(
+                    [SupportQueue.all, .mine, .unassigned]
+                        + (assignment == .unclassified ? [.unclassified] : []), id: \.self
+                ) { scope in
                     let count = fixture.tickets.filter(scope.includes).count
                     Text("\(scope.rawValue) \(count)").tag(scope)
                 }
@@ -219,7 +206,12 @@ struct SupportInquiryPreview: View {
                         Text($0).tag(Optional($0))
                     }
                 }
-                Button("미분류 문의") { label = "미분류" }
+                Button("미분류 문의") {
+                    assignment = .unclassified
+                    label = nil
+                    category = nil
+                    status = nil
+                }
                 Spacer(minLength: 0)
                 Text("\(tickets.count)건").monospacedDigit()
             }.labelsHidden()
@@ -273,7 +265,8 @@ struct SupportComposePreview: View {
     @Bindable var recipient: SupportRecipient
     @State private var attachment: String?
     @State private var reading = false
-    @State private var reference: SupportArticle?
+    @State private var referenceID: String?
+    private var reference: SupportArticle? { articles.first { $0.id == referenceID } }
     @State private var category = "출석·과제"
 
     private var suggestion: SupportArticle? {
@@ -295,14 +288,15 @@ struct SupportComposePreview: View {
             _attachment = State(initialValue: "오류 화면.png")
         }
         self.recipient = recipient
-        _reference = State(initialValue: reference ?? (scene == .reference ? articles.first : nil))
+        _referenceID = State(
+            initialValue: reference?.id ?? (scene == .reference ? articles.first?.id : nil))
         _category = State(initialValue: reference?.category ?? "출석·과제")
     }
 
     var body: some View {
         if reading, let suggestion {
             SupportAnswerDetail(article: suggestion, back: { reading = false }) {
-                reference = suggestion
+                referenceID = suggestion.id
                 reading = false
             }
         } else {
@@ -389,7 +383,11 @@ struct SupportComposePreview: View {
                                 Text("답변 확인하기").frame(maxWidth: .infinity, minHeight: 44)
                             }
                             if let reference {
-                                Text("참고한 답변\n" + reference.question).padding(16)
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text("참고한 답변").inquiryFont(13)
+                                    Text(reference.question).inquiryFont(14, weight: .medium)
+                                }.frame(maxWidth: .infinity, alignment: .leading)
+                                    .fixedSize(horizontal: false, vertical: true).padding(16)
                                     .background(
                                         UMCColor.Semantic.surfaceBrandWeak,
                                         in: .rect(cornerRadius: 12))
@@ -434,8 +432,8 @@ struct SupportTeamOptions: View {
                                 recipient.isOpen = false
                             } label: {
                                 VStack(alignment: .leading, spacing: 8) {
-                                    Text(option.rawValue).inquiryFont(18, weight: .bold)
-                                    Text(option.summary)
+                                    Text(option.rawValue).inquiryFont(14, weight: .medium)
+                                    Text(option.summary).inquiryFont(13)
                                     if recipient.team == option { Image(systemName: "checkmark") }
                                 }
                                 .padding(14).frame(

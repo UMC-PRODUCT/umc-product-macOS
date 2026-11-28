@@ -20,12 +20,22 @@ struct SupportTicketDetail: View {
     @State private var initialLabels: [String] = []
     @State private var pendingLabels: [String] = []
     @State private var message = ""
+    @State private var attachment = false
     @FocusState private var inputFocused: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: UMCSpacing.value12) {
             HStack {
-                Text(ticket.subject).inquiryFont(28, weight: .bold).accessibilityAddTraits(.isHeader)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(isOperator ? (ticket.operatorTitle ?? ticket.subject) : ticket.subject)
+                        .inquiryFont(28, weight: .bold).accessibilityAddTraits(.isHeader)
+                    Text(
+                        isOperator
+                            ? "김유엠 · UMC 서비스 · "
+                                + timestamp(ticket.createdAt)
+                                + " 접수" : ticket.category + " · UMC 서비스"
+                    ).inquiryFont(14)
+                }
                 Spacer()
                 Button(isOperator ? "문의 관리로" : "내 문의로", action: back)
                     .keyboardShortcut(.cancelAction)
@@ -49,6 +59,17 @@ struct SupportTicketDetail: View {
                         ScrollView {
                             VStack(alignment: .leading, spacing: 20) {
                                 bubble(ticket.content, author: .requester, date: ticket.createdAt)
+                                if let file = ticket.attachmentName {
+                                    Label(file, systemImage: "paperclip")
+                                }
+                                ForEach(ticket.replies) { reply in
+                                    bubble(
+                                        reply.text
+                                            + (reply.attachment.map { "\n첨부 · " + $0 } ?? ""),
+                                        author: reply.author, date: reply.sentAt
+                                    )
+                                    .id(reply.id)
+                                }
                                 if !isOperator && ticket.status == .received
                                     && !ticket.replies.contains(where: { $0.author == .agent })
                                 {
@@ -56,15 +77,9 @@ struct SupportTicketDetail: View {
                                         .inquiryFont(13).foregroundStyle(
                                             UMCColor.Semantic.textNeutralMedium600)
                                 }
-                                if let file = ticket.attachmentName {
-                                    Label(file, systemImage: "paperclip")
-                                }
                                 if let reference = ticket.reference {
-                                    Text("참고한 답변 · " + reference.question)
-                                }
-                                ForEach(ticket.replies) { reply in
-                                    bubble(reply.text, author: reply.author, date: reply.sentAt)
-                                        .id(reply.id)
+                                    Divider()
+                                    Text("참고한 답변 · " + reference.question).inquiryFont(14)
                                 }
                             }
                             .frame(maxWidth: .infinity, alignment: .leading)
@@ -77,26 +92,49 @@ struct SupportTicketDetail: View {
                         Label("종료된 문의예요. 이전 대화를 읽을 수 있어요.", systemImage: "lock")
                             .foregroundStyle(.secondary)
                     } else {
-                        HStack {
-                            TextField(isOperator ? "문의자에게 답변" : "담당자에게 메시지 보내기", text: $message)
-                                .textFieldStyle(.plain)
-                                .accessibilityIdentifier("support.reply")
-                                .focused($inputFocused)
-                                .onSubmit { send() }
-                                .onExitCommand(perform: back)
-                            Button(action: send) {
-                                Label("보내기", systemImage: "arrow.up").labelStyle(.iconOnly)
+                        VStack(alignment: .leading, spacing: 10) {
+                            TextField(
+                                isOperator ? "문의자에게 답변" : "UMC PRODUCT 담당자에게 메시지 보내기",
+                                text: $message
+                            )
+                            .textFieldStyle(.plain)
+                            .accessibilityIdentifier("support.reply")
+                            .focused($inputFocused)
+                            .onSubmit { send() }
+                            .onExitCommand(perform: back)
+                            HStack {
+                                Button {
+                                    attachment.toggle()
+                                } label: {
+                                    Label(
+                                        attachment ? "오류 화면.png 제거" : "예시 파일 첨부",
+                                        systemImage: attachment ? "paperclip" : "plus"
+                                    )
+                                    .labelStyle(.iconOnly)
+                                }
+                                if attachment { Text("오류 화면.png").inquiryFont(13) }
+                                Spacer()
+                                Button(action: send) {
+                                    Label("보내기", systemImage: "arrow.up").labelStyle(.iconOnly)
+                                }
+                                .buttonBorderShape(.circle)
+                                .accessibilityIdentifier("support.send")
+                                .disabled(
+                                    message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                                )
                             }
-                            .buttonBorderShape(.circle)
-                            .accessibilityIdentifier("support.send")
-                            .disabled(
-                                message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                         }
                         .padding(16).frame(minHeight: 104)
                         .background(
                             UMCColor.Custom.backgroundSurface,
                             in: .rect(cornerRadius: UMCRadius.value12))
-                        if ticket.status == .closed {
+                        if ticket.status != .closed {
+                            Text(
+                                isOperator
+                                    ? "첫 답변을 보내면 진행 중으로 바뀌어요. 종료 후 새 메시지로 다시 열 수 있어요."
+                                    : "UMC PRODUCT 담당자에게 메시지를 보내세요."
+                            ).inquiryFont(13)
+                        } else {
                             Text("메시지를 보내면 문의가 다시 열려요")
                                 .inquiryFont(13)
                                 .foregroundStyle(.secondary)
@@ -123,9 +161,14 @@ struct SupportTicketDetail: View {
         }
     }
 
+    private func timestamp(_ date: Date) -> String {
+        let time = Calendar.current.dateComponents([.hour, .minute], from: date)
+        return String(format: "%02d:%02d", time.hour ?? 0, time.minute ?? 0)
+    }
+
     private func bubble(_ text: String, author: SupportTicket.Author, date: Date) -> some View {
         let own = isOperator ? author == .agent : author == .requester
-        let time = date.formatted(date: .omitted, time: .shortened)
+        let time = timestamp(date)
         let surface =
             own
             ? UMCColor.Semantic.surfaceBrandMedium : UMCColor.Custom.backgroundSurface
@@ -152,9 +195,6 @@ struct SupportTicketDetail: View {
         VStack(alignment: .leading, spacing: 12) {
             Text("처리 정보").inquiryFont(18, weight: .bold)
             Text("담당자").inquiryFont(13)
-            Picker("받는 팀", selection: $ticket.team) {
-                ForEach(SupportTeam.allCases, id: \.self) { Text($0.rawValue).tag($0) }
-            }
             Button {
                 editingAssignee.toggle()
                 editingLabel = false
@@ -173,7 +213,10 @@ struct SupportTicketDetail: View {
                             }
                         }
                         Button("취소") { editingAssignee = false }.keyboardShortcut(.cancelAction)
-                    }.frame(width: 280).supportCard(padding: 16).fixedSize(
+                    }.frame(width: 280, height: 261, alignment: .topLeading).supportCard(
+                        padding: 16
+                    )
+                    .fixedSize(
                         horizontal: false, vertical: true
                     ).offset(y: 44)
                 }
@@ -223,16 +266,22 @@ struct SupportTicketDetail: View {
                                 editingLabel = false
                             }
                         }
-                    }.frame(width: 272).supportCard(padding: 20).fixedSize(
+                    }.frame(width: 272, height: 273, alignment: .topLeading).supportCard(
+                        padding: 20
+                    )
+                    .fixedSize(
                         horizontal: false, vertical: true
                     ).offset(y: 44)
                 }
             }.zIndex(editingLabel ? 2 : 0)
+            Text("대표 질문").inquiryFont(13)
+            Text(articles.first { $0.id == ticket.linkedQuestion }?.question ?? "미분류").inquiryFont(
+                14)
             Picker("대표 질문 연결", selection: $ticket.linkedQuestion) {
                 Text("미분류").tag(String?.none)
                 ForEach(articles) { Text($0.question).tag(Optional($0.id)) }
             }
-            Text("처리 이력").inquiryFont(18, weight: .bold)
+            Text("담당자 변경 이력").inquiryFont(13, weight: .medium)
             Text("14:20 문의 접수 · 담당자 미배정")
             ForEach(ticket.history) { event in
                 Text(
@@ -245,8 +294,13 @@ struct SupportTicketDetail: View {
     }
 
     private func send() {
-        guard ticket.reply(message, from: isOperator ? .agent : .requester) else { return }
+        guard
+            ticket.reply(
+                message, from: isOperator ? .agent : .requester,
+                attachment: attachment ? "오류 화면.png" : nil)
+        else { return }
         message = ""
+        attachment = false
         inputFocused = true
     }
 }

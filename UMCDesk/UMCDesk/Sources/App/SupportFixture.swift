@@ -44,6 +44,7 @@ struct SupportTicket: Identifiable {
     var belongsToCurrentUser = true
     var subject: String
     var content: String
+    var operatorTitle: String?
     var team: SupportTeam { didSet { if oldValue != team { record("받는 팀 · " + team.rawValue) } } }
     var category = "기타"
     var assignee = "미배정" { didSet { if oldValue != assignee { record("담당자 · " + assignee) } } }
@@ -92,14 +93,15 @@ struct SupportTicket: Identifiable {
         var sentAt = Date()
         let author: Author
         let text: String
+        var attachment: String? = nil
     }
 
     @discardableResult
-    mutating func reply(_ input: String, from author: Author) -> Bool {
+    mutating func reply(_ input: String, from author: Author, attachment: String? = nil) -> Bool {
         let text = input.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty, status != .closed || author == .requester else { return false }
         guard author == .agent || belongsToCurrentUser else { return false }
-        replies.append(Reply(author: author, text: text))
+        replies.append(Reply(author: author, text: text, attachment: attachment))
         if author == .agent || status == .closed { changeStatus(.active, by: author) }
         return true
     }
@@ -135,30 +137,50 @@ struct SupportDraft: Identifiable {
     }
 }
 
+enum SupportQueue: String, CaseIterable {
+    case all = "전체"
+    case mine = "내 담당"
+    case unassigned = "미배정"
+    case unclassified = "미분류"
+
+    func includes(_ ticket: SupportTicket) -> Bool {
+        switch self {
+        case .all: true
+        case .mine: ticket.assignee == "이지원"
+        case .unassigned: ticket.assignee == "미배정"
+        case .unclassified: ticket.labels.isEmpty
+        }
+    }
+}
+
 @Observable
 final class SupportFixture {
     var tickets = [
         SupportTicket(
             subject: "출석 기록이 실제와 다르게 보여요",
             content: "앱에서 출석 기록이 실제와 다르게 표시돼요.\n새로고침해도 같아서 앱 버전과 오류 화면을 보내드립니다.",
-            team: .learning, category: "출석·과제", assignee: "예시 담당자", labels: ["출석 오류", "정보 확인"],
-            attachmentName: "오류 화면.png", status: .active,
-            replies: [.init(author: .agent, text: "확인해 볼게요. 사용 중인 앱 버전과 오류가 나타난 화면을 보내주실 수 있나요?")]),
+            operatorTitle: "출석 화면 오류 문의", team: .learning, category: "출석·과제",
+            labels: ["출석 오류", "정보 확인"],
+            attachmentName: "오류 화면.png"),
         SupportTicket(
             subject: "앱에 로그인이 안 돼요", content: "앱 언어 설정을 확인했어요.",
-            team: .operations, category: "앱 설정", status: .closed,
-            replies: [.init(author: .agent, text: "언어 설정 확인이 끝나 문의를 종료했어요.")]),
+            team: .platform, category: "계정·로그인", assignee: "이지원", status: .active),
         SupportTicket(
             belongsToCurrentUser: false, subject: "과제 파일이 업로드되지 않아요",
-            content: "과제 제출을 확인하고 싶어요.", team: .learning, category: "출석·과제"),
+            content: "과제 제출을 확인하고 싶어요.", team: .learning, category: "출석·과제", assignee: "이지원"),
         SupportTicket(
             subject: "프로젝트 지원이 저장되지 않아요", content: "지원서를 확인해 주세요.",
-            team: .learning, category: "프로젝트·매칭", labels: ["기능 요청"]),
+            team: .learning, category: "프로젝트·매칭", labels: ["기능 요청"], status: .closed),
         SupportTicket(
             belongsToCurrentUser: false, subject: "활동 증명서가 열리지 않아요",
             content: "증명서를 확인하고 싶어요.", team: .learning, category: "활동 증명"),
     ]
     var drafts: [SupportDraft]
+    private let additionalPublished: [SupportArticle]
+
+    var suggestedDraft: SupportDraft? {
+        drafts.first { $0.id == "notification" && $0.published == nil && !$0.archived }
+    }
 
     init(emptyInquiries: Bool = false) {
         let examples = [
@@ -193,7 +215,22 @@ final class SupportFixture {
                 answer: "활동 기수와 등록 정보를 확인한 뒤 문의를 남겨 주세요.",
                 category: "활동 증명", dayReaders: 7, weekReaders: 29),
         ]
-        drafts = examples.map { SupportDraft(article: $0, published: $0) }
+        additionalPublished = Array(examples.dropFirst(2))
+        drafts = examples.prefix(2).map { SupportDraft(article: $0, published: $0) }
+        drafts[1].article.answer += "\n네트워크 연결을 다시 확인해 주세요."
+        drafts.append(
+            SupportDraft(
+                article: SupportArticle(
+                    id: "notification", question: "알림이 오지 않아요",
+                    answer:
+                        "기기의 알림 권한과 앱의 알림 설정을 확인해 주세요.\n계속 알림이 오지 않으면 앱 버전과 발생 시각을 UMC PRODUCT에 알려주세요.",
+                    category: "알림")))
+        drafts.append(
+            SupportDraft(
+                article: SupportArticle(
+                    id: "old-login", question: "이전 버전의 로그인 오류 안내", answer: "이전 안내",
+                    category: "계정·로그인"),
+                archived: true))
         // The Figma fixture uses local wall-clock labels, independently of the day the app runs.
         let day = Calendar.current.date(from: DateComponents(year: 2026, month: 9, day: 30))!
         let minutes = [860, 822, 731, -180, -260]
@@ -226,7 +263,13 @@ final class SupportFixture {
 
     var myTickets: [SupportTicket] { tickets.filter(\.belongsToCurrentUser) }
 
-    var publishedArticles: [SupportArticle] { drafts.compactMap(\.published) }
+    var publishedArticles: [SupportArticle] {
+        drafts.compactMap(\.published) + additionalPublished
+    }
+
+    func publishedArticle(id: String) -> SupportArticle? {
+        publishedArticles.first { $0.id == id }
+    }
 
     @discardableResult
     func create(
@@ -238,7 +281,8 @@ final class SupportFixture {
         guard !title.isEmpty, !body.isEmpty else { return nil }
         let ticket = SupportTicket(
             subject: title, content: body, team: team, category: category,
-            attachmentName: attachmentName, reference: reference)
+            attachmentName: attachmentName,
+            reference: reference.flatMap { publishedArticle(id: $0.id) })
         tickets.insert(ticket, at: 0)
         return ticket.id
     }

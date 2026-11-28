@@ -13,6 +13,7 @@ struct SupportArticle: Identifiable, Equatable {
     var question: String
     var answer: String
     var category: String = ""
+    var audience = "UMC 서비스 사용자"
     var dayReaders: Int?
     var weekReaders: Int?
 
