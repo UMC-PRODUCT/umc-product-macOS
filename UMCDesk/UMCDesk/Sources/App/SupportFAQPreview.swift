@@ -128,8 +128,11 @@ private struct SupportFAQEditor: View {
             }
             VStack(alignment: .leading, spacing: 12) {
                 Text("공개용 질문").inquiryFont(13)
-                TextField("공개용 질문", text: $draft.article.question)
-                    .textFieldStyle(.plain).inquiryFont(18).padding(16)
+                TextField("공개용 질문", text: $draft.article.question, axis: .vertical)
+                    .textFieldStyle(.plain)
+                    .font(.custom("NotoSansKR-Regular", fixedSize: 18).weight(.medium))
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(minHeight: 27, alignment: .leading).padding(16)
                     .background(
                         UMCColor.Custom.backgroundSurfaceGreyWeak, in: .rect(cornerRadius: 10))
                 if draft.article.id == "attendance" { Text("별칭 · 출석 오류, 출석 정정, 결석 표시") }
@@ -173,7 +176,9 @@ private struct SupportFAQEditor: View {
                 .buttonStyle(SupportActionStyle(prominent: true))
                 .disabled(!verified || !draft.isValid)
                 .keyboardShortcut(.defaultAction)
-                if current?.published != nil { Button("보관") { save(draft, .archive) } }
+                if current?.published != nil {
+                    Button("보관") { save(draft, .archive) }.accessibilityLabel("선택한 FAQ 보관")
+                }
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading).supportCard()

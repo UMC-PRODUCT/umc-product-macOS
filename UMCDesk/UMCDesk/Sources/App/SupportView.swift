@@ -168,14 +168,16 @@ struct SupportView: View {
         .tint(UMCColor.Semantic.textBrandDefault)
         .overlay(alignment: .topTrailing) {
             if toolsOpen {
-                Color.clear.contentShape(Rectangle()).onTapGesture { toolsOpen = false }
-                    .accessibilityHidden(true)
-                toolsPanel
-                    .background(
-                        UMCColor.Custom.backgroundSurfaceWhite, in: .rect(cornerRadius: 16)
-                    )
-                    .shadow(color: .black.opacity(0.13), radius: 12, y: 8)
-                    .padding(.trailing, 48).padding(.top, 63)
+                ZStack(alignment: .topTrailing) {
+                    Color.clear.contentShape(Rectangle()).onTapGesture { toolsOpen = false }
+                        .accessibilityHidden(true)
+                    toolsPanel
+                        .background(
+                            UMCColor.Custom.backgroundSurfaceWhite, in: .rect(cornerRadius: 16)
+                        )
+                        .shadow(color: .black.opacity(0.13), radius: 12, y: 8)
+                        .padding(.trailing, 48).padding(.top, 63)
+                }
             }
         }
         .onChange(of: dismissTools) { toolsOpen = false }
@@ -362,9 +364,9 @@ private struct SupportAnswersView: View {
                             choosingSearch = false
                             search = ""
                         } label: {
-                            Text("많이 묻는 질문").frame(width: 128, height: 44)
+                            Text("많이 묻는 질문").frame(width: 128, height: 48)
                         }.buttonStyle(SupportActionStyle(selected: true))
-                        Button(action: showInquiries) { Text("내 문의").frame(width: 72, height: 44) }
+                        Button(action: showInquiries) { Text("내 문의").frame(width: 72, height: 48) }
                     }
                 } else {
                     HStack {
@@ -413,7 +415,7 @@ private struct SupportAnswersView: View {
                         }.padding(.horizontal, 12).frame(height: 40)
                             .background(
                                 UMCColor.Custom.backgroundSurfaceGreyWeak,
-                                in: .rect(cornerRadius: 8))
+                                in: .rect(cornerRadius: 12))
                         Button("검색") {
                             if search.isEmpty {
                                 choosingSearch = true
@@ -422,7 +424,7 @@ private struct SupportAnswersView: View {
                                 focusResults()
                             }
                         }
-                    }.padding(.horizontal, 6).frame(minHeight: 52)
+                    }.padding(.horizontal, 16).frame(minHeight: 52)
                         .background(
                             UMCColor.Custom.backgroundSurfaceWhite, in: .rect(cornerRadius: 12))
                 }
@@ -587,7 +589,7 @@ private struct SupportAnswersView: View {
                                 weekly = week
                             } label: {
                                 Text((week == weekly ? "✓ " : "") + (week ? "최근 7일" : "최근 24시간"))
-                                    .frame(minHeight: 44)
+                                    .frame(minHeight: 48)
                             }
                             .accessibilityAddTraits(week == weekly ? .isSelected : [])
                         }
@@ -752,7 +754,7 @@ struct SupportActionStyle: ButtonStyle {
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .inquiryFont(13, weight: .medium).tracking(-0.13)
+            .inquiryFont(13, weight: .medium).tracking(prominent ? -0.13 : -0.26)
             .padding(.horizontal, 16)
             .frame(minWidth: prominent ? 144 : nil, minHeight: prominent ? 40 : 36)
             .foregroundStyle(

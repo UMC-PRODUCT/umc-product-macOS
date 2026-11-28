@@ -55,6 +55,31 @@ struct SupportFlowTests {
         #expect(preview.tickets.first { $0.id == previous }?.reference == opened)
     }
 
+    @Test func audienceWithdrawalKeepsOperatorAccessAndPreventsNewRequesterReferences() throws {
+        let fixture = SupportFixture()
+        var draft = try #require(fixture.drafts.first)
+        let opened = try #require(fixture.publishedArticle(id: draft.id))
+        draft.article.audience = "UMC 운영진"
+        fixture.apply(.publish, draft: draft)
+        #expect(fixture.operatorPublishedArticles.contains(draft.article))
+        #expect(fixture.publishedArticle(id: opened.id) == nil)
+        #expect(
+            fixture.publishedArticles.contains {
+                $0.id != opened.id && $0.category == opened.category
+            })
+        let id = try #require(
+            fixture.create(
+                subject: "나의 입력", content: "작성 중 본문", team: .platform, reference: opened,
+                attachmentName: "예시.png"))
+        let ticket = try #require(fixture.tickets.first { $0.id == id })
+        #expect(
+            ticket.reference == nil && ticket.content == "작성 중 본문"
+                && ticket.attachmentName == "예시.png")
+        draft.article.audience = "UMC 서비스 사용자"
+        fixture.apply(.publish, draft: draft)
+        #expect(fixture.publishedArticle(id: opened.id) == draft.article)
+    }
+
     @Test func staleEditorCannotRestoreArchivedPublication() throws {
         let fixture = SupportFixture()
         var older = try #require(fixture.drafts.first)

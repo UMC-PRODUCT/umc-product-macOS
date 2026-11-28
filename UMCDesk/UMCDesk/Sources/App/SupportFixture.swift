@@ -263,8 +263,12 @@ final class SupportFixture {
 
     var myTickets: [SupportTicket] { tickets.filter(\.belongsToCurrentUser) }
 
-    var publishedArticles: [SupportArticle] {
+    var operatorPublishedArticles: [SupportArticle] {
         drafts.compactMap(\.published) + additionalPublished
+    }
+
+    var publishedArticles: [SupportArticle] {
+        operatorPublishedArticles.filter { $0.audience == "UMC 서비스 사용자" }
     }
 
     func publishedArticle(id: String) -> SupportArticle? {

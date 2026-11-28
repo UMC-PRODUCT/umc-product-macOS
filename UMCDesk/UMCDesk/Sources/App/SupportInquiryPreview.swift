@@ -71,7 +71,8 @@ struct SupportInquiryPreview: View {
         } else if let ticket = selectedTicket {
             SupportTicketDetail(
                 ticket: ticket, scene: scene, isOperator: isOperator,
-                articles: fixture.publishedArticles
+                articles: isOperator
+                    ? fixture.operatorPublishedArticles : fixture.publishedArticles
             ) {
                 highlightedID = selectedID
                 selectedID = nil
@@ -92,7 +93,7 @@ struct SupportInquiryPreview: View {
                 Spacer()
                 if isOperator {
                     Button("FAQ 관리") { managingFAQ = true }
-                } else if !fixture.myTickets.isEmpty {
+                } else {
                     Button("문의하기", action: beginCompose).buttonStyle(
                         SupportActionStyle(prominent: true))
                 }
@@ -264,7 +265,7 @@ struct SupportComposePreview: View {
     @State private var content = ""
     @Bindable var recipient: SupportRecipient
     @State private var attachment: String?
-    @State private var reading = false
+    @State private var readingID: String?
     @State private var referenceID: String?
     private var reference: SupportArticle? { articles.first { $0.id == referenceID } }
     @State private var category = "출석·과제"
@@ -294,111 +295,119 @@ struct SupportComposePreview: View {
     }
 
     var body: some View {
-        if reading, let suggestion {
-            SupportAnswerDetail(article: suggestion, back: { reading = false }) {
-                referenceID = suggestion.id
-                reading = false
-            }
-        } else {
-            VStack(alignment: .leading, spacing: 16) {
-                Text("문의하기").inquiryFont(28, weight: .bold)
-                Text("서비스 이용 중 겪은 문제를 알려주시면 UMC PRODUCT가 확인해 드려요.")
-                HStack(alignment: .top, spacing: 24) {
-                    VStack(alignment: .leading, spacing: 16) {
-                        HStack(alignment: .top, spacing: 20) {
-                            VStack(alignment: .leading, spacing: 8) {
-                                Text("카테고리").inquiryFont(14)
-                                Menu {
-                                    ForEach(
-                                        Array(Set(articles.map(\.category))).sorted(), id: \.self
-                                    ) { name in
-                                        Button(name) { category = name }
-                                    }
-                                } label: {
-                                    Text(category).frame(maxWidth: .infinity, minHeight: 40)
-                                }
-                            }.frame(width: 300)
-                            VStack(alignment: .leading, spacing: 8) {
-                                Text("받는 팀").inquiryFont(14)
-                                Button {
-                                    recipient.isOpen = true
-                                } label: {
-                                    HStack {
-                                        Text(recipient.team?.rawValue ?? "받는 팀 선택")
-                                        Spacer()
-                                        Image(systemName: "chevron.down")
-                                    }.frame(maxWidth: .infinity, minHeight: 40)
-                                }
-                            }
-                        }
-                        Text("문의와 가까운 팀을 선택해 주세요. 잘 모르겠다면 UMC PRODUCT에서 확인해 드려요.")
-                        Text("문의 내용").inquiryFont(18, weight: .bold)
-                        VStack(alignment: .leading, spacing: 12) {
-                            TextEditor(text: $content)
-                                .inquiryFont(16).scrollContentBackground(.hidden)
-                                .accessibilityLabel("문의 내용").frame(minHeight: 120)
-                            Text("내용과 첨부 자료는 UMC PRODUCT에 전달돼요.").inquiryFont(13)
-                        }.padding(16)
-                            .background(
-                                UMCColor.Custom.backgroundSurfaceGreyWeak,
-                                in: .rect(cornerRadius: 10))
-                        Text("첨부").inquiryFont(18, weight: .bold)
-                        Button {
-                            attachment = attachment == nil ? "오류 화면.png" : nil
-                        } label: {
-                            Text(attachment.map { $0 + "  ·  첨부 변경" } ?? "예시 오류 화면 첨부")
-                                .frame(width: 328, height: 44)
-                        }
-                        Text("이미지·문서, 최대 50MB").inquiryFont(13)
-                        HStack {
-                            Spacer()
-                            Button("취소", action: cancel)
-                            Button("문의 보내기") {
-                                guard let team = recipient.team else {
-                                    recipient.isOpen = true
-                                    return
-                                }
-                                let line =
-                                    content.split(whereSeparator: \.isNewline)
-                                    .map { $0.trimmingCharacters(in: .whitespaces) }
-                                    .first { !$0.isEmpty } ?? ""
-                                submit(
-                                    String(line.prefix(50)), content, team, category, reference,
-                                    attachment)
-                            }
-                            .buttonStyle(SupportActionStyle(prominent: true))
-                            .disabled(
-                                content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                        }
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading).supportCard()
-                    if let suggestion {
+        Group {
+            if let reading = articles.first(where: { $0.id == readingID }) {
+                SupportAnswerDetail(article: reading, back: { readingID = nil }) {
+                    referenceID = reading.id
+                    readingID = nil
+                }
+            } else {
+                VStack(alignment: .leading, spacing: 16) {
+                    Text("문의하기").inquiryFont(28, weight: .bold)
+                    Text("서비스 이용 중 겪은 문제를 알려주시면 UMC PRODUCT가 확인해 드려요.")
+                    HStack(alignment: .top, spacing: 24) {
                         VStack(alignment: .leading, spacing: 16) {
-                            Text("먼저 확인해 보세요").inquiryFont(18, weight: .bold)
-                            Text(suggestion.question)
-                            Text("검증된 답변 · UMC PRODUCT")
+                            HStack(alignment: .top, spacing: 20) {
+                                VStack(alignment: .leading, spacing: 8) {
+                                    Text("카테고리").inquiryFont(14)
+                                    Menu {
+                                        ForEach(
+                                            Array(Set(articles.map(\.category))).sorted(),
+                                            id: \.self
+                                        ) { name in
+                                            Button(name) { category = name }
+                                        }
+                                    } label: {
+                                        Text(category).frame(maxWidth: .infinity, minHeight: 40)
+                                    }
+                                }.frame(width: 300)
+                                VStack(alignment: .leading, spacing: 8) {
+                                    Text("받는 팀").inquiryFont(14)
+                                    Button {
+                                        recipient.isOpen = true
+                                    } label: {
+                                        HStack {
+                                            Text(recipient.team?.rawValue ?? "받는 팀 선택")
+                                            Spacer()
+                                            Image(systemName: "chevron.down")
+                                        }.frame(maxWidth: .infinity, minHeight: 40)
+                                    }
+                                }
+                            }
+                            Text("문의와 가까운 팀을 선택해 주세요. 잘 모르겠다면 UMC PRODUCT에서 확인해 드려요.")
+                            Text("문의 내용").inquiryFont(18, weight: .bold)
+                            VStack(alignment: .leading, spacing: 12) {
+                                TextEditor(text: $content)
+                                    .inquiryFont(16).scrollContentBackground(.hidden)
+                                    .accessibilityLabel("문의 내용").frame(minHeight: 120)
+                                Text("내용과 첨부 자료는 UMC PRODUCT에 전달돼요.").inquiryFont(13)
+                            }.padding(16)
+                                .background(
+                                    UMCColor.Custom.backgroundSurfaceGreyWeak,
+                                    in: .rect(cornerRadius: 10))
+                            Text("첨부").inquiryFont(18, weight: .bold)
                             Button {
-                                reading = true
+                                attachment = attachment == nil ? "오류 화면.png" : nil
                             } label: {
-                                Text("답변 확인하기").frame(maxWidth: .infinity, minHeight: 44)
+                                Text(attachment.map { $0 + "  ·  첨부 변경" } ?? "예시 오류 화면 첨부")
+                                    .frame(width: 328, height: 44)
                             }
-                            if let reference {
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text("참고한 답변").inquiryFont(13)
-                                    Text(reference.question).inquiryFont(14, weight: .medium)
-                                }.frame(maxWidth: .infinity, alignment: .leading)
-                                    .fixedSize(horizontal: false, vertical: true).padding(16)
-                                    .background(
-                                        UMCColor.Semantic.surfaceBrandWeak,
-                                        in: .rect(cornerRadius: 12))
+                            Text("이미지·문서, 최대 50MB").inquiryFont(13)
+                            HStack {
+                                Spacer()
+                                Button("취소", action: cancel)
+                                Button("문의 보내기") {
+                                    guard let team = recipient.team else {
+                                        recipient.isOpen = true
+                                        return
+                                    }
+                                    let line =
+                                        content.split(whereSeparator: \.isNewline)
+                                        .map { $0.trimmingCharacters(in: .whitespaces) }
+                                        .first { !$0.isEmpty } ?? ""
+                                    submit(
+                                        String(line.prefix(50)), content, team, category,
+                                        reference,
+                                        attachment)
+                                }
+                                .buttonStyle(SupportActionStyle(prominent: true))
+                                .disabled(
+                                    content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                                )
                             }
-                            Text("답변을 읽지 않아도 문의를 보낼 수 있어요. 작성하던 내용과 첨부는 유지돼요.")
                         }
-                        .frame(maxWidth: .infinity, alignment: .leading).supportCard().frame(
-                            width: 360)
+                        .frame(maxWidth: .infinity, alignment: .leading).supportCard()
+                        if let suggestion {
+                            VStack(alignment: .leading, spacing: 16) {
+                                Text("먼저 확인해 보세요").inquiryFont(18, weight: .bold)
+                                Text(suggestion.question)
+                                Text("검증된 답변 · UMC PRODUCT")
+                                Button {
+                                    readingID = suggestion.id
+                                } label: {
+                                    Text("답변 확인하기").frame(maxWidth: .infinity, minHeight: 44)
+                                }
+                                if let reference {
+                                    VStack(alignment: .leading, spacing: 8) {
+                                        Text("참고한 답변").inquiryFont(13, weight: .medium)
+                                        Text(reference.question).inquiryFont(14)
+                                    }.frame(maxWidth: .infinity, alignment: .leading)
+                                        .fixedSize(horizontal: false, vertical: true).padding(16)
+                                        .background(
+                                            UMCColor.Semantic.surfaceBrandWeak,
+                                            in: .rect(cornerRadius: 12))
+                                }
+                                Text("답변을 읽지 않아도 문의를 보낼 수 있어요. 작성하던 내용과 첨부는 유지돼요.")
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading).supportCard().frame(
+                                width: 360)
+                        }
                     }
                 }
             }
+        }.onChange(of: articles) {
+            if !articles.contains(where: { $0.id == readingID }) { readingID = nil }
+            if !articles.contains(where: { $0.id == referenceID }) { referenceID = nil }
         }
     }
 }
@@ -417,7 +426,8 @@ struct SupportTeamOptions: View {
                 .onTapGesture { recipient.isOpen = false }
             VStack(alignment: .leading, spacing: 20) {
                 HStack {
-                    Text("어느 팀에 문의할까요?").inquiryFont(20, weight: .bold)
+                    Text("어느 팀에 문의할까요?").font(.custom("NotoSansKR-Regular", fixedSize: 20).bold())
+                        .lineHeight(.exact(points: 20))
                     Spacer()
                     Button("취소") { recipient.isOpen = false }.keyboardShortcut(.cancelAction)
                 }

@@ -212,7 +212,11 @@ struct SupportTicketDetail: View {
                                 editingAssignee = false
                             }
                         }
-                        Button("취소") { editingAssignee = false }.keyboardShortcut(.cancelAction)
+                        Button {
+                            editingAssignee = false
+                        } label: {
+                            Text("취소").frame(maxWidth: .infinity)
+                        }.buttonStyle(.plain).keyboardShortcut(.cancelAction)
                     }.frame(width: 280, height: 261, alignment: .topLeading).supportCard(
                         padding: 16
                     )
@@ -257,15 +261,16 @@ struct SupportTicketDetail: View {
                             }.accessibilityAddTraits(
                                 pendingLabels.contains(name) ? .isSelected : [])
                         }
-                        Text("라벨은 UMC PRODUCT 내부에서만 보여요.").inquiryFont(13)
-                        HStack {
-                            Button("취소") { editingLabel = false }.keyboardShortcut(.cancelAction)
-                            Button("적용") {
-                                ticket.applyLabels(
-                                    original: initialLabels, selected: pendingLabels)
-                                editingLabel = false
-                            }
+                        Button("적용") {
+                            ticket.applyLabels(original: initialLabels, selected: pendingLabels)
+                            editingLabel = false
                         }
+                        Text("라벨은 UMC PRODUCT 내부에서만 보여요.").inquiryFont(13)
+                        Button {
+                            editingLabel = false
+                        } label: {
+                            Text("취소").frame(maxWidth: .infinity)
+                        }.buttonStyle(.plain).keyboardShortcut(.cancelAction)
                     }.frame(width: 272, height: 273, alignment: .topLeading).supportCard(
                         padding: 20
                     )
@@ -277,10 +282,12 @@ struct SupportTicketDetail: View {
             Text("대표 질문").inquiryFont(13)
             Text(articles.first { $0.id == ticket.linkedQuestion }?.question ?? "미분류").inquiryFont(
                 14)
-            Picker("대표 질문 연결", selection: $ticket.linkedQuestion) {
-                Text("미분류").tag(String?.none)
-                ForEach(articles) { Text($0.question).tag(Optional($0.id)) }
-            }
+            Menu("대표 질문 연결") {
+                Button("미분류") { ticket.linkedQuestion = nil }
+                ForEach(articles) { article in
+                    Button(article.question) { ticket.linkedQuestion = article.id }
+                }
+            }.fixedSize()
             Text("담당자 변경 이력").inquiryFont(13, weight: .medium)
             Text("14:20 문의 접수 · 담당자 미배정")
             ForEach(ticket.history) { event in
