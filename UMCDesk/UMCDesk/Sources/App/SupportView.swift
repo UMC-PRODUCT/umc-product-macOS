@@ -12,12 +12,13 @@ import UMCFoundation
 struct SupportView: View {
     private enum Page {
         case answers, inquiries
-        case operations
+        case operations, faq
     }
     @State private var page = Page.answers
     @State private var composing = false
     @State private var createdTicket: UUID?
 
+    @State private var searchRequest = 0
     @State private var toolsOpen = false
     @State private var reference: SupportArticle?
 
@@ -25,7 +26,7 @@ struct SupportView: View {
         switch page {
         case .answers: AppLocalization.string("문의")
         case .inquiries: AppLocalization.string("내 문의")
-        case .operations: "문의 관리"
+        case .operations, .faq: "문의 관리"
         }
     }
 
@@ -62,20 +63,38 @@ struct SupportView: View {
                 Button("문의 도구", systemImage: "slider.horizontal.3") { toolsOpen.toggle() }
                     .popover(isPresented: $toolsOpen) {
                         VStack(alignment: .leading, spacing: 14) {
-                            Text("문의 도구").umcTypography(.title2Bold)
-                            Button("많이 묻는 질문") { navigate(.answers) }
-                            Button("내 문의") { navigate(.inquiries) }
-                            if fixture != nil {
-                                Button("문의하기") { toolsOpen = false; reference = nil; composing = true }
-                                Button("문의 관리") { navigate(.operations) }
+                            let operating = page == .operations || page == .faq
+                            HStack {
+                                Text(operating ? "문의 관리 도구" : "문의 도구").umcTypography(.headlineBold)
+                                Spacer()
+                                Button("닫기") { toolsOpen = false }.keyboardShortcut(.cancelAction)
+                            }
+                            if operating, fixture != nil {
+                                Text("UMC PRODUCT 구성원만 사용할 수 있는 관리 도구예요.")
+                                Button("FAQ 작성 · 관리") { navigate(.faq) }
+                                Button("문의 관리 목록") { navigate(.operations) }
+                                Button("많이 묻는 질문 보기") { navigate(.answers) }
+                            } else {
+                                Text("답을 찾아보고 내 문의를 이어가세요.")
+                                Button("도움말 검색") { navigate(.answers); searchRequest += 1 }
+                                if fixture != nil {
+                                    Button("새 문의 작성") {
+                                        toolsOpen = false
+                                        reference = nil
+                                        composing = true
+                                    }
+                                }
+                                Button("많이 묻는 질문") { navigate(.answers) }
+                                Button("내 문의 현황") { navigate(.inquiries) }
                             }
                         }.padding(20).frame(width: 390, alignment: .leading)
                     }
             }
             if composing, let fixture {
                 SupportComposePreview(articles: articles, cancel: { composing = false },
-                                      submit: { subject, content, team in
-                    createdTicket = fixture.create(subject: subject, content: content, team: team)
+                                      submit: { subject, content, team, category, reference, attachment in
+                    createdTicket = fixture.create(subject: subject, content: content, team: team, category: category,
+                                                  reference: reference, attachmentName: attachment)
                     navigate(.inquiries)
                 }, reference: reference)
             } else {
@@ -90,7 +109,7 @@ struct SupportView: View {
                 Spacer()
                 if fixture != nil && page == .answers {
                     Button("문의하기") { reference = nil; composing = true }
-                        .buttonStyle(.borderedProminent).modifier(SupportControlFill())
+                        .buttonStyle(SupportActionStyle(prominent: true))
                 }
             }
             Picker(AppLocalization.string("고객센터"), selection: $page) {
@@ -98,12 +117,14 @@ struct SupportView: View {
                 Text(AppLocalization.string("내 문의")).tag(Page.inquiries)
                 if fixture != nil { Text("운영").tag(Page.operations) }
             }
-            .pickerStyle(.segmented).modifier(SupportControlFill())
+            .pickerStyle(.segmented).controlSize(.large).modifier(SupportControlFill())
             .labelsHidden()
             .frame(maxWidth: 300)
             switch page {
+            case .faq:
+                if let fixture { SupportFAQPreview(fixture: fixture) { navigate(.operations) } }
             case .answers:
-                SupportAnswersView(articles: articles, showInquiries: { page = .inquiries },
+                SupportAnswersView(articles: articles, searchRequest: searchRequest, showInquiries: { page = .inquiries },
                                    compose: fixture == nil ? nil : { article in
                     reference = article
                     composing = true
@@ -119,7 +140,8 @@ struct SupportView: View {
         }.padding(.horizontal, 40).padding(.vertical, 24)
         .frame(minWidth: 560, maxWidth: .infinity, minHeight: 420, maxHeight: .infinity,
                alignment: .topLeading)
-        .background(UMCColor.Custom.backgroundDefault)
+        .background(UMCColor.Custom.backgroundSurface)
+        .buttonStyle(SupportActionStyle())
         .tint(UMCColor.Semantic.textBrandDefault)
         .safeAreaInset(edge: .bottom, alignment: .leading, spacing: 0) {
             if fixture != nil {
@@ -137,7 +159,7 @@ struct SupportView: View {
     }
 
     private var articles: [SupportArticle] {
-        if let fixture { return fixture.publishedArticles + SupportArticle.appGuide }
+        if let fixture { return fixture.publishedArticles }
         return SupportArticle.appGuide
     }
 
@@ -164,10 +186,12 @@ struct SupportView: View {
 private struct SupportAnswersView: View {
     private enum Focus { case search, table, back }
     let articles: [SupportArticle]
+    let searchRequest: Int
     let showInquiries: () -> Void
     let compose: ((SupportArticle?) -> Void)?
     @State private var category: String?
     @State private var weekly = false
+    @State private var refreshed = false
     @State private var search = ""
     @State private var selectedID: String?
     @State private var detail: SupportArticle?
@@ -184,7 +208,8 @@ private struct SupportAnswersView: View {
     }
 
     private func readers(_ article: SupportArticle) -> Int? {
-        weekly ? article.weekReaders : article.dayReaders
+        if !weekly, refreshed, article.id == "login" { return 30 }
+        return weekly ? article.weekReaders : article.dayReaders
     }
 
     private var matches: [SupportArticle] {
@@ -200,8 +225,10 @@ private struct SupportAnswersView: View {
             SupportAnswerDetail(article: detail, back: { self.detail = nil },
                                 inquire: compose.map { action in { action(detail) } })
         } else {
+            HStack(spacing: 12) {
+            Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
             TextField(AppLocalization.string("궁금한 내용을 검색하세요"), text: $search)
-                .textFieldStyle(.roundedBorder)
+                .textFieldStyle(.plain)
                 .accessibilityIdentifier("support.search")
                 .focused($focus, equals: .search)
                 .onSubmit { focusResults() }
@@ -210,8 +237,11 @@ private struct SupportAnswersView: View {
                     focusResults()
                     return .handled
                 }
-                .frame(minHeight: 44)
+                .onChange(of: searchRequest, initial: true) { if searchRequest > 0 { focus = .search } }
                 .onChange(of: search) { selectedID = nil }
+            Button("검색") { focusResults() }
+            }.padding(.horizontal, 16).frame(minHeight: 52)
+                .background(UMCColor.Custom.backgroundSurfaceGreyWeak, in: .rect(cornerRadius: 12))
             if focus == .search && search.isEmpty {
                 HStack {
                     Button("출석·과제") { search = "출석·과제" }
@@ -255,7 +285,13 @@ private struct SupportAnswersView: View {
                             min(360, width * 0.28)
                         }
                 }
-
+                if showsRanking && !refreshed {
+                    HStack {
+                        Text("새 순위가 있어요. 읽던 목록은 그대로 유지했어요.")
+                        Spacer()
+                        Button("새 순위 보기") { refreshed = true }
+                    }.padding(12)
+                }
             }
         }
     }
@@ -305,6 +341,13 @@ private struct SupportAnswersView: View {
                     }.pickerStyle(.segmented).modifier(SupportControlFill()).labelsHidden().fixedSize()
                 }
             }
+            if showsRanking {
+                HStack {
+                    Text(weekly ? "최근 7일" : "최근 24시간")
+                    Spacer()
+                    Text(refreshed ? "마지막 갱신 14:33" : "마지막 갱신 14:32")
+                }.umcTypography(.captionRegular)
+            }
             List(selection: $selectedID) {
                 ForEach(Array(matches.enumerated()), id: \.element.id) { index, article in
                     Button { open(article) } label: {
@@ -328,6 +371,7 @@ private struct SupportAnswersView: View {
                 }
             }
             .listStyle(.plain)
+            .environment(\.defaultMinListRowHeight, showsRanking ? 76 : 56)
             .accessibilityIdentifier("support.faq.table")
             .focused($focus, equals: .table)
             .task {
@@ -401,5 +445,23 @@ struct SupportAnswerDetail: View {
                 }.padding(24).frame(width: 356, alignment: .leading)
             }
         }
+    }
+}
+
+struct SupportActionStyle: ButtonStyle {
+    var prominent = false
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .umcTypography(.bodyRegular)
+            .padding(.horizontal, 16)
+            .frame(minHeight: prominent ? 40 : 36)
+            .foregroundStyle(prominent ? UMCColor.Custom.backgroundTextWhite
+                             : UMCColor.Semantic.textNeutralDefault)
+            .background(prominent ? UMCColor.Semantic.fillPrimaryStrong200
+                        : UMCColor.Custom.backgroundSurfaceGreyWeaker, in: .rect(cornerRadius: 8))
+            .overlay { RoundedRectangle(cornerRadius: 8)
+                .strokeBorder(UMCColor.Semantic.borderNeutralWeak200, lineWidth: prominent ? 0 : 1) }
+            .opacity(configuration.isPressed ? 0.75 : 1)
     }
 }

@@ -47,7 +47,13 @@ struct SupportTicket: Identifiable {
     var team: SupportTeam
     var category = "기타"
     var assignee = "미배정"
-    var label = "미분류"
+    var labels: [String] = []
+    var linkedQuestion: String?
+    var attachmentName: String?
+    var reference: SupportArticle?
+    var history: [String] = []
+
+    var label: String { labels.isEmpty ? "미분류" : labels.joined(separator: " · ") }
     var status = SupportInquiryStatus.received
     var replies: [Reply] = []
 
@@ -103,7 +109,7 @@ struct SupportDraft: Identifiable {
 final class SupportFixture {
     var tickets = [
         SupportTicket(subject: "출석 화면 오류 문의", content: "예시 일정의 출석 기록을 확인해 주세요.",
-                      team: .learning, category: "출석·과제", assignee: "예시 담당자", label: "화면 오류", status: .active,
+                      team: .learning, category: "출석·과제", assignee: "예시 담당자", labels: ["출석 오류", "정보 확인"], attachmentName: "오류 화면.png", status: .active,
                       replies: [.init(author: .agent, text: "확인해 볼게요. 사용 중인 앱 버전을 알려 주세요.")]),
         SupportTicket(subject: "종료된 예시 문의", content: "앱 언어 설정을 확인했어요.",
                       team: .operations, category: "앱 설정", status: .closed,
@@ -140,11 +146,13 @@ final class SupportFixture {
     var publishedArticles: [SupportArticle] { drafts.compactMap(\.published) }
 
     @discardableResult
-    func create(subject: String, content: String, team: SupportTeam) -> UUID? {
+    func create(subject: String, content: String, team: SupportTeam, category: String = "기타",
+                reference: SupportArticle? = nil, attachmentName: String? = nil) -> UUID? {
         let title = subject.trimmingCharacters(in: .whitespacesAndNewlines)
         let body = content.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !title.isEmpty, !body.isEmpty else { return nil }
-        let ticket = SupportTicket(subject: title, content: body, team: team)
+        let ticket = SupportTicket(subject: title, content: body, team: team, category: category,
+                                   attachmentName: attachmentName, reference: reference)
         tickets.insert(ticket, at: 0)
         return ticket.id
     }

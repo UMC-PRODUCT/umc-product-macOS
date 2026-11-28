@@ -44,7 +44,7 @@ struct SupportInquiryPreview: View {
             (status == nil || status == ticket.status)
                 && assignment.includes(ticket)
                 && (category == nil || category == ticket.category)
-                && (label == nil || label == ticket.label)
+                && (label == nil || ticket.labels.contains(label ?? "") || label == ticket.label)
         }
     }
     @FocusState private var tableFocused: Bool
@@ -63,8 +63,9 @@ struct SupportInquiryPreview: View {
     var body: some View {
         if composing {
             SupportComposePreview(articles: fixture.publishedArticles, cancel: { composing = false }) {
-                subject, content, team in
-                selectedID = fixture.create(subject: subject, content: content, team: team)
+                subject, content, team, category, reference, attachment in
+                selectedID = fixture.create(subject: subject, content: content, team: team, category: category,
+                                            reference: reference, attachmentName: attachment)
                 composing = false
             }
         } else if isOperator && managingFAQ {
@@ -73,7 +74,7 @@ struct SupportInquiryPreview: View {
                 managingFAQ = false
             }
         } else if let ticket = selectedTicket {
-            SupportTicketDetail(ticket: ticket, isOperator: isOperator) {
+            SupportTicketDetail(ticket: ticket, isOperator: isOperator, articles: fixture.publishedArticles) {
                 highlightedID = selectedID
                 selectedID = nil
             }
@@ -182,7 +183,7 @@ struct SupportInquiryPreview: View {
                 }
                 Picker("라벨", selection: $label) {
                     Text("라벨 전체").tag(String?.none)
-                    ForEach(Set(fixture.tickets.map(\.label)).sorted(), id: \.self) {
+                    ForEach(Set(fixture.tickets.flatMap { $0.labels.isEmpty ? ["미분류"] : $0.labels }).sorted(), id: \.self) {
                         Text($0).tag(Optional($0))
                     }
                 }
@@ -225,20 +226,21 @@ struct SupportInquiryPreview: View {
 struct SupportComposePreview: View {
     let articles: [SupportArticle]
     let cancel: () -> Void
-    let submit: (String, String, SupportTeam) -> Void
+    let submit: (String, String, SupportTeam, String, SupportArticle?, String?) -> Void
     @State private var content = ""
     @State private var team: SupportTeam?
     @State private var choosingTeam = false
+    @State private var attachment: String?
     @State private var reading = false
     @State private var reference: SupportArticle?
     @State private var category = "출석·과제"
 
     private var suggestion: SupportArticle? {
-        articles.first { $0.category == category }
+        reference ?? articles.first { $0.category == category }
     }
 
     init(articles: [SupportArticle], cancel: @escaping () -> Void,
-         submit: @escaping (String, String, SupportTeam) -> Void, reference: SupportArticle? = nil) {
+         submit: @escaping (String, String, SupportTeam, String, SupportArticle?, String?) -> Void, reference: SupportArticle? = nil) {
         self.articles = articles
         self.cancel = cancel
         self.submit = submit
@@ -269,6 +271,10 @@ struct SupportComposePreview: View {
                         TextEditor(text: $content)
                             .accessibilityLabel("문의 내용").frame(minHeight: 120)
                             .border(UMCColor.Semantic.borderNeutralWeak200)
+                        Text("첨부").umcTypography(.headlineBold)
+                        Button(attachment ?? "예시 오류 화면 첨부") {
+                            attachment = attachment == nil ? "오류 화면.png" : nil
+                        }
                         if let reference {
                             Text("참고한 답변 · " + reference.question)
                         }
@@ -279,7 +285,7 @@ struct SupportComposePreview: View {
                                 let line = content.split(whereSeparator: \.isNewline)
                                     .map { $0.trimmingCharacters(in: .whitespaces) }
                                     .first { !$0.isEmpty } ?? ""
-                                submit(String(line.prefix(50)), content, team)
+                                submit(String(line.prefix(50)), content, team, category, reference, attachment)
                             }
                             .disabled(content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                         }

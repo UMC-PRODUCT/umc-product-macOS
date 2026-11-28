@@ -11,9 +11,10 @@ import SwiftUI
 struct SupportTicketDetail: View {
     @Binding var ticket: SupportTicket
     let isOperator: Bool
+    var articles: [SupportArticle] = []
     let back: () -> Void
     @State private var editingLabel = false
-    @State private var pendingLabel = ""
+    @State private var pendingLabels: [String] = []
     @State private var message = ""
     @FocusState private var inputFocused: Bool
 
@@ -29,6 +30,7 @@ struct SupportTicketDetail: View {
                 Text(ticket.status.rawValue)
                     .padding(.horizontal, UMCSpacing.value16).padding(.vertical, UMCSpacing.value4)
                     .background(UMCColor.Semantic.surfaceBrandWeak, in: .capsule)
+                Text("받는 팀 · " + ticket.team.rawValue)
                 if isOperator {
                     Spacer()
                     Button(ticket.status == .closed ? "다시 진행" : "문의 종료") {
@@ -45,6 +47,8 @@ struct SupportTicketDetail: View {
                                 Label("답변 대기 · 담당자가 문의를 확인하고 있어요.", systemImage: "clock")
                             }
                             bubble(ticket.content, author: .requester, date: ticket.createdAt)
+                            if let file = ticket.attachmentName { Label(file, systemImage: "paperclip") }
+                            if let reference = ticket.reference { Text("참고한 답변 · " + reference.question) }
                             ForEach(ticket.replies) { reply in
                                 bubble(reply.text, author: reply.author, date: reply.sentAt)
                                     .id(reply.id)
@@ -90,6 +94,9 @@ struct SupportTicketDetail: View {
             if isOperator { operations.frame(width: 360) }
             }
         }
+        .onChange(of: ticket.labels) { ticket.history.append("라벨 · " + ticket.label) }
+        .onChange(of: ticket.assignee) { ticket.history.append("담당자 · " + ticket.assignee) }
+        .onChange(of: ticket.status) { ticket.history.append(ticket.status.rawValue) }
         .onAppear { inputFocused = ticket.status != .closed }
     }
 
@@ -112,7 +119,7 @@ struct SupportTicketDetail: View {
     }
 
     private var operations: some View {
-        GroupBox("운영 정보") {
+        GroupBox("처리 정보") {
             Form {
                 Picker("받는 팀", selection: $ticket.team) {
                     ForEach(SupportTeam.allCases, id: \.self) { Text($0.rawValue).tag($0) }
@@ -121,22 +128,34 @@ struct SupportTicketDetail: View {
                     Text("미배정").tag("미배정")
                     Text("예시 담당자").tag("예시 담당자")
                 }
+                Button("내가 맡기") { ticket.assignee = "예시 담당자" }
                 Button("라벨 · " + ticket.label) {
-                    pendingLabel = ticket.label
+                    pendingLabels = ticket.labels
                     editingLabel = true
                 }
                 .popover(isPresented: $editingLabel) {
                     VStack(alignment: .leading, spacing: 12) {
-                        Picker("라벨 편집", selection: $pendingLabel) {
-                            ForEach(["미분류", "화면 오류", "출석 오류", "정보 확인", "기능 요청", "이용 방법"],
-                                    id: \.self) { Text($0).tag($0) }
-                        }.pickerStyle(.radioGroup)
+                        Text("라벨 편집").umcTypography(.headlineBold)
+                        ForEach(["출석 오류", "정보 확인", "기능 요청", "로그인"], id: \.self) { name in
+                            Button {
+                                if pendingLabels.contains(name) { pendingLabels.removeAll { $0 == name } }
+                                else { pendingLabels.append(name) }
+                            } label: {
+                                Label(name, systemImage: pendingLabels.contains(name)
+                                      ? "checkmark.square.fill" : "square")
+                            }.accessibilityAddTraits(pendingLabels.contains(name) ? .isSelected : [])
+                        }
                         HStack {
                             Button("취소") { editingLabel = false }.keyboardShortcut(.cancelAction)
-                            Button("적용") { ticket.label = pendingLabel; editingLabel = false }
+                            Button("적용") { ticket.labels = pendingLabels; editingLabel = false }
                         }
                     }.padding(20)
                 }
+                Picker("대표 질문 연결", selection: $ticket.linkedQuestion) {
+                    Text("미분류").tag(String?.none)
+                    ForEach(articles) { Text($0.question).tag(Optional($0.id)) }
+                }
+                ForEach(Array(ticket.history.enumerated()), id: \.offset) { Text($0.element) }
             }
             .padding(UMCSpacing.value12)
         }
