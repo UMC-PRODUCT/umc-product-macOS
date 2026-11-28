@@ -70,6 +70,9 @@ struct AuthAppearanceTests {
                     #expect(abs(buttonWidth - contentWidth) <= 1)
                 } else {
                     let fields: [NSTextField] = descendants(in: scrollView).filter(\.isEditable)
+                    if screen == .emailLogin || screen == .credentialsError {
+                        #expect(fields.contains { $0 is NSSecureTextField })
+                    }
                     let first = try #require(fields.first)
                     let firstFrame = host.convert(first.bounds, from: first)
                     #expect(viewportFrame.contains(firstFrame))

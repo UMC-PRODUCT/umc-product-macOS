@@ -118,6 +118,15 @@ def handle(handler, method, path, query, body, email):
         entries = state["entries"]
         suffix = path.removeprefix("/api/v1/notices").strip("/")
         if suffix in ("", "search") and method == "GET":
+            control = getattr(server, "control", None)
+            if control:
+                for marker, status in (("fail-notice-list-once", 503),
+                                       ("deny-notice-list-once", 403)):
+                    try:
+                        (control / marker).unlink()
+                    except FileNotFoundError:
+                        continue
+                    return send(status)
             if "gisuId" not in query or "noticeTab" not in query:
                 return send(400)
             term = query.get("keyword", [""])[0].casefold()

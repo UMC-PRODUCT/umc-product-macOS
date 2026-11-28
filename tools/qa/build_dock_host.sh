@@ -15,7 +15,7 @@ for resource in Home_HomePresentation CoreDesignSystem_CoreDesignSystem UMCFound
 done
 xcrun swiftc -parse-as-library -O -target arm64-apple-macos26.0 \
     -F "$products" -framework HomePresentation -framework HomeDomain \
-    -framework CoreDesignSystem -framework CoreDomain -framework UMCFoundation \
+    -framework CoreUIComponents -framework CoreDesignSystem -framework CoreDomain -framework UMCFoundation \
     "$root/tools/qa/DockPerformanceHost.swift" -o "$bundle/MacOS/Dock"
 plutil -create xml1 "$bundle/Info.plist"
 plutil -insert CFBundleIdentifier -string org.umc.desk.dock-qa "$bundle/Info.plist"

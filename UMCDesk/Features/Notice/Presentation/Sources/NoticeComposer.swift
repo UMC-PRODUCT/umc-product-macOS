@@ -5,6 +5,7 @@
 
 import CoreDesignSystem
 import NoticeDomain
+import CoreUIComponents
 import SwiftUI
 import UniformTypeIdentifiers
 
@@ -70,6 +71,7 @@ struct NoticeComposer: View {
             Form {
                 Section("공지 내용") {
                     TextField("제목", text: $draft.title)
+                        .umcInputField()
                     TextField("본문", text: $draft.content, axis: .vertical).lineLimit(4...12)
                     Picker(
                         "수신 대상",
@@ -111,8 +113,10 @@ struct NoticeComposer: View {
                     Toggle("투표 추가", isOn: $usingPoll)
                     if usingPoll {
                         TextField("투표 제목", text: $poll.title)
+                            .umcInputField()
                         ForEach(poll.options.indices, id: \.self) { index in
                             TextField("선택지 \(index + 1)", text: $poll.options[index])
+                                .umcInputField()
                         }
                         HStack {
                             Button("선택지 추가") { poll.options.append("") }.disabled(
@@ -144,12 +148,18 @@ struct NoticeComposer: View {
                     }
                 }.frame(maxHeight: 100).disabled(busy)
             }
-            HStack {
+            VStack(alignment: .leading, spacing: UMCSpacing.value8) {
                 if !restored {
                     Button("작성 상태 다시 열기") { Task { await openJournal() } }.disabled(busy)
                 } else if publication.input != nil {
-                    Button("이 작성 시도 버리기") { discarding = true }.disabled(busy)
+                    Button("이 작성 시도 버리기", role: .destructive) { discarding = true }.disabled(busy)
                 }
+                if publication.needsListCheck {
+                    Button("별도 공지로 작성") { confirmingNew = true }.disabled(busy)
+                }
+            }
+            Divider()
+            HStack {
                 Button(publishedID == nil ? "취소" : "게시된 공지 열기") {
                     if let publishedID {
                         onPublished(publishedID)
@@ -162,8 +172,9 @@ struct NoticeComposer: View {
                 Spacer()
                 if busy { ProgressView().controlSize(.small) }
                 if publication.needsListCheck {
-                    Button("별도 공지로 작성") { confirmingNew = true }.disabled(busy)
                     Button("게시 결과 확인") { recover(nil) }
+                        .buttonStyle(.borderedProminent)
+                        .keyboardShortcut(.defaultAction)
                         .disabled(busy)
                 } else {
                     Button(
@@ -177,6 +188,7 @@ struct NoticeComposer: View {
                         }
                     }
                     .keyboardShortcut(.defaultAction)
+                    .buttonStyle(.borderedProminent)
                     .disabled(
                         !restored || publication.input.map { $0.gisu != gisu } == true
                             || (!valid && !publication.needsPollCheck) || busy)

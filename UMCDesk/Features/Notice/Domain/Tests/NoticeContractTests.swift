@@ -41,6 +41,33 @@ struct NoticeContractTests {
         #expect(decoded.vote?.options.first?.voteCount == "1")
     }
 
+    @Test("마감 필드가 누락되거나 null이어도 투표를 읽는다", arguments: ["", #""endsAtExclusive":null,"#])
+    func missingVoteDeadline(_ field: String) throws {
+        let json = """
+            {"title":"선택","status":"OPEN","isAnonymous":true,"allowMultipleChoice":false,
+            \(field)"totalParticipants":0,"options":[]}
+            """
+        let vote = try JSONDecoder().decode(NoticeVote.self, from: Data(json.utf8))
+        #expect(vote.endsAtExclusive.isEmpty)
+        #expect(vote.status == "OPEN")
+    }
+
+    @Test("마감값 타입이 잘못되어도 공지와 투표를 읽는다", arguments: ["42", "{}"])
+    func invalidDeadlineType(_ value: String) throws {
+        let json = """
+            {"id":77,"title":"공지","content":"본문","createdAt":"2026-11-23T00:00:00Z",
+            "mustRead":true,"viewCount":8,"vote":{"title":"선택","status":"OPEN","isAnonymous":true,
+            "allowMultipleChoice":false,"endsAtExclusive":\(value),"totalParticipants":1,"options":[
+            {"optionId":"82","content":"첫째","voteCount":1}],"mySelectedOptionIds":[82]}}
+            """
+        let entry = try JSONDecoder().decode(NoticeEntry.self, from: Data(json.utf8))
+        let vote = try #require(entry.vote)
+        #expect(entry.content == "본문")
+        #expect(vote.endsAtExclusive.isEmpty)
+        #expect(vote.options.first?.content == "첫째")
+        #expect(vote.mySelectedOptionIds == ["82"])
+    }
+
     @Test("읽음 현황의 다음 페이지 커서는 문자열로 보존한다")
     func readers() throws {
         let json =

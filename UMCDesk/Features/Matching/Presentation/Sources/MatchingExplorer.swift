@@ -7,8 +7,10 @@
 
 import AppKit
 import CoreDesignSystem
+import CoreUIComponents
 import MatchingDomain
 import SwiftUI
+import UMCFoundation
 
 @MainActor
 @Observable
@@ -44,44 +46,20 @@ struct MatchingExplorer: View {
     let select: (MatchingProject) -> Void
 
     @Bindable var state: MatchingExplorerState
-    @FocusState private var searchFocused: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: UMCSpacing.value24) {
             HStack {
-                TextField("프로젝트명 검색", text: $state.filters.keyword)
-                    .accessibilityLabel("프로젝트명 검색")
-                    .accessibilityHint("프로젝트 이름을 입력해 검색하세요.")
-                    .frame(maxWidth: 220)
-                    .focused($searchFocused)
-                Picker("학교", selection: $state.filters.schoolId) {
-                    Text("학교 전체").tag(String?.none)
-                    ForEach(schools) { Text($0.name).tag(Optional($0.id)) }
-                }
-                .accessibilityLabel("학교 필터")
-                Picker("파트", selection: $state.filters.part) {
-                    Text("파트 전체").tag(String?.none)
-                    ForEach(["DESIGN", "MOBILE_PRODUCT_ENGINEER", "WEB_PRODUCT_ENGINEER",
-                             "WEB", "IOS", "ANDROID", "NODEJS", "SPRINGBOOT"], id: \.self) {
-                        Text(MatchingLabel.part($0)).tag(Optional($0))
-                    }
-                }
-                .accessibilityLabel("파트 필터")
-                Picker("모집 상태", selection: $state.filters.quotaStatus) {
-                    Text("모집 상태 전체").tag(String?.none)
-                    Text("모집 중").tag(Optional("RECRUITING"))
-                    Text("모집 완료").tag(Optional("COMPLETED"))
-                }
-                .accessibilityLabel("모집 상태 필터")
+                UMCSearchField(
+                    AppLocalization.string("프로젝트 이름 검색"), text: $state.filters.keyword,
+                    accessibilityHint: AppLocalization.string("프로젝트 이름을 입력해 검색하세요.")
+                )
+                .frame(maxWidth: 220)
+                MatchingFilterPickers(state: state, schools: schools)
                 Spacer()
             }
             .labelsHidden()
             .fixedSize(horizontal: false, vertical: true)
-            .background {
-                Button("프로젝트 검색") { searchFocused = true }
-                    .keyboardShortcut("f")
-                    .hidden()
-            }
             MatchingRequestView(request: state.projects, retry: { state.attempt += 1 }) { result in
                 if result.content.isEmpty {
                     ContentUnavailableView("프로젝트가 없어요", systemImage: "magnifyingglass",
@@ -138,6 +116,33 @@ struct MatchingExplorer: View {
             }
             if !Task.isCancelled { state.loadedQuery = query }
         }
+    }
+}
+
+struct MatchingFilterPickers: View {
+    @Bindable var state: MatchingExplorerState
+    let schools: [MatchingFilterOption]
+
+    var body: some View {
+        Picker("학교", selection: $state.filters.schoolId) {
+            Text("학교 전체").tag(String?.none)
+            ForEach(schools) { Text($0.name).tag(Optional($0.id)) }
+        }
+        .accessibilityLabel("학교 필터")
+        Picker("파트", selection: $state.filters.part) {
+            Text("파트 전체").tag(String?.none)
+            ForEach(["DESIGN", "MOBILE_PRODUCT_ENGINEER", "WEB_PRODUCT_ENGINEER",
+                     "WEB", "IOS", "ANDROID", "NODEJS", "SPRINGBOOT"], id: \.self) {
+                Text(MatchingLabel.part($0)).tag(Optional($0))
+            }
+        }
+        .accessibilityLabel("파트 필터")
+        Picker("모집 상태", selection: $state.filters.quotaStatus) {
+            Text("모집 상태 전체").tag(String?.none)
+            Text("모집 중").tag(Optional("RECRUITING"))
+            Text("모집 완료").tag(Optional("COMPLETED"))
+        }
+        .accessibilityLabel("모집 상태 필터")
     }
 }
 

@@ -5,7 +5,9 @@
 //  Created by euijjang97 on 10/6/26.
 //
 
+import CoreUIComponents
 import CoreDesignSystem
+import CoreRouting
 import Foundation
 import ProjectWorkspaceDomain
 import SwiftUI
@@ -16,9 +18,16 @@ public struct ProjectWorkspaceView: View {
         let initialProjectID: String?
     }
 
+    private enum Location: Equatable {
+        case list
+        case project(String)
+    }
+
+    @Environment(\.windowDetail) private var windowDetail
     private let entry: Entry
     private let loadProjects: @Sendable () async throws -> [WorkspaceProject]
     private let loadGitHub: WorkspaceGitHubLoader?
+    private let teamContent: ((String) -> AnyView)?
     private let openMatching: (() -> Void)?
 
     public init(
@@ -26,23 +35,37 @@ public struct ProjectWorkspaceView: View {
         initialProjectID: String? = nil,
         loadProjects: @escaping @Sendable () async throws -> [WorkspaceProject],
         loadGitHub: WorkspaceGitHubLoader? = nil,
+        teamContent: ((String) -> AnyView)? = nil,
         openMatching: (() -> Void)? = nil
     ) {
         entry = Entry(accountID: accountID, initialProjectID: initialProjectID)
         self.loadProjects = loadProjects
         self.loadGitHub = loadGitHub
         self.openMatching = openMatching
+        self.teamContent = teamContent
     }
 
     // MARK: - Body
 
     public var body: some View {
-        WorkspaceDirectory(
+        let target = windowDetail?.wrappedValue?.route(as: Location.self)
+        let projectID: String? = switch target {
+        case .project(let id): id
+        case .list: nil
+        case nil: entry.initialProjectID
+        }
+        return WorkspaceDirectory(
             accountID: entry.accountID, loadProjects: loadProjects,
-            loadGitHub: loadGitHub, openMatching: openMatching,
-            directory: WorkspaceDirectoryModel(initialProjectID: entry.initialProjectID)
+            loadGitHub: loadGitHub, openMatching: openMatching, teamContent: teamContent,
+            directory: WorkspaceDirectoryModel(initialProjectID: projectID),
+            selectProject: windowDetail.map { binding in
+                { id in
+                    binding.wrappedValue = id == entry.initialProjectID
+                        ? nil : WindowDetail(id.map(Location.project) ?? .list)
+                }
+            }
         )
-        .id(entry)
+        .id(Entry(accountID: entry.accountID, initialProjectID: projectID))
     }
 }
 
@@ -51,8 +74,11 @@ struct WorkspaceDirectory: View {
     let loadProjects: @Sendable () async throws -> [WorkspaceProject]
     let loadGitHub: WorkspaceGitHubLoader?
     let openMatching: (() -> Void)?
+    let teamContent: ((String) -> AnyView)?
 
+    private let selectProject: ((String?) -> Void)?
     @AppStorage private var recentProjectID: String
+    @State private var listPosition = ScrollPosition()
     @State private var directory: WorkspaceDirectoryModel
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.appearsActive) private var appearsActive
@@ -60,13 +86,16 @@ struct WorkspaceDirectory: View {
     init(
         accountID: String, loadProjects: @escaping @Sendable () async throws -> [WorkspaceProject],
         loadGitHub: WorkspaceGitHubLoader?, openMatching: (() -> Void)?,
-        directory: WorkspaceDirectoryModel
+        teamContent: ((String) -> AnyView)? = nil,
+        directory: WorkspaceDirectoryModel, selectProject: ((String?) -> Void)? = nil
     ) {
+        self.selectProject = selectProject
         _directory = State(initialValue: directory)
         self.accountID = accountID
         self.loadProjects = loadProjects
         self.loadGitHub = loadGitHub
         self.openMatching = openMatching
+        self.teamContent = teamContent
         let key = "umc.project-workspace.recent." + Data(accountID.utf8).base64EncodedString()
         _recentProjectID = AppStorage(wrappedValue: "", key)
     }
@@ -78,43 +107,18 @@ struct WorkspaceDirectory: View {
         let revision = directory.revision
         return Group {
             if let selected = directory.selected {
-                VStack(spacing: 0) {
-                    if directory.failed {
-                        HStack {
-                            Text("참여 상태를 다시 확인하지 못했어요.")
-                            Button("다시 시도", action: directory.requestRefresh)
-                        }
+                ProjectWorkspaceDetail(
+                    project: selected, accountID: accountID, sheet: $directory.sheet,
+                    loadGitHub: loadGitHub, teamContent: teamContent,
+                    membershipFailed: directory.failed,
+                    refreshMembership: directory.requestRefresh, close: {
+                        if let selectProject { selectProject(nil) } else { directory.close() }
                     }
-                    ProjectWorkspaceDetail(
-                        project: selected, accountID: accountID, sheet: $directory.sheet,
-                        loadGitHub: loadGitHub, openMatching: openMatching,
-                        refreshMembership: directory.requestRefresh, close: directory.close
-                    )
-                    .id(selected.id)
-                }
+                )
+                .id(selected.id)
             } else {
                 ScrollView {
                     VStack(alignment: .leading, spacing: UMCSpacing.value24) {
-                        HStack {
-                            Spacer()
-                            WorkspaceTools(description: "참여 중인 프로젝트와 작업을 빠르게 찾으세요.") { dismiss in
-                                Button("프로젝트 목록", action: dismiss)
-                                if let openMatching {
-                                    Button("매칭에서 찾기") {
-                                        dismiss()
-                                        openMatching()
-                                    }
-                                }
-                                if let recent = directory.projects?.first(where: {
-                                    $0.id == recentProjectID
-                                }) {
-                                    Button("이어서 작업 · \(recent.name)") {
-                                        dismiss()
-                                        directory.open(recent)
-                                    }
-                                }
-                            }
-                        }
                         ViewThatFits(in: .horizontal) {
                             HStack {
                                 heading
@@ -147,25 +151,62 @@ struct WorkspaceDirectory: View {
                                     }
                                 }
                             } else {
+                                let recent = projects.first { $0.id == recentProjectID }
+                                if let recent {
+                                    Text("이어서 작업").umcTypography(.headlineBold)
+                                        .accessibilityAddTraits(.isHeader)
+                                    WorkspaceDirectoryRow(project: recent, accountID: accountID) {
+                                        open(recent)
+                                    }
+                                    .background(UMCColor.Semantic.surfaceBrandWeak,
+                                                in: .rect(cornerRadius: UMCRadius.value12))
+                                }
+                                let remaining = projects.filter { $0.id != recent?.id }
                                 VStack(spacing: 0) {
-                                    ForEach(projects) { project in
+                                    ForEach(remaining) { project in
                                         WorkspaceDirectoryRow(
                                             project: project, accountID: accountID
                                         ) {
-                                            directory.open(project)
+                                            open(project)
                                         }
-                                        if project.id != projects.last?.id { Divider() }
+                                        if project.id != remaining.last?.id { Divider() }
                                     }
                                 }.workspaceCard()
                             }
-                            Text("매칭은 팀 구성과 지원을, 프로젝트는 내 작업과 자료를 관리합니다.")
-                                .umcTypography(.bodyRegular).foregroundStyle(.secondary)
                         } else {
                             ProgressView("참여 프로젝트 확인 중")
                         }
                     }
                     .padding(UMCSpacing.value32)
                     .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .scrollPosition($listPosition)
+                .umcTabTools("프로젝트 도구") { dismiss in
+                    if let openMatching {
+                        Button("매칭에서 프로젝트 찾기", systemImage: "magnifyingglass") {
+                            dismiss()
+                            openMatching()
+                        }.buttonStyle(UMCToolPrimaryButtonStyle())
+                        Divider()
+                    }
+                    if !directory.failed, !directory.isOpening,
+                       let projects = directory.projects, !projects.isEmpty {
+                        UMCToolGroupHeading("내 프로젝트")
+                        Button("프로젝트 목록", systemImage: "folder") {
+                            dismiss()
+                            listPosition.scrollTo(edge: .top)
+                        }
+                        if let recent = projects.first(where: { $0.id == recentProjectID }) {
+                            Button("이어서 작업 · \(recent.name)", systemImage: "clock") {
+                                dismiss()
+                                open(recent)
+                            }
+                        }
+                    }
+                    Button("참여 상태 새로고침", systemImage: "arrow.clockwise") {
+                        dismiss()
+                        directory.requestRefresh()
+                    }
                 }
             }
         }
@@ -185,11 +226,14 @@ struct WorkspaceDirectory: View {
         }
     }
 
+    private func open(_ project: WorkspaceProject) {
+        if let selectProject { selectProject(project.id) } else { directory.open(project) }
+    }
+
     private var heading: some View {
         VStack(alignment: .leading, spacing: UMCSpacing.value4) {
             Text("프로젝트").umcTypography(.largeTitle3Bold)
-            Text("지금 작업하는 프로젝트를 한곳에서 열어 보세요.")
-                .umcTypography(.headlineRegular).foregroundStyle(.secondary)
+                .accessibilityAddTraits(.isHeader)
         }
     }
 
@@ -221,11 +265,17 @@ private struct WorkspaceDirectoryRow: View {
         let resources = WorkspaceResource.allCases.filter { record?.link(for: $0) != nil }
         Button(action: select) {
             HStack(spacing: UMCSpacing.value16) {
-                Image(systemName: "square.grid.2x2")
+                Image(systemName: "folder")
                     .foregroundStyle(UMCColor.Semantic.textBrandDefault)
+                    .padding(UMCSpacing.value12)
+                    .background(UMCColor.Semantic.surfaceBrandWeak, in: .rect(cornerRadius: 8))
+                    .accessibilityHidden(true)
                 VStack(alignment: .leading) {
                     Text(project.name).umcTypography(.title4Bold)
-                    Text("매칭 연결").umcTypography(.bodyRegular).foregroundStyle(.secondary)
+                    if let next = record?.todos.first(where: { !$0.completed }) {
+                        Label(next.title, systemImage: "circle")
+                            .umcTypography(.bodyRegular).foregroundStyle(.secondary)
+                    }
                 }
                 Spacer()
                 VStack(alignment: .trailing) {

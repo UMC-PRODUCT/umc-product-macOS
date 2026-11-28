@@ -8,7 +8,9 @@
 import CommunityDomain
 import CoreDesignSystem
 import ImageIO
+import CoreUIComponents
 import SwiftUI
+import UMCFoundation
 import UniformTypeIdentifiers
 
 public struct ThreadConversationView: View {
@@ -653,7 +655,7 @@ private struct ConversationMentions: View {
 
     var body: some View {
         VStack(alignment: .leading) {
-            TextField("참여자 검색", text: $query)
+            UMCSearchField(AppLocalization.string("참여자 검색"), text: $query)
             if let failure { Text(failure) }
             List(people, id: \.memberId) { person in
                 Button(person.name) { choose(person) }

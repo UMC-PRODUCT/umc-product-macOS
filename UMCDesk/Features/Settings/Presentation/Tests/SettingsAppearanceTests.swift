@@ -206,6 +206,21 @@ struct SettingsAppearanceTests {
         ])
     }
 
+    @Test("Empty workspace keeps the registration guide after refresh and reopening My Page")
+    func emptyWorkspaceProfile() async throws {
+        let preferences = SettingsPreferences(defaults: UserDefaults(suiteName:
+            "EmptyWorkspaceProfileTests.\(UUID().uuidString)")!)
+        let model = SettingsDesignPreview.workspace(preferences: preferences, isEmpty: true)
+        let initial = try #require(model.profile)
+        #expect(initial.activities.isEmpty)
+        #expect(initial.links == SettingsProfileLinks())
+        await model.refreshProfile()
+        #expect(model.profile == initial)
+        await model.logout()
+        SettingsDesignPreview.prepareViewModel(model, page: .myPage)
+        #expect(model.profile == initial)
+    }
+
     @Test("Usage preview statistics and heatmap describe the same twelve weeks")
     func usagePreviewIsConsistent() {
         let days = SettingsUsagePreview.days

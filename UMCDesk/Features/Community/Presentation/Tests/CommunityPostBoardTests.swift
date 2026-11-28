@@ -85,7 +85,7 @@ struct CommunityPostBoardTests {
         let splitTop = split.convert(split.bounds, to: nil).maxY
         #expect(splitTop <= window.contentLayoutRect.maxY)
         let fieldFrame = field.convert(field.bounds, to: nil)
-        // Reserve room for the complete title and compose button above the search field.
+        // Reserve room for the complete title above the search field.
         #expect(window.contentLayoutRect.maxY - fieldFrame.maxY >= 40)
         table.selectRowIndexes(IndexSet(integer: 0), byExtendingSelection: false)
         try await waitUntil(in: host) { await repository.opened == "1" }

@@ -9,6 +9,7 @@ import CommunityDomain
 import CoreDesignSystem
 import CoreUIComponents
 import SwiftUI
+import UMCFoundation
 
 enum ThreadManagementPeopleMode { case members, invite, transfer }
 
@@ -57,7 +58,7 @@ struct ThreadManagementPeopleView: View {
                     }
                 }
             }
-            TextField("이름 또는 닉네임 검색", text: $query).textFieldStyle(.roundedBorder)
+            UMCSearchField(AppLocalization.string("이름 또는 닉네임 검색"), text: $query)
             if !model.selection.isEmpty && mode != .members {
                 HStack {
                     Text("\(model.selection.count)명 선택").umcTypography(.headlineBold)

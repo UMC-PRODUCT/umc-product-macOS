@@ -16,10 +16,10 @@ final class MatchingProgressController: NSObject {
     private let repository: any MatchingUseCase
     private var accountId: String?
     private var monitor: Task<Void, Never>?
-    private var wings: [NSPanel] = []
     private var expanded: NSPanel?
     private var revision = UUID()
     var openApplications: (() -> Void)?
+    var openExplorer: (() -> Void)?
     private(set) var card: MatchingApplication?
     private(set) var round: MatchingRound?
     private(set) var lastChecked: Date?
@@ -41,10 +41,6 @@ final class MatchingProgressController: NSObject {
             workspace.addObserver(self, selector: #selector(activityChanged(_:)),
                                   name: notification, object: nil)
         }
-        NotificationCenter.default.addObserver(
-            self, selector: #selector(updateScreens),
-            name: NSApplication.didChangeScreenParametersNotification, object: nil
-        )
     }
 
     func setAccount(_ id: String?) {
@@ -53,17 +49,15 @@ final class MatchingProgressController: NSObject {
         monitor?.cancel()
         monitor = nil
         closeExpanded()
-        removeWings()
         accountId = id
         card = nil
         round = nil
         lastChecked = nil
         unavailable = false
-        if id != nil { restart() }
     }
 
     func restart() {
-        guard accountId != nil, !suspended else { return }
+        guard expanded != nil, accountId != nil, !suspended else { return }
         monitor?.cancel()
         let ticket = UUID()
         revision = ticket
@@ -73,6 +67,11 @@ final class MatchingProgressController: NSObject {
                 do { try await Task.sleep(for: .seconds(60)) } catch { return }
             }
         }
+    }
+
+    func refreshOnce() async {
+        guard isSignedIn else { return }
+        await refresh(ticket: revision)
     }
 
     private func refresh(ticket: UUID) async {
@@ -92,7 +91,6 @@ final class MatchingProgressController: NSObject {
             guard ticket == revision, !Task.isCancelled else { return }
             unavailable = true
         }
-        updateScreens()
     }
 
     static func currentCard(
@@ -129,7 +127,6 @@ final class MatchingProgressController: NSObject {
             monitor?.cancel()
             unavailable = true
             closeExpanded()
-            removeWings()
         } else {
             restart()
         }
@@ -152,7 +149,9 @@ final class MatchingProgressController: NSObject {
             styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false
         )
         panel.onEscape = { [weak self] in self?.closeExpanded() }
-        panel.contentView = NSHostingView(rootView: MatchingProgressPanel(controller: self))
+        panel.contentView = NSHostingView(
+            rootView: MatchingProgressPanel(controller: self).environment(\.colorScheme, .dark)
+        )
         configure(panel)
         expanded = panel
         panel.makeKeyAndOrderFront(nil)
@@ -160,36 +159,11 @@ final class MatchingProgressController: NSObject {
     }
 
     func closeExpanded() {
+        revision = UUID()
+        monitor?.cancel()
+        monitor = nil
         expanded?.orderOut(nil)
         expanded = nil
-    }
-
-    @objc private func updateScreens() {
-        removeWings()
-        guard card != nil, !suspended else { return }
-        for screen in NSScreen.screens {
-            guard screen.safeAreaInsets.top > 0,
-                  let left = screen.auxiliaryTopLeftArea,
-                  let right = screen.auxiliaryTopRightArea,
-                  left.width >= 165, right.width >= 100 else { continue }
-            let leftFrame = NSRect(x: left.maxX - 158, y: left.minY, width: 158, height: left.height)
-            let rightFrame = NSRect(x: right.minX, y: right.minY, width: 98, height: right.height)
-            for (frame, leading) in [(leftFrame, true), (rightFrame, false)] {
-                let panel = MatchingWingPanel(
-                    contentRect: frame, styleMask: [.borderless, .nonactivatingPanel],
-                    backing: .buffered, defer: false
-                )
-                panel.contentView = NSHostingView(rootView: MatchingProgressWing(
-                    controller: self, leading: leading
-                ))
-                configure(panel)
-                panel.hasShadow = false
-                // Menu-bar windows are normally constrained below the reserved area.
-                panel.setFrame(frame, display: true)
-                panel.orderFrontRegardless()
-                wings.append(panel)
-            }
-        }
     }
 
     private func configure(_ panel: NSPanel) {
@@ -201,11 +175,6 @@ final class MatchingProgressController: NSObject {
         panel.isReleasedWhenClosed = false
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .ignoresCycle]
     }
-
-    private func removeWings() {
-        for panel in wings { panel.orderOut(nil) }
-        wings.removeAll()
-    }
 }
 
 @MainActor
@@ -213,14 +182,4 @@ private final class MatchingDetailPanel: NSPanel {
     var onEscape: (() -> Void)?
     override var canBecomeKey: Bool { true }
     override func cancelOperation(_ sender: Any?) { onEscape?() }
-}
-
-
-@MainActor
-private final class MatchingWingPanel: NSPanel {
-    // The wing frames were already intersected with the screen's auxiliary menu-bar areas.
-    // Let these two panels occupy that strip rather than constraining them to visibleFrame.
-    override func constrainFrameRect(_ frameRect: NSRect, to screen: NSScreen?) -> NSRect {
-        frameRect
-    }
 }

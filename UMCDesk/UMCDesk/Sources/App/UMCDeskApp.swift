@@ -27,10 +27,16 @@ import SettingsPresentation
 struct UMCDeskApp: App {
     @NSApplicationDelegateAdaptor(AppLifecycleDelegate.self) private var lifecycle
     private let dependencies = AppDependencies()
+    @State private var previewMode = DataPreviewMode()
+    private var dataPreview: DataPreviewSession? { previewMode.session }
     #if DEBUG || UMC_PRERELEASE
     @State private var authPreview = AuthPreviewSession()
     @State private var typographyPreview = UMCTypographyPreview()
     #endif
+
+    private var previewInMainWindow: some View {
+        ContentUnavailableView("메인 창에서 미리보기를 사용 중이에요", systemImage: "macwindow")
+    }
 
     private func publishedDocument(_ document: SettingsPublishedDocument,
                                    close: @escaping () -> Void) -> AnyView {
@@ -46,52 +52,66 @@ struct UMCDeskApp: App {
         #endif
 
         Window("UMC Desk", id: "main") {
-            AppRootView(dependencies: dependencies)
-                .environment(\.settingsPublishedDocument, publishedDocument)
-                .toggleStyle(UMCCheckboxStyle())
-                .environment(\.locale, AppLocalization.shared.language.locale)
-                .onChange(of: preferences.language) {
-                    dependencies.restoreSupportedFonts()
-                }
-                .preferredColorScheme(preferences.theme.colorScheme)
-                .environment(\.umcBodyTextScale, preferences.bodyTextSize.scale)
-                .environment(\.umcFontDesign, preferences.font.design)
-                .environment(\.umcFontFamily, preferences.availableFontFamily)
-                .frame(minWidth: 1040, minHeight: 720)
-                #if DEBUG || UMC_PRERELEASE
-                .environment(\.umcTypographyPreview, typographyPreview)
-                #endif
-                .onAppear { lifecycle.preferences = preferences }
+            if let dataPreview {
+                DataPreviewWindow(session: dataPreview)
+                    .id(ObjectIdentifier(dataPreview))
+            } else {
+                AppRootView(dependencies: dependencies)
+                    .environment(\.settingsPublishedDocument, publishedDocument)
+                    .toggleStyle(UMCCheckboxStyle())
+                    .environment(\.locale, AppLocalization.shared.language.locale)
+                    .onChange(of: preferences.language) {
+                        dependencies.restoreSupportedFonts()
+                    }
+                    .preferredColorScheme(preferences.theme.colorScheme)
+                    .environment(\.umcBodyTextScale, preferences.bodyTextSize.scale)
+                    .environment(\.umcFontDesign, preferences.font.design)
+                    .environment(\.umcFontFamily, preferences.availableFontFamily)
+                    .frame(minWidth: 1040, minHeight: 720)
+                    #if DEBUG || UMC_PRERELEASE
+                    .environment(\.umcTypographyPreview, typographyPreview)
+                    #endif
+                    .onAppear { lifecycle.preferences = preferences }
+            }
         }
         .defaultSize(width: 1440, height: 960)
         .windowStyle(.titleBar)
         .windowToolbarStyle(.unifiedCompact(showsTitle: false))
         .commands {
-            AppSettingsCommands(dependencies: dependencies)
+            AppSettingsCommands(dependencies: dependencies, preview: dataPreview)
+            DataPreviewCommands(mode: previewMode)
             #if DEBUG || UMC_PRERELEASE
             AuthPreviewCommands(session: authPreview)
             #endif
         }
 
         Window("업데이트 확인", id: DeskWindow.updates) {
-            UpdateWindow()
+            UpdateWindow(usesInstalledRelease: dataPreview != nil)
+                .id(dataPreview != nil)
                 .preferredColorScheme(preferences.theme.colorScheme)
         }
         .defaultSize(width: 640, height: 440)
+        .commandsRemoved()
 
         Window(AppLocalization.string("고객센터"), id: DeskWindow.support) {
-            SupportView()
+            Group {
+                if dataPreview != nil { previewInMainWindow }
+                else { SupportView() }
+            }
                 .environment(\.locale, AppLocalization.shared.language.locale)
                 .preferredColorScheme(preferences.theme.colorScheme)
                 .environment(\.umcBodyTextScale, preferences.bodyTextSize.scale)
                 .environment(\.umcFontDesign, preferences.font.design)
                 .environment(\.umcFontFamily, preferences.availableFontFamily)
         }
+        .commandsRemoved()
         .defaultSize(width: 980, height: 720)
         .windowToolbarStyle(.unifiedCompact)
 
         WindowGroup("스레드", for: ThreadWindowKey.self) { $key in
-            if let key, let account = dependencies.navigation.account, key.accountID == account.memberID {
+            if dataPreview != nil {
+                previewInMainWindow
+            } else if let key, let account = dependencies.navigation.account, key.accountID == account.memberID {
                 ThreadWindowContent(key: key, repository: account.threads,
                                     conversations: account.conversations, management: account.members,
                                     defaults: dependencies.featureDefaults)
@@ -106,21 +126,25 @@ struct UMCDeskApp: App {
         .defaultSize(width: 760, height: 640)
 
         Settings {
-            SettingsSceneView(dependencies: dependencies)
-                .environment(\.settingsPublishedDocument, publishedDocument)
-                .toggleStyle(UMCCheckboxStyle())
-                .environment(\.locale, AppLocalization.shared.language.locale)
-                .onChange(of: preferences.language) {
-                    dependencies.restoreSupportedFonts()
-                }
-                .preferredColorScheme(preferences.theme.colorScheme)
-                .environment(\.umcBodyTextScale, preferences.bodyTextSize.scale)
-                .environment(\.umcFontDesign, preferences.font.design)
-                .environment(\.umcFontFamily, preferences.availableFontFamily)
-                .frame(minWidth: 1040, minHeight: 720)
-                #if DEBUG || UMC_PRERELEASE
-                .environment(\.umcTypographyPreview, typographyPreview)
-                #endif
+            if dataPreview != nil {
+                previewInMainWindow
+            } else {
+                SettingsSceneView(dependencies: dependencies)
+                    .environment(\.settingsPublishedDocument, publishedDocument)
+                    .toggleStyle(UMCCheckboxStyle())
+                    .environment(\.locale, AppLocalization.shared.language.locale)
+                    .onChange(of: preferences.language) {
+                        dependencies.restoreSupportedFonts()
+                    }
+                    .preferredColorScheme(preferences.theme.colorScheme)
+                    .environment(\.umcBodyTextScale, preferences.bodyTextSize.scale)
+                    .environment(\.umcFontDesign, preferences.font.design)
+                    .environment(\.umcFontFamily, preferences.availableFontFamily)
+                    .frame(minWidth: 1040, minHeight: 720)
+                    #if DEBUG || UMC_PRERELEASE
+                    .environment(\.umcTypographyPreview, typographyPreview)
+                    #endif
+            }
         }
         .defaultSize(width: 1440, height: 960)
         .windowStyle(.titleBar)
@@ -168,7 +192,8 @@ struct UMCDeskApp: App {
         MenuBarExtra(
             "UMC Desk", systemImage: "square.grid.2x2", isInserted: $preferences.showsMenuBar
         ) {
-            AppMenuBarContent(dependencies: dependencies)
+            AppMenuBarContent(dependencies: dependencies, preview: dataPreview)
+                .id(dataPreview.map(ObjectIdentifier.init))
                 .environment(\.locale, AppLocalization.shared.language.locale)
                 .onChange(of: preferences.language) {
                     dependencies.restoreSupportedFonts()
@@ -178,10 +203,11 @@ struct UMCDeskApp: App {
 }
 
 private struct UpdateWindow: View {
+    let usesInstalledRelease: Bool
     @Environment(\.dismissWindow) private var dismissWindow
 
     var body: some View {
-        AuthUpdateCheckView(onClose: { dismissWindow(id: DeskWindow.updates) })
+        AuthUpdateCheckView(usesInstalledRelease: usesInstalledRelease, onClose: { dismissWindow(id: DeskWindow.updates) })
     }
 }
 
@@ -217,6 +243,11 @@ private struct AppRootView: View {
         .task { await dependencies.restoreSession() }
         .onAppear {
             configureLoginAction()
+            dependencies.matchingProgress.openExplorer = {
+                dependencies.openMatching(.explore)
+                openWindow(id: "main")
+                NSApplication.shared.activate()
+            }
             dependencies.matchingProgress.openApplications = {
                 dependencies.openMatching(.applications)
                 openWindow(id: "main")
@@ -237,6 +268,16 @@ private struct AppRootView: View {
         }
     }
 
+    private enum FeatureLocation: Hashable {
+        case matching(MatchingDestination)
+        case project(String)
+    }
+
+    private var featureLocation: FeatureLocation? {
+        if let matching = dependencies.navigation.matchingDestination { return .matching(matching) }
+        return dependencies.navigation.workspaceProjectID.map(FeatureLocation.project)
+    }
+
     @ViewBuilder private var liveRoot: some View {
         if dependencies.navigation.showsSettings {
             SettingsView(
@@ -249,12 +290,27 @@ private struct AppRootView: View {
                         activities: dependencies.settingsViewModel.profile?.activities ?? [],
                         openWorkspace: dependencies.navigation.openWorkspace
                     )
+                    .id(destination)
                     .id(dependencies.navigation.matchingNavigationID)
                     .id(dependencies.settingsViewModel.profile?.id))
                 } ?? featureContent, matchingSelected: dependencies.navigation.matchingDestination != nil,
                 onOpenMatching: { dependencies.openMatching() },
                 onSelectSection: dependencies.selectSection
             )
+            .windowFeatureNavigation(
+                location: featureLocation,
+                explicitNavigationID: dependencies.navigation.matchingNavigationID
+            ) { location in
+                switch location {
+                case .matching(let destination):
+                    dependencies.openMatching(destination, isRestoring: true)
+                case .project(let id):
+                    if let member = dependencies.navigation.account?.memberID {
+                        dependencies.navigation.openWorkspace(projectID: id, memberID: member)
+                    }
+                }
+            }
+            .id(dependencies.navigation.account?.memberID)
         } else {
             AuthView(login: dependencies.login, repository: dependencies.loginRepository,
                      entry: dependencies.navigation.authEntry, onSignOut: dependencies.signOut,
@@ -307,6 +363,10 @@ private struct AppRootView: View {
                                  initialProjectID: dependencies.navigation.workspaceProjectID,
                                  loadProjects: account.projects,
                                  loadGitHub: WorkspaceGitHubClient.recentWork(repository:),
+                                 teamContent: { id in
+                                     AnyView(PublishedMatchingTeamSheet(repository: dependencies.matchingUseCase,
+                                         projectId: id, memberId: account.memberID))
+                                 },
                                  openMatching: { dependencies.openMatching() })
         }
     }
@@ -380,6 +440,7 @@ private struct SettingsSceneView: View {
             openWindow(id: "main")
             NSApplication.shared.activate()
         })
+            .id(dependencies.navigation.account?.memberID)
             .background(SettingsWindowToolbar())
             .onAppear {
                 dependencies.windowSettingsViewModel.showSettings()
@@ -413,6 +474,7 @@ private final class SettingsToolbarView: NSView {
 
 private struct AppMenuBarContent: View {
     let dependencies: AppDependencies
+    let preview: DataPreviewSession?
     @Environment(\.openWindow) private var openWindow
     @Environment(\.openSettings) private var openSettings
 
@@ -422,27 +484,40 @@ private struct AppMenuBarContent: View {
             NSApplication.shared.activate()
         }
         Button("매칭 진행 현황") {
-            dependencies.matchingProgress.showExpanded()
+            if let preview {
+                preview.select(.progress)
+                openWindow(id: "main")
+            } else { dependencies.matchingProgress.showExpanded() }
         }
         Button("내 매칭 지원") {
-            dependencies.openMatching(.applications)
+            if let preview {
+                preview.openMatching(.applications)
+            } else { dependencies.openMatching(.applications) }
             openWindow(id: "main")
             NSApplication.shared.activate()
         }
         Button(AppLocalization.string("마이페이지")) {
-            dependencies.selectSection(nil)
-            dependencies.settingsViewModel.showProfile()
-            dependencies.navigation.showsSettings = true
+            if let preview { preview.select(.profile) } else {
+                dependencies.selectSection(nil)
+                dependencies.settingsViewModel.showProfile()
+                dependencies.navigation.showsSettings = true
+            }
             openWindow(id: "main")
             NSApplication.shared.activate()
         }
         Button(AppLocalization.string("설정…")) {
-            dependencies.windowSettingsViewModel.showSettings()
-            openSettings()
+            if let preview {
+                preview.select(.settings)
+                openWindow(id: "main")
+            } else {
+                dependencies.windowSettingsViewModel.showSettings()
+                openSettings()
+            }
         }
-        if let account = dependencies.navigation.account {
+        if let account = preview?.account ?? dependencies.navigation.account {
             ActivityMenuContent(repository: account.activity) {
-                dependencies.selectSection(.activity)
+                if let preview { preview.select(.feature(.activity)) }
+                else { dependencies.selectSection(.activity) }
                 openWindow(id: "main")
                 NSApplication.shared.activate()
             }
@@ -456,34 +531,52 @@ private struct AppMenuBarContent: View {
 
 private struct AppSettingsCommands: Commands {
     let dependencies: AppDependencies
+    let preview: DataPreviewSession?
     @Environment(\.openSettings) private var openSettings
     @Environment(\.openWindow) private var openWindow
 
     var body: some Commands {
-        @Bindable var preferences = dependencies.settingsPreferences
+        @Bindable var preferences = preview?.settings.preferences ?? dependencies.settingsPreferences
 
         CommandGroup(replacing: .appSettings) {
             Button(AppLocalization.string("설정…")) {
+                if let preview { preview.select(.settings); activateMainWindow(); return }
                 dependencies.windowSettingsViewModel.showSettings()
                 openSettings()
             }
             .keyboardShortcut(",", modifiers: .command)
         }
+        CommandGroup(before: .windowList) {
+            Button("업데이트 확인") {
+                if let preview {
+                    activateMainWindow()
+                    preview.showsUpdateInfo = true
+                } else { openWindow(id: DeskWindow.updates) }
+            }
+            Button(AppLocalization.string("고객센터")) {
+                if let preview {
+                    preview.select(.support)
+                    activateMainWindow()
+                } else { openWindow(id: DeskWindow.support) }
+            }
+        }
         CommandGroup(after: .toolbar) {
             Menu(AppLocalization.string("탭 이동")) {
                 ForEach(DeskSection.allCases, id: \.self) { section in
                     Button(AppLocalization.string(.init(section.title))) {
-                        dependencies.selectSection(section)
+                        if let preview { preview.select(.feature(section)) }
+                        else { dependencies.selectSection(section) }
                         activateMainWindow()
                     }
                 }
                 Button(AppLocalization.string("프로젝트 매칭")) {
-                    dependencies.openMatching()
+                    if let preview { preview.select(.matching) } else { dependencies.openMatching() }
                     activateMainWindow()
                 }
                 Divider()
                 Button(AppLocalization.string("마이페이지")) { openProfile() }
                 Button(AppLocalization.string("설정")) {
+                    if let preview { preview.select(.settings); activateMainWindow(); return }
                     dependencies.selectSection(nil)
                     dependencies.settingsViewModel.showSettings()
                     activateMainWindow()
@@ -493,9 +586,9 @@ private struct AppSettingsCommands: Commands {
         CommandMenu("계정") {
             Button(AppLocalization.string("마이페이지")) { openProfile() }
             Button("챌린저 연결…") { openAccount(.challenger) }
-                .disabled(dependencies.navigation.account == nil)
+                .disabled(preview != nil || dependencies.navigation.account == nil)
             Button("회원 탈퇴…") { openAccount(.withdrawal) }
-                .disabled(dependencies.navigation.account == nil)
+                .disabled(preview != nil || dependencies.navigation.account == nil)
         }
         #if DEBUG || UMC_PRERELEASE
         CommandGroup(after: .sidebar) {
@@ -523,6 +616,7 @@ private struct AppSettingsCommands: Commands {
     }
 
     private func openProfile() {
+        if let preview { preview.select(.profile); activateMainWindow(); return }
         dependencies.selectSection(nil)
         dependencies.settingsViewModel.showProfile()
         activateMainWindow()
@@ -550,7 +644,7 @@ final class AppLifecycleDelegate: NSObject, NSApplicationDelegate {
     }
 }
 
-private extension SettingsTheme {
+extension SettingsTheme {
     var colorScheme: ColorScheme? {
         switch self {
         case .system: nil

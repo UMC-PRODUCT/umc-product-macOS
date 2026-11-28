@@ -5,6 +5,7 @@
 //
 
 import CoreDesignSystem
+import CoreUIComponents
 import HomeDomain
 import SwiftUI
 import UMCFoundation
@@ -72,19 +73,16 @@ final class HomeViewModel {
 
 public struct HomeView: View {
     @State private var model: HomeViewModel
-    @State private var showsArcade = false
-    @State private var dockOwner: HomeGameRecordStore?
+    @State private var dockOwner: DockRecordStore?
+    @State private var dockRecords = DockRecords()
     @FocusState private var dockFocused: Bool
-    @State private var selectedGame: MiniGame?
+    private let recordStore: DockRecordStore
     @State private var reload = UUID()
-    @State private var records = GameRecords()
     @Environment(\.colorScheme) private var scheme
     @Environment(\.colorSchemeContrast) private var contrast
     @State private var wideHero = false
     @State private var narrowPage = false
     private var paper: DeskPaper { DeskPaper(dark: scheme == .dark) }
-    private let defaults: UserDefaults
-    private let memberID: String?
     private let onOpen: ((HomeDestination) -> Void)?
 
     public init(
@@ -93,56 +91,76 @@ public struct HomeView: View {
         onOpen: ((HomeDestination) -> Void)? = nil
     ) {
         _model = State(initialValue: HomeViewModel(repository))
-        self.defaults = defaults
-        self.memberID = memberID
+        recordStore = DockRecordStore(defaults: defaults, memberID: memberID)
         self.onOpen = onOpen
-    }
-
-    var recordStore: HomeGameRecordStore {
-        HomeGameRecordStore(defaults: defaults, memberID: memberID ?? model.profile?.id)
     }
 
     public var body: some View {
         Group {
-            if let dockOwner {
+            if let dockOwner, dockOwner == recordStore {
                 DockSessionView(record: { score in
-                    guard dockOwner == recordStore else { return }
-                    save(id: "postmarkDock", title: "소인이 찍겠습니다!", score: score)
+                    guard self.dockOwner == recordStore else { return }
+                    dockRecords = dockOwner.record(score)
                 }, close: {
                     self.dockOwner = nil
                     Task { @MainActor in dockFocused = true }
                 })
-            } else if let selectedGame {
-                GameSessionView(
-                    game: selectedGame, records: records, record: save,
-                    close: { self.selectedGame = nil })
             } else {
-                ScrollView {
-                    VStack(alignment: .leading, spacing: UMCSpacing.value24) {
-                        homeHeader
-                        workSummary
-                        arcadeHeader
-                        if showsArcade { arcade }
-                    }
-                    .frame(maxWidth: 1120)
-                    .padding(narrowPage ? UMCSpacing.value20 : UMCSpacing.value32)
-                    .frame(maxWidth: .infinity)
-                    .transformEnvironment(\.umcFontDesign) { design in
-                        if design == nil { design = .default }
+                home
+            }
+        }
+        .umcTabTools(AppLocalization.string("홈 도구")) { dismiss in
+            if let onOpen {
+                if schedule != nil {
+                    Button(AppLocalization.string("일정 보기"), systemImage: "calendar") {
+                        dismiss()
+                        onOpen(.activity)
                     }
                 }
-                .onGeometryChange(for: Bool.self) { $0.size.width < 684 } action: {
-                    narrowPage = $0
+                if case .loaded(.some) = model.notice {
+                    Button(AppLocalization.string("공지 보기"), systemImage: "megaphone") {
+                        dismiss()
+                        onOpen(.notice)
+                    }
                 }
+                if case .loaded(.some) = model.project {
+                    Button(AppLocalization.string("프로젝트 보기"), systemImage: "folder") {
+                        dismiss()
+                        onOpen(.project)
+                    }
+                }
+            }
+            Button(AppLocalization.string("새로고침"), systemImage: "arrow.clockwise") {
+                dismiss()
+                reload = UUID()
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(selectedGame == nil ? paper.background : UMCColor.Custom.backgroundSurface)
+        .background(paper.background)
         .tint(UMCColor.Semantic.textBrandDefault)
         .task(id: reload) { await model.load() }
         .onChange(of: recordStore, initial: true) { _, store in
             if dockOwner != store { dockOwner = nil }
-            records = store.load()
+            dockRecords = store.load()
+        }
+    }
+
+    private var home: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: UMCSpacing.value24) {
+                homeHeader
+                workSummary
+                dockCard
+            }
+            .frame(maxWidth: 1120)
+            .padding(narrowPage ? UMCSpacing.value20 : UMCSpacing.value32)
+            .frame(maxWidth: .infinity)
+            .transformEnvironment(\.umcFontDesign) { design in
+                if design == nil { design = .default }
+            }
+        }
+        .onGeometryChange(for: Bool.self) { $0.size.width < 684 } action: {
+            narrowPage = $0
         }
     }
 
@@ -300,6 +318,25 @@ public struct HomeView: View {
         }
     }
 
+    private var dockCard: some View {
+        VStack(alignment: .leading, spacing: UMCSpacing.value8) {
+            Label("소인이 찍겠습니다!", systemImage: "ferry.fill").umcTypography(.title2Bold)
+            Text("꾹이의 접지부두 · 소인기 세 면 펼치기").umcTypography(.headlineRegular)
+            Text("WASD 이동 · ← → 회전 · F 소인").umcTypography(.calloutRegular)
+            Text("최고 \(dockRecords.best)점 · 누적 \(dockRecords.total)점")
+            if !dockRecords.recent.isEmpty {
+                Text("최근 플레이 · " + dockRecords.recent.map { "\($0)점" }.joined(separator: " / "))
+            }
+            Button("한 판 하기") { dockOwner = recordStore }
+                .buttonStyle(.borderedProminent)
+                .focused($dockFocused)
+                .accessibilityLabel("소인이 찍겠습니다! 한 판 하기")
+        }
+        .padding(UMCSpacing.value20)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background { panelSurface }
+    }
+
     private var panelSurface: some View {
         RoundedRectangle(cornerRadius: 14)
             .fill(paper.panel)
@@ -308,128 +345,5 @@ public struct HomeView: View {
                     .strokeBorder(.primary.opacity(contrast == .increased ? 0.55 : 0.13))
             }
             .shadow(color: .black.opacity(0.07), radius: 3, y: 2)
-    }
-
-    private var arcadeHeader: some View {
-        HStack(spacing: UMCSpacing.value16) {
-            Image("desk-scene", bundle: .module)
-                .resizable().aspectRatio(contentMode: .fit)
-                .frame(maxWidth: narrowPage ? 110 : 215)
-                .clipShape(.rect(cornerRadius: 9))
-                .accessibilityHidden(true)
-            GameBoard(round: MiniGameRound(game: .jump), preview: true, surface: paper.panel)
-                .aspectRatio(100.0 / 60, contentMode: .fit)
-                .frame(width: 48, height: 48)
-                .accessibilityHidden(true)
-            Text("잠깐, 한 판?").umcTypography(.title2Bold)
-            Spacer(minLength: 0)
-            Button {
-                showsArcade.toggle()
-            } label: {
-                HStack(spacing: UMCSpacing.value4) {
-                    Text(showsArcade ? "게임 접기" : "게임 선택")
-                    Image(systemName: showsArcade ? "chevron.up" : "chevron.down")
-                }
-                .umcTypography(.headlineBold)
-                .foregroundStyle(paper.buttonText)
-                .padding(.horizontal, UMCSpacing.value12)
-                .frame(minHeight: 32)
-                .background(paper.button, in: .rect(cornerRadius: 8))
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel(showsArcade ? "게임 접기" : "게임 선택")
-            .accessibilityValue(showsArcade ? "펼침" : "접힘")
-        }
-        .padding(.horizontal, UMCSpacing.value16)
-        .padding(.vertical, UMCSpacing.value12)
-        .frame(minHeight: 76)
-        .background { panelSurface }
-    }
-
-    private var arcade: some View {
-        VStack(alignment: .leading, spacing: UMCSpacing.value16) {
-            HStack(alignment: .top, spacing: UMCSpacing.value16) {
-                dockCard
-                ForEach([MiniGame.bricks, .tower]) { game in gameCard(game) }
-            }
-            Button("블록 점프 한 판 하기") { selectedGame = .jump }
-            Text("소인이 찍겠습니다! · 누적 \(records.totals["postmarkDock", default: 0])점")
-            Text("나의 기록").umcTypography(.headlineBold)
-            HStack(alignment: .top, spacing: 20) {
-                ForEach(MiniGame.allCases) { game in
-                    let total = records.totals[game.rawValue, default: 0]
-                    let goal = [500, 1500, 3000].first { $0 > total }
-                    VStack(alignment: .leading) {
-                        Text("\(game.title) · 누적 \(total)점").umcTypography(
-                            .headlineBold)
-                        ProgressView(
-                            value: Double(min(total, goal ?? 3000)),
-                            total: Double(goal ?? 3000))
-                        Text(goal.map { "다음 목표 \($0)점" } ?? "3단계 달성")
-                            .umcTypography(.calloutRegular).foregroundStyle(.secondary)
-                    }.frame(maxWidth: .infinity, alignment: .leading)
-                }
-            }
-            VStack(alignment: .leading, spacing: 8) {
-                Text("최근 플레이").umcTypography(.headlineBold)
-                Text(
-                    records.recent.isEmpty
-                        ? "아직 플레이 기록이 없어요"
-                        : records.recent.joined(separator: "   /   ")
-                )
-                .foregroundStyle(.secondary)
-            }
-        }
-    }
-
-    private var dockCard: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("소인이 찍겠습니다!").umcTypography(.headlineBold)
-            Text("꾹이의 접지부두 · 소인기 세 면 펼치기").umcTypography(.calloutRegular)
-            HStack {
-                Image(systemName: "water.waves")
-                Image(systemName: "ferry.fill")
-                Image(systemName: "envelope.fill")
-            }.font(.title).frame(maxWidth: .infinity, minHeight: 64)
-                .background(paper.panel, in: .rect(cornerRadius: 8)).accessibilityHidden(true)
-            Text("WASD / F · 최고 \(records.best["postmarkDock", default: 0])점")
-                .umcTypography(.calloutRegular)
-            Button { dockOwner = recordStore } label: {
-                Text("한 판 하기").frame(maxWidth: .infinity)
-            }.buttonStyle(.borderedProminent).focused($dockFocused)
-                .accessibilityLabel("소인이 찍겠습니다! 한 판 하기")
-        }
-        .padding(18)
-        .background(UMCColor.Custom.backgroundSurfaceGreyWeaker, in: .rect(cornerRadius: 12))
-    }
-
-    private func gameCard(_ game: MiniGame) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text(game.title).umcTypography(.headlineBold)
-            Text(game.summary).umcTypography(.calloutRegular).foregroundStyle(.secondary)
-            GameBoard(round: MiniGameRound(game: game), preview: true)
-                .frame(height: 64).clipShape(.rect(cornerRadius: 8))
-            Text("\(game.controls) · 최고 \(records.best[game.rawValue, default: 0])점")
-                .umcTypography(.calloutRegular).foregroundStyle(.secondary)
-            Button {
-                selectedGame = game
-            } label: {
-                Text("한 판 하기").frame(maxWidth: .infinity)
-            }
-            .buttonStyle(.borderedProminent).accessibilityLabel(game.title + " 한 판 하기")
-        }
-        .padding(18)
-        .background(UMCColor.Custom.backgroundSurfaceGreyWeaker, in: .rect(cornerRadius: 12))
-    }
-
-    private func save(_ game: MiniGame, score: Int) {
-        save(id: game.rawValue, title: game.title, score: score)
-    }
-
-    private func save(id: String, title: String, score: Int) {
-        records.best[id] = max(score, records.best[id, default: 0])
-        records.totals[id, default: 0] += score
-        records.recent = Array((["\(title) \(score)점"] + records.recent).prefix(3))
-        recordStore.save(records)
     }
 }

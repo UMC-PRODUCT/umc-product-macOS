@@ -25,7 +25,9 @@ final class AppNavigation {
         }
     }
 
-    func openMatching(_ destination: MatchingDestination = .explore, memberId: String?) {
+    func openMatching(
+        _ destination: MatchingDestination = .explore, memberId: String?, isRestoring: Bool = false
+    ) {
         workspaceProjectID = nil
         section = nil
         pendingSection = nil
@@ -37,7 +39,7 @@ final class AppNavigation {
         }
         pendingMatching = nil
         showsSettings = true
-        matchingNavigationID = UUID()
+        if !isRestoring { matchingNavigationID = UUID() }
         matchingDestination = destination
     }
 

@@ -7,7 +7,10 @@
 
 import CommunityDomain
 import CoreDesignSystem
+import CoreRouting
+import CoreUIComponents
 import SwiftUI
+import UMCFoundation
 
 public struct CommunityPostBoardView: View {
     private let accountID: String
@@ -30,7 +33,7 @@ private struct Board: View {
     @State private var scope = CommunityPostScope.all
     @State private var category: CommunityPostCategory?
     @State private var rows: [CommunityPost] = []
-    @State private var selected: String?
+    @WindowDetailSelection private var selected: String?
     @State private var next: String?
     @State private var failure: String?
     @State private var loading = true
@@ -44,33 +47,20 @@ private struct Board: View {
     private var request: [String] { [keyword, scope.rawValue, category?.rawValue ?? ""] }
     private var version: [String] { request + [String(reload)] }
 
+    private var hasFilters: Bool { !keyword.isEmpty || scope != .all || category != nil }
+
     var body: some View {
         HSplitView {
             VStack(alignment: .leading, spacing: UMCSpacing.value12) {
-                HStack {
-                    Text("커뮤니티").umcTypography(.title1Bold)
-                    Spacer()
-                    Button("새 글", systemImage: "square.and.pencil") { creating = true }
-                }
-                TextField("제목·본문 검색", text: $query)
-                    .accessibilityLabel("게시글 검색")
+                Text("커뮤니티").umcTypography(.title2Bold).accessibilityAddTraits(.isHeader)
+                UMCSearchField(AppLocalization.string("제목·본문 검색"), text: $query,
+                                   accessibilityLabel: AppLocalization.string("게시글 검색"))
                     .onSubmit(selectResult)
-                if keyword.isEmpty {
-                    Picker("게시글 범위", selection: $scope) {
-                        ForEach(CommunityPostScope.allCases, id: \.self) { scope in
-                            Text(scope.label).tag(scope)
-                        }
-                    }
-                    if scope == .all {
-                        Picker("카테고리", selection: $category) {
-                            Text("전체").tag(nil as CommunityPostCategory?)
-                            ForEach(CommunityPostCategory.allCases, id: \.self) {
-                                Text($0.label).tag(Optional($0))
-                            }
-                        }
-                    }
-                } else {
+                if !keyword.isEmpty {
                     Text("전체 게시글 검색 결과").font(.caption).foregroundStyle(.secondary)
+                } else if hasFilters {
+                    Text(scope == .all ? category?.label ?? scope.label : scope.label)
+                        .font(.caption).foregroundStyle(.secondary)
                 }
                 if let failure {
                     Text(failure)
@@ -133,9 +123,59 @@ private struct Board: View {
         }
         .communitySplitContent()
         .background(UMCColor.Custom.backgroundDefault)
+        .umcTabTools(AppLocalization.string("커뮤니티 도구"), width: .wide, findShortcut: true) { dismiss in
+            UMCSearchField(AppLocalization.string("제목·본문 검색"), text: $query,
+                               accessibilityLabel: AppLocalization.string("게시글 검색"))
+                .onSubmit { dismiss(); selectResult() }
+            Button(AppLocalization.string("새 글"), systemImage: "square.and.pencil") {
+                dismiss()
+                creating = true
+            }
+            .buttonStyle(UMCToolPrimaryButtonStyle())
+            if keyword.isEmpty {
+                Divider()
+                VStack(spacing: UMCSpacing.value8) {
+                    HStack {
+                        Text(AppLocalization.string("게시글 범위")).accessibilityHidden(true)
+                        Spacer(minLength: UMCSpacing.value8)
+                        Picker(AppLocalization.string("게시글 범위"), selection: $scope) {
+                            ForEach(CommunityPostScope.allCases, id: \.self) { scope in
+                                Text(scope.label).tag(scope)
+                            }
+                        }.labelsHidden().fixedSize().accessibilityLabel(AppLocalization.string("게시글 범위"))
+                    }
+                    .frame(maxWidth: .infinity, minHeight: 28)
+                    if scope == .all {
+                        HStack {
+                            Text(AppLocalization.string("카테고리")).accessibilityHidden(true)
+                            Spacer(minLength: UMCSpacing.value8)
+                            Picker(AppLocalization.string("카테고리"), selection: $category) {
+                                Text(AppLocalization.string("전체")).tag(nil as CommunityPostCategory?)
+                                ForEach(CommunityPostCategory.allCases, id: \.self) {
+                                    Text($0.label).tag(Optional($0))
+                                }
+                            }.labelsHidden().fixedSize().accessibilityLabel(AppLocalization.string("카테고리"))
+                        }
+                        .frame(maxWidth: .infinity, minHeight: 28)
+                    }
+                }
+                .pickerStyle(.menu)
+                .buttonStyle(.borderless)
+                .tint(.primary)
+                .umcTypography(.subheadlineRegular)
+                .padding(.horizontal, UMCSpacing.value8)
+            }
+            if hasFilters {
+                Button(AppLocalization.string("필터 초기화"), systemImage: "arrow.counterclockwise") {
+                    query = ""
+                    scope = .all
+                    category = nil
+                }
+            }
+        }
         .task(id: version) {
             if loadedRequest != request {
-                selected = nil
+                if loadedRequest != nil { selected = nil }
                 rows = []
                 next = nil
             }
@@ -196,11 +236,11 @@ private struct Board: View {
 extension CommunityPostCategory {
     var label: String {
         switch self {
-        case .free: "자유"
-        case .question: "질문"
-        case .information: "정보"
-        case .habit: "취미"
-        case .lightning: "번개"
+        case .free: AppLocalization.string("자유")
+        case .question: AppLocalization.string("질문")
+        case .information: AppLocalization.string("정보")
+        case .habit: AppLocalization.string("취미")
+        case .lightning: AppLocalization.string("번개")
         }
     }
 }
@@ -208,10 +248,10 @@ extension CommunityPostCategory {
 extension CommunityPostScope {
     fileprivate var label: String {
         switch self {
-        case .all: "전체 게시글"
-        case .my: "내가 쓴 글"
-        case .commented: "댓글 단 글"
-        case .scrapped: "스크랩한 글"
+        case .all: AppLocalization.string("전체 게시글")
+        case .my: AppLocalization.string("내가 쓴 글")
+        case .commented: AppLocalization.string("댓글 단 글")
+        case .scrapped: AppLocalization.string("스크랩한 글")
         }
     }
 }

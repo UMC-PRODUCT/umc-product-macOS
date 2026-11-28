@@ -16,15 +16,23 @@ import SwiftUI
 public struct SettingsView: View {
     // MARK: - Property
 
-    @Environment(\.openWindow) private var openWindow
+    @Environment(\.settingsOpenWindow) private var openWindow
     @State private var viewModel: SettingsViewModel
     private let onSelectSection: ((DeskSection?) -> Void)?
+    @State private var history = WindowHistory()
+    @Environment(\.windowFeatureRouter) private var featureRouter
     private let section: DeskSection?
+    private let supportSelected: Bool
     private let matchingSelected: Bool
     private let onOpenMatching: (() -> Void)?
     private let featureContent: AnyView?
     @State private var pendingSearchResultID: String?
     @State private var showsSearchSuggestions = false
+    @State private var hoveredRailItem: RailItem?
+    private enum RailItem: Equatable {
+        case section(DeskSection), matching, help, profile
+    }
+
     @State private var railHelpFocus = UMCWindowButtonFocus()
     @State private var tabbedPastSearchResults = false
     @FocusState private var searchFocus: SearchFocus?
@@ -36,6 +44,7 @@ public struct SettingsView: View {
         case result(String)
     }
 
+    @State private var tabToolsDismissalRequest = 0
     @State private var showsProfileMenu = false
     @State private var hoveredProfileMenuItem: ProfileMenuFocus?
     @State private var showsProfileKeyboardFocus = false
@@ -76,9 +85,10 @@ public struct SettingsView: View {
     }
 
     public init(viewModel: SettingsViewModel, section: DeskSection? = nil,
-                featureContent: AnyView? = nil, matchingSelected: Bool = false,
+                featureContent: AnyView? = nil, matchingSelected: Bool = false, supportSelected: Bool = false,
                 onOpenMatching: (() -> Void)? = nil,
                 onSelectSection: ((DeskSection?) -> Void)? = nil) {
+        self.supportSelected = supportSelected
         self.matchingSelected = matchingSelected
         self.onOpenMatching = onOpenMatching
         self.section = section
@@ -89,13 +99,84 @@ public struct SettingsView: View {
 
     // MARK: - Body
 
+    @State private var workspaceModal = UMCWorkspaceModalHost()
+
     public var body: some View {
+        workspace
+            .umcTabToolsHost()
+            .environment(\.umcWorkspaceModalHost, workspaceModal)
+            .disabled(workspaceModal.content != nil)
+            .accessibilityHidden(workspaceModal.content != nil)
+            .overlay { if let content = workspaceModal.content { content } }
+    }
+
+    @ViewBuilder
+    private func settingsTools(dismiss: @escaping () -> Void) -> some View {
+        if viewModel.page == .myPage {
+            if let profile = viewModel.profile {
+                if profile.activities.isEmpty {
+                    Button(AppLocalization.string("활동 코드 등록"), systemImage: "plus.circle") {
+                        dismiss()
+                        viewModel.addPermission()
+                    }
+                    .disabled(viewModel.isAccountBusy)
+                }
+                let hasLinks = SettingsLinkKind.allCases.contains {
+                    !profile.links[$0].trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                }
+                Button(AppLocalization.string(hasLinks ? "프로필 링크 편집" : "프로필 링크 추가"),
+                       systemImage: "link") {
+                    dismiss()
+                    viewModel.editLinks()
+                }
+                .disabled(viewModel.isAccountBusy)
+            }
+            Button(AppLocalization.string("새로고침"), systemImage: "arrow.clockwise") {
+                dismiss()
+                Task { await viewModel.refreshProfile() }
+            }
+            .disabled(viewModel.isRefreshing || viewModel.isAccountBusy)
+            Divider()
+            Button(AppLocalization.string("설정"), systemImage: "gearshape") {
+                dismiss()
+                viewModel.showSettings()
+            }
+        } else {
+            Button(AppLocalization.string("설정 검색"), systemImage: "magnifyingglass") {
+                dismiss()
+                searchFocus = .field
+                showsSearchSuggestions = true
+            }
+            if !viewModel.searchText.isEmpty {
+                Button(AppLocalization.string("검색어 지우기"), systemImage: "xmark.circle") {
+                    dismiss()
+                    viewModel.searchText = ""
+                    searchFocus = .field
+                }
+            }
+            Divider()
+            UMCToolGroupHeading(AppLocalization.string("설정 항목"))
+            ForEach(SettingsPage.allCases.filter { $0 != viewModel.page && $0 != .myPage }) { page in
+                Button(page.title, systemImage: page.symbol) {
+                    dismiss()
+                    dismissSearchSuggestions()
+                    viewModel.searchText = ""
+                    viewModel.navigate(to: page)
+                }
+            }
+        }
+    }
+
+    private var workspace: some View {
         HStack(spacing: UMCSpacing.value4) {
             appRail
                 .frame(width: Constants.railWidth)
                 .environment(\.colorScheme, .light)
                 .zIndex(1)
-                .simultaneousGesture(TapGesture().onEnded { dismissSearchSuggestions() })
+                .simultaneousGesture(TapGesture().onEnded {
+                    tabToolsDismissalRequest += 1
+                    dismissSearchSuggestions()
+                })
             HStack(spacing: 0) {
                 if featureContent == nil, viewModel.page != .myPage {
                     settingsSidebar
@@ -111,7 +192,13 @@ public struct SettingsView: View {
                 }
                 Group {
                     if let featureContent { featureContent }
-                    else { pageContent }
+                    else {
+                        pageContent.umcTabTools(
+                            AppLocalization.string(viewModel.page == .myPage ? "마이페이지 도구" : "설정 도구")
+                        ) { dismiss in
+                            settingsTools(dismiss: dismiss)
+                        }
+                    }
                 }
                     .environment(\.settingsAppearancePalette, palette)
                     .background(palette.backgroundDefault)
@@ -137,9 +224,13 @@ public struct SettingsView: View {
         }
         .padding(.leading, UMCSpacing.value4)
         .padding([.bottom, .trailing], UMCSpacing.value12)
-        .background(UMCColor.Custom.backgroundAppShell)
+        .background {
+            UMCColor.Custom.backgroundAppShell
+                .onTapGesture { tabToolsDismissalRequest += 1 }
+        }
+        .environment(\.tabToolsDismissalRequest, tabToolsDismissalRequest)
         .disabled(showsProfileMenu)
-        .accessibilityHidden(showsProfileMenu)
+        .accessibilityHidden(true, isEnabled: showsProfileMenu)
         .overlay(alignment: .bottomLeading) {
             if showsProfileMenu {
                 ZStack(alignment: .bottomLeading) {
@@ -187,7 +278,15 @@ public struct SettingsView: View {
                 accessibleProfileMenuFocus = .trigger
             }
         }
-        .toolbar { if featureContent == nil { navigationToolbar } }
+        .environment(\.windowDetail, detailSelection)
+        .environment(\.invalidateWindowDetail, { [location] detail in
+            history.invalidate(WindowVisit(location: location, detail: detail))
+        })
+        .onChange(of: windowEntry, initial: true) { old, new in
+            if old.location != new.location { tabToolsDismissalRequest += 1 }
+            history.arrive(from: old, at: new)
+        }
+        .toolbar { navigationToolbar }
         .toolbarBackground(UMCColor.Custom.backgroundAppShell, for: .windowToolbar)
         .toolbarBackgroundVisibility(.visible, for: .windowToolbar)
         .toolbarColorScheme(.dark, for: .windowToolbar)
@@ -221,37 +320,27 @@ public struct SettingsView: View {
         VStack(spacing: 0) {
             VStack(spacing: 0) {
                 ForEach(DeskSection.allCases, id: \.self) { item in
+                    let title = AppLocalization.string(String.LocalizationValue(item.title))
                     if let onSelectSection {
-                        Button { onSelectSection(item) } label: {
-                            Image(systemName: item.symbol)
-                                .frame(width: 44, height: 44)
-                                .contentShape(.rect)
-                        }
-                        .buttonStyle(SettingsPlainButtonStyle())
-                        .foregroundStyle(sidebarChromeForeground)
-                        .background(section == item ? UMCColor.Primitives.teal800 : .clear,
-                                    in: .rect(cornerRadius: UMCRadius.value8))
-                        .accessibilityAddTraits(section == item ? .isSelected : [])
-                        .accessibilityLabel(item.title)
-                        .help(item.title)
+                        railButton(.section(item), title: title, symbol: item.symbol,
+                                   selected: section == item) { onSelectSection(item) }
                     } else {
-                        railItem(item.title, symbol: item.symbol)
+                        Image(systemName: item.symbol)
+                            .font(.system(size: 16, weight: .medium))
+                            .foregroundStyle(sidebarChromeForeground.opacity(0.75))
+                            .frame(width: Constants.railWidth, height: Constants.railWidth)
+                            .accessibilityLabel(AppLocalization.string("\(title), 준비 중"))
+                            .accessibilityHint(AppLocalization.string("\(title) 화면은 아직 제공하지 않아요."))
+                            .modifier(railHover(.section(item), title: title))
                     }
                 }
                 if let onOpenMatching {
-                    Button(action: onOpenMatching) {
-                        Image(systemName: "person.2.badge.gearshape")
-                            .frame(width: 44, height: 44)
-                    }
-                    .buttonStyle(SettingsPlainButtonStyle())
-                    .background(matchingSelected ? UMCColor.Primitives.teal800 : .clear,
-                                in: .rect(cornerRadius: UMCRadius.value8))
-                    .accessibilityAddTraits(matchingSelected ? .isSelected : [])
-                    .accessibilityLabel("프로젝트 매칭")
-                    .help("프로젝트 매칭")
+                    railButton(.matching, title: AppLocalization.string("프로젝트 매칭"),
+                               symbol: "person.2.badge.gearshape", selected: matchingSelected,
+                               action: onOpenMatching)
                 }
                 SettingsHelpButton(foreground: sidebarChromeForeground, focusTarget: railHelpFocus) {
-                    openWindow(id: DeskWindow.support)
+                    openWindow(DeskWindow.support)
                 }
                 .onKeyPress(keys: [.tab, Constants.backTab]) { press in
                     guard featureContent == nil, viewModel.page != .myPage else { return .ignored }
@@ -262,8 +351,8 @@ public struct SettingsView: View {
                     searchFocus = backwards ? searchFocusRows.last ?? .field : .field
                     return .handled
                 }
-                .modifier(SettingsTooltip(
-                    title: AppLocalization.string("도움말"), isSuppressed: showsProfileMenu))
+                .accessibilityAddTraits(supportSelected ? .isSelected : [])
+                .modifier(railHover(.help, title: AppLocalization.string("도움말"), selected: supportSelected))
             }
             Spacer(minLength: UMCSpacing.value24)
             Button { showsProfileMenu.toggle() } label: {
@@ -272,30 +361,41 @@ public struct SettingsView: View {
                     .frame(width: 44, height: 44)
                     .contentShape(.rect(cornerRadius: UMCRadius.value12))
             }
-            .buttonStyle(SettingsPlainButtonStyle(
-                highlight: sidebarChromeForeground.opacity(0.1),
-                cornerRadius: UMCRadius.value12))
+            .buttonStyle(.plain)
             .accessibilityLabel(AppLocalization.string("프로필 메뉴"))
             .accessibilityHint(AppLocalization.string("마이페이지, 설정 및 계정 메뉴"))
             .focused($profileMenuFocus, equals: .trigger)
             .accessibilityFocused($accessibleProfileMenuFocus, equals: .trigger)
-            .modifier(
-                SettingsTooltip(
-                    title: AppLocalization.string("프로필 메뉴"), isSuppressed: showsProfileMenu)
-            )
+            .modifier(railHover(.profile, title: AppLocalization.string("프로필 메뉴")))
             .padding(.bottom, UMCSpacing.value16)
         }
     }
 
-    private func railItem(_ title: String, symbol: String) -> some View {
-        Image(systemName: symbol)
-            .font(.system(size: 16, weight: .medium))
-            .foregroundStyle(sidebarChromeForeground.opacity(0.75))
-            .frame(width: 44, height: 44)
-            .contentShape(.rect)
-            .accessibilityLabel(AppLocalization.string("\(title), 준비 중"))
-            .accessibilityHint(AppLocalization.string("\(title) 화면은 아직 제공하지 않아요."))
-            .modifier(SettingsTooltip(title: title, isSuppressed: showsProfileMenu))
+    private func railButton(
+        _ item: RailItem, title: String, symbol: String, selected: Bool, action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Image(systemName: symbol)
+                .foregroundStyle(sidebarChromeForeground)
+                .frame(width: Constants.railWidth, height: Constants.railWidth)
+                .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(title)
+        .accessibilityAddTraits(selected ? .isSelected : [])
+        .modifier(railHover(item, title: title, selected: selected))
+    }
+
+    private func railHover(_ item: RailItem, title: String, selected: Bool = false)
+        -> some ViewModifier {
+        let hovered = hoveredRailItem == item && !showsProfileMenu
+        return RailHover(title: title, hovered: hovered, selected: selected) { inside in
+            if inside {
+                hoveredRailItem = item
+            } else if hoveredRailItem == item {
+                hoveredRailItem = nil
+            }
+        }
     }
 
     private var profileMenu: some View {
@@ -422,46 +522,78 @@ public struct SettingsView: View {
         .accessibilityFocused($accessibleProfileMenuFocus, equals: focus)
     }
 
+    private var location: WindowLocation {
+        if let key = featureRouter?.location { return .feature(key) }
+        if let section { return .section(section) }
+        if matchingSelected { return .matching }
+        return .settings(viewModel.page)
+    }
+
+    private var windowEntry: WindowEntry {
+        WindowEntry(location: location, explicitNavigationID: featureRouter?.explicitNavigationID)
+    }
+
+    private var detailSelection: Binding<WindowDetail?> {
+        let destination = location
+        return Binding {
+            history.current?.location == destination ? history.current?.detail : nil
+        } set: { id in
+            guard history.current?.location == destination else { return }
+            history.visit(WindowVisit(location: destination, detail: id))
+        }
+    }
+
+    private func restore(_ visit: WindowVisit?) {
+        guard let visit, visit.location != location else { return }
+        switch visit.location {
+        case .section(let section): onSelectSection?(section)
+        case .matching: onOpenMatching?()
+        case .feature(let key): featureRouter?.restore(key)
+        case .settings(let page):
+            if featureContent != nil { onSelectSection?(nil) }
+            viewModel.navigate(to: page)
+        }
+    }
+
     @ToolbarContentBuilder
     private var navigationToolbar: some ToolbarContent {
-        ToolbarItem(placement: .navigation) {
-            SettingsToolbarHost(content: HStack(spacing: UMCSpacing.value4) {
-                    navigationButton(
-                        AppLocalization.string("뒤로"), symbol: "chevron.left",
-                        isEnabled: viewModel.canGoBack
-                    ) {
-                    viewModel.goBack()
-                }
-                    navigationButton(
-                        AppLocalization.string("앞으로"), symbol: "chevron.right",
-                        isEnabled: viewModel.canGoForward
-                    ) {
-                    viewModel.goForward()
-                }
-            })
-            .frame(width: UMCSpacing.value32 * 2 + UMCSpacing.value4,
-                height: UMCSpacing.value40)
+        ToolbarItem(id: "window.back", placement: .navigation) {
+            navigationButton(
+                AppLocalization.string("뒤로"), symbol: "chevron.left", shortcut: "[",
+                isEnabled: history.canGoBack
+            ) { restore(history.back()) }
+        }
+        .sharedBackgroundVisibility(.hidden)
+        ToolbarItem(id: "window.forward", placement: .navigation) {
+            navigationButton(
+                AppLocalization.string("앞으로"), symbol: "chevron.right", shortcut: "]",
+                isEnabled: history.canGoForward
+            ) { restore(history.forward()) }
         }
         .sharedBackgroundVisibility(.hidden)
     }
 
     private func navigationButton(
-        _ title: String, symbol: String, isEnabled: Bool, action: @escaping () -> Void
+        _ title: String, symbol: String, shortcut: KeyEquivalent,
+        isEnabled: Bool, action: @escaping () -> Void
     ) -> some View {
         Button {
             dismissSearchSuggestions()
             action()
         } label: {
-            Image(systemName: symbol)
-                .font(.system(size: 16, weight: .medium))
-                .foregroundStyle(sidebarChromeForeground.opacity(isEnabled ? 0.75 : 0.3))
-                .frame(width: UMCSpacing.value32, height: UMCSpacing.value32)
+            Label(title, systemImage: symbol)
+                .labelStyle(.iconOnly)
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(sidebarChromeForeground.opacity(isEnabled ? 0.90 : 0.46))
+                .frame(width: 28, height: 28)
         }
-        .buttonStyle(SettingsPlainButtonStyle(
-            highlight: sidebarChromeForeground.opacity(0.1)))
+        .buttonStyle(WindowNavigationButtonStyle())
+        .keyboardShortcut(shortcut, modifiers: .command)
         .disabled(showsProfileMenu || !isEnabled)
         .accessibilityLabel(title)
-        .modifier(SettingsTooltip(title: title, isSuppressed: showsProfileMenu, isBelow: true))
+        .modifier(ToolbarTooltip(
+            title: "\(title) ⌘\(shortcut.character)", isSuppressed: showsProfileMenu
+        ))
     }
 
     private var settingsSidebar: some View {
@@ -530,8 +662,17 @@ public struct SettingsView: View {
     }
 
     private var searchField: some View {
-        HStack(spacing: UMCSpacing.value8) {
-            Image(systemName: "magnifyingglass").accessibilityHidden(true)
+        UMCSearchField(
+            text: $viewModel.searchText, isFocused: searchFocus == .field,
+            background: sidebarPalette.backgroundSurfaceGreyWeak,
+            foreground: sidebarPalette.textNeutralWeak500,
+            focusBorder: sidebarPalette.textBrandDefault,
+            onClear: {
+                viewModel.searchText = ""
+                searchFocus = .field
+                showsSearchSuggestions = true
+            }
+        ) {
             TextField(AppLocalization.string("검색"), text: $viewModel.searchText)
                 .textFieldStyle(.plain)
                 .accessibilityLabel(AppLocalization.string("설정 검색"))
@@ -543,26 +684,6 @@ public struct SettingsView: View {
                         selectSearchResult(result)
                     }
                 }
-            if !viewModel.searchText.isEmpty {
-                Button {
-                    viewModel.searchText = ""
-                    searchFocus = .field
-                    showsSearchSuggestions = true
-                } label: {
-                    Image(systemName: "xmark.circle.fill")
-                }
-                .buttonStyle(SettingsPlainButtonStyle())
-                .accessibilityLabel(AppLocalization.string("검색어 지우기"))
-            }
-        }
-        .umcTypography(.headlineRegular)
-        .foregroundStyle(sidebarPalette.textNeutralWeak500)
-        .padding(.horizontal, UMCSpacing.value16)
-        .frame(minHeight: 36)
-        .background(sidebarPalette.backgroundSurfaceGreyWeak, in: .capsule)
-        .overlay {
-            Capsule().strokeBorder(searchFocus == .field ?
-                sidebarPalette.textBrandDefault : .clear, lineWidth: 2)
         }
         .overlay(alignment: .topLeading) {
             if showsSearchSuggestions && !viewModel.isSearching {
@@ -670,6 +791,11 @@ public struct SettingsView: View {
         }
         let backwards = press.key == .upArrow || press.key == Constants.backTab ||
             press.modifiers.contains(.shift)
+        // With a query, native Tab navigation visits the clear button between field and results.
+        if !viewModel.searchText.isEmpty, press.key == .tab || press.key == Constants.backTab,
+           (index == 0 && !backwards) || (index == 1 && backwards) {
+            return .ignored
+        }
         let next = index + (backwards ? -1 : 1)
         guard positions.indices.contains(next) else {
             if press.key == .tab || press.key == Constants.backTab {
@@ -789,10 +915,41 @@ public struct SettingsView: View {
     }
 }
 
-private struct SettingsTooltip: ViewModifier {
+private struct RailHover: ViewModifier {
+    let title: String
+    let hovered: Bool
+    let selected: Bool
+    let onHover: (Bool) -> Void
+
+    func body(content: Content) -> some View {
+        content
+            .background {
+                RoundedRectangle(cornerRadius: UMCRadius.value8)
+                    .fill(selected ? UMCColor.Primitives.teal800 :
+                        hovered ? UMCColor.Semantic.fillNeutralInverseStrongHoverPressed : .clear)
+            }
+            .contentShape(.rect)
+            .onHover(perform: onHover)
+            .overlay(alignment: .leading) {
+                if hovered {
+                    Text(verbatim: title)
+                        .umcTypography(.bodyRegular)
+                        .foregroundStyle(UMCColor.Primitives.white)
+                        .padding(.horizontal, UMCSpacing.value12)
+                        .padding(.vertical, UMCSpacing.value4)
+                        .background(.black, in: .capsule)
+                        .fixedSize()
+                        .offset(x: SettingsView.Constants.railWidth + UMCSpacing.value8)
+                        .allowsHitTesting(false)
+                        .accessibilityHidden(true)
+                }
+            }
+    }
+}
+
+private struct ToolbarTooltip: ViewModifier {
     let title: String
     let isSuppressed: Bool
-    var isBelow = false
 
     @State private var isHovered = false
 
@@ -800,17 +957,7 @@ private struct SettingsTooltip: ViewModifier {
         content
             .onHover { isHovered = $0 }
             .background {
-                if isBelow {
-                    ToolbarTooltipAnchor(title: title, isPresented: isHovered && !isSuppressed)
-                }
-            }
-            .overlay(alignment: .leading) {
-                if isHovered && !isSuppressed && !isBelow {
-                    SettingsTooltipLabel(title: title)
-                        .offset(x: SettingsView.Constants.railWidth + UMCSpacing.value8)
-                        .allowsHitTesting(false)
-                        .accessibilityHidden(true)
-                }
+                ToolbarTooltipAnchor(title: title, isPresented: isHovered && !isSuppressed)
             }
     }
 }
@@ -904,16 +1051,21 @@ func profileMenuShowsKeyboardHighlight(
     keyboardNavigation && !hasHoveredItem && isFocused
 }
 
-private struct SettingsToolbarHost<Content: View>: NSViewRepresentable {
-    let content: Content
+private struct WindowNavigationButtonStyle: ButtonStyle {
+    @Environment(\.isEnabled) private var isEnabled
+    @Environment(\.isFocused) private var isFocused
+    @State private var isHovered = false
 
-    func makeNSView(context: Context) -> NSHostingView<Content> {
-        let view = NSHostingView(rootView: content)
-        view.clipsToBounds = false
-        return view
-    }
-
-    func updateNSView(_ view: NSHostingView<Content>, context: Context) {
-        view.rootView = content
+    func makeBody(configuration: Configuration) -> some View {
+        let opacity = configuration.isPressed ? 0.28 : (isHovered ? 0.15 : 0)
+        configuration.label
+            .background(.white.opacity(isEnabled ? opacity : 0), in: .circle)
+            .overlay {
+                if isEnabled && isFocused {
+                    Circle().strokeBorder(.white, lineWidth: 2)
+                }
+            }
+            .contentShape(.rect)
+            .onHover { isHovered = $0 }
     }
 }

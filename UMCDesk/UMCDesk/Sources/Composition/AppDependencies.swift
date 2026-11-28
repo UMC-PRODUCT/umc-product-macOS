@@ -249,8 +249,9 @@ final class AppDependencies {
         isSettingsPreview ? nil : settingsViewModel.profile?.id
     }
 
-    func openMatching(_ destination: MatchingDestination = .explore) {
-        navigation.openMatching(destination, memberId: verifiedMatchingMemberId)
+    func openMatching(_ destination: MatchingDestination = .explore, isRestoring: Bool = false) {
+        navigation.openMatching(destination, memberId: verifiedMatchingMemberId,
+                                isRestoring: isRestoring)
     }
 
     func selectSection(_ section: DeskSection?) {
@@ -259,14 +260,14 @@ final class AppDependencies {
 
     func signOut() async throws { try await client.logout() }
 
-    var featureDefaults: UserDefaults {
+    private(set) lazy var featureDefaults: UserDefaults = {
         #if DEBUG
-        if let port = Self.fixturePort(arguments: arguments) {
+        if let port = Self.fixturePort(arguments: self.arguments) {
             return UserDefaults(suiteName: "com.umc.product.macos.local-api.\(port)")!
         }
         #endif
         return .standard
-    }
+    }()
 
     func restoreSupportedFonts() {
         settingsPreferences.restoreSupportedFont()

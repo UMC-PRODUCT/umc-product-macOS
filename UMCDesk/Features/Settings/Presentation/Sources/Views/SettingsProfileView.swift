@@ -13,7 +13,7 @@ import SwiftUI
 
 struct SettingsProfileView: View {
     @Environment(\.settingsAppearancePalette) private var palette
-    @Environment(\.openWindow) private var openWindow
+    @Environment(\.settingsOpenWindow) private var openWindow
     @FocusState private var focusesScroll: Bool
     @State private var position = ScrollPosition()
     @State private var visiblePage = CGRect.zero
@@ -30,7 +30,7 @@ struct SettingsProfileView: View {
                         HStack(alignment: .top, spacing: UMCSpacing.value20) {
                             VStack(spacing: UMCSpacing.value20) {
                                 profileLinks(profile)
-                                SettingsUsageCard(isDesignPreview: viewModel.isDesignPreview)
+                                usageCard
                             }
                             .frame(minWidth: 340)
                             activities(profile).frame(minWidth: 340)
@@ -38,7 +38,7 @@ struct SettingsProfileView: View {
                         VStack(spacing: UMCSpacing.value20) {
                             profileLinks(profile)
                             activities(profile)
-                            SettingsUsageCard(isDesignPreview: viewModel.isDesignPreview)
+                            usageCard
                         }
                     }
                     HStack(spacing: UMCSpacing.value16) {
@@ -47,7 +47,7 @@ struct SettingsProfileView: View {
                             typography: .bodyRegular)
                         Spacer(minLength: 0)
                         SettingsProfileSupportButton {
-                            openWindow(id: DeskWindow.support)
+                            openWindow(DeskWindow.support)
                         }
                         .fixedSize()
                     }
@@ -84,15 +84,27 @@ struct SettingsProfileView: View {
         }
     }
 
+    @ViewBuilder
+    private var usageCard: some View {
+        if viewModel.previewProfile?.activities.isEmpty == true {
+            SettingsCard(isSubtle: true) {
+                profileCardHeading(AppLocalization.string("앱 사용 기록"),
+                    description: AppLocalization.string("사용 기록 없음"))
+            }
+        } else {
+            SettingsUsageCard(isDesignPreview: viewModel.isDesignPreview)
+        }
+    }
+
     private func profileSummary(_ profile: SettingsProfile) -> some View {
         SettingsCard(isSubtle: true) {
             HStack(spacing: UMCSpacing.value20) {
-                SettingsAvatar(url: profile.profileImageURL, size: 48,
+                SettingsAvatar(url: profile.profileImageURL, size: 56,
                     usesDesignImage: viewModel.isDesignPreview)
                 VStack(alignment: .leading, spacing: UMCSpacing.value4) {
                     HStack(spacing: UMCSpacing.value8) {
                         Text("\(profile.nickname) / \(profile.name)")
-                            .umcTypography(.title2Bold)
+                            .umcTypography(.title1Bold).accessibilityAddTraits(.isHeader)
                         if let activity = profile.activities.last {
                             SettingsPartTag(part: activity.part)
                         }
@@ -522,13 +534,11 @@ private struct SettingsUsageCard: View {
     let isDesignPreview: Bool
 
     private var statistics: [String] {
-        #if DEBUG || UMC_PRERELEASE
         if isDesignPreview {
             return [SettingsUsagePreview.totalDuration,
                 AppLocalization.string("\(SettingsUsagePreview.activeDays)일"),
                 AppLocalization.string("\(SettingsUsagePreview.currentStreak)일")]
         }
-        #endif
         return ["—", "—", "—"]
     }
 
@@ -539,7 +549,6 @@ private struct SettingsUsageCard: View {
                     Text(AppLocalization.string("앱 사용 기록"))
                         .umcTypography(.title4Bold)
                         .accessibilityAddTraits(.isHeader)
-                    #if DEBUG || UMC_PRERELEASE
                     if isDesignPreview {
                         Text(AppLocalization.string("미리보기 데이터"))
                             .umcTypography(.captionRegular)
@@ -549,7 +558,6 @@ private struct SettingsUsageCard: View {
                             .background(palette.surfaceNeutralMedium,
                                 in: .rect(cornerRadius: UMCRadius.value4))
                     }
-                    #endif
                 }
                 ViewThatFits(in: .horizontal) {
                     HStack(spacing: UMCSpacing.value24) {
@@ -560,15 +568,11 @@ private struct SettingsUsageCard: View {
                     }
                 }
                 SettingsDivider()
-                #if DEBUG || UMC_PRERELEASE
                 if isDesignPreview {
                     SettingsUsageHeatmap()
                 } else {
                     SettingsUsagePlaceholder()
                 }
-                #else
-                SettingsUsagePlaceholder()
-                #endif
             }
         }
     }
@@ -611,7 +615,6 @@ private struct SettingsUsagePlaceholder: View {
     }
 }
 
-#if DEBUG || UMC_PRERELEASE
 /// 디자인 프리뷰 전용 데이터이며 사용 기록을 수집하거나 저장하지 않습니다.
 enum SettingsUsagePreview {
     struct Day: Identifiable {
@@ -736,7 +739,6 @@ private struct SettingsUsageHeatmap: View {
         }
     }
 }
-#endif
 
 private struct SettingsProfileDetailColor: ViewModifier {
     @Environment(\.settingsAppearancePalette) private var palette

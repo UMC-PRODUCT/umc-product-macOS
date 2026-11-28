@@ -7,6 +7,7 @@
 
 import CoreDesignSystem
 import ProjectWorkspaceDomain
+import CoreUIComponents
 import SwiftUI
 
 struct WorkspaceTodoForm: View {
@@ -20,7 +21,10 @@ struct WorkspaceTodoForm: View {
             Text("할 일 추가").umcTypography(.title1Bold)
             Text("한 줄이면 충분해요. 이 프로젝트에 내 할 일로 저장됩니다.")
                 .foregroundStyle(.secondary)
-            TextField("할 일", text: $title).focused($editing)
+            TextField("할 일", text: $title)
+                .focused($editing)
+                .focusEffectDisabled()
+                .umcInputField(isFocused: editing)
             HStack {
                 Spacer()
                 Button("취소") { dismiss() }.keyboardShortcut(.cancelAction)
@@ -48,6 +52,7 @@ struct WorkspaceConnectionsForm: View {
         VStack(alignment: .leading, spacing: UMCSpacing.value16) {
             Text("연결 관리").umcTypography(.title1Bold)
             ForEach(WorkspaceResource.allCases) { resource in
+                let invalid = submitted && !valid(resource)
                 VStack(alignment: .leading, spacing: UMCSpacing.value4) {
                     Text(resource.rawValue).umcTypography(.headlineBold)
                     TextField(resource == .github ? "GitHub 저장소 링크" : "Figma 파일 링크",
@@ -55,7 +60,8 @@ struct WorkspaceConnectionsForm: View {
                                 get: { links[resource.rawValue] ?? "" },
                                 set: { links[resource.rawValue] = $0 }
                               ))
-                    if submitted && !valid(resource) {
+                    .umcInputField(isInvalid: invalid)
+                    if invalid {
                         Text(resource == .github ? "GitHub 저장소 주소를 확인하세요." :
                                 "Figma 파일 링크를 확인하세요.")
                             .foregroundStyle(UMCColor.Semantic.iconError)
@@ -86,31 +92,5 @@ struct WorkspaceConnectionsForm: View {
         let value = links[resource.rawValue] ?? ""
         let input = value.trimmingCharacters(in: .whitespacesAndNewlines)
         return input.isEmpty || resource.validatedURL(input) != nil
-    }
-}
-
-/// A keyboard-accessible popover shared by the directory and the current project's tool menu.
-struct WorkspaceTools<Content: View>: View {
-    let description: String
-    @ViewBuilder let content: (@escaping () -> Void) -> Content
-    @State private var presented = false
-
-    var body: some View {
-        Button("프로젝트 도구", systemImage: "slider.horizontal.3") { presented.toggle() }
-            .popover(isPresented: $presented, arrowEdge: .bottom) {
-                VStack(alignment: .leading, spacing: UMCSpacing.value12) {
-                    HStack {
-                        Text("프로젝트 도구").umcTypography(.title4Bold)
-                        Spacer()
-                        Button("닫기", systemImage: "xmark") { presented = false }
-                            .labelStyle(.iconOnly)
-                            .keyboardShortcut(.cancelAction)
-                    }
-                    Text(description).umcTypography(.bodyRegular).foregroundStyle(.secondary)
-                    content { presented = false }
-                }
-                .padding(UMCSpacing.value20)
-                .frame(width: 300, alignment: .leading)
-            }
     }
 }

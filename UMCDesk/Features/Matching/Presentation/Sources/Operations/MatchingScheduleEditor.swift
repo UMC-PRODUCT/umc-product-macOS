@@ -6,6 +6,7 @@
 //
 
 import CoreDesignSystem
+import CoreUIComponents
 import MatchingDomain
 import SwiftUI
 
@@ -15,7 +16,7 @@ struct MatchingScheduleEditor: View {
     let rounds: [MatchingRound]
     let onSaved: () -> Void
     @Environment(\.dismiss) private var dismiss
-    @State private var type = "PLAN_DEVELOPER"
+    @State private var type: String
     @State private var rows: [ScheduleRow] = []
     @State private var allowed = false
     @State private var working = false
@@ -23,6 +24,15 @@ struct MatchingScheduleEditor: View {
     @State private var pending: Action?
     @State private var loadingAccess = true
     @State private var accessAttempt = 0
+
+    init(repository: any MatchingUseCase, chapterId: String, rounds: [MatchingRound],
+         initialType: String = MatchingRosterType.developer.rawValue, onSaved: @escaping () -> Void) {
+        self.repository = repository
+        self.chapterId = chapterId
+        self.rounds = rounds
+        self.onSaved = onSaved
+        _type = State(initialValue: initialType)
+    }
 
     private enum Action: Identifiable {
         case save, delete, auto(MatchingRound)
@@ -83,13 +93,14 @@ struct MatchingScheduleEditor: View {
                                 HStack {
                                     Text(row.phaseTitle).umcTypography(.headlineBold)
                                     TextField("차수 이름", text: $row.name)
+                                        .umcInputField()
                                         .disabled(!allowed || isLocked(clock.date) || working)
                                     if let round = existing.first(where: { $0.phase == row.phase }),
                                        allowed {
                                         Button(round.autoDecisionExecutedAt == nil ? "자동 선발" : "실행 완료") {
                                             pending = .auto(round)
                                         }
-                                        .disabled(working || !canAutoDecide(round, at: clock.date))
+                                        .disabled(working || !round.canReviewAutoDecision(in: rounds, at: clock.date))
                                     }
                                 }
                                 HStack(alignment: .top, spacing: UMCSpacing.value12) {
@@ -190,18 +201,6 @@ struct MatchingScheduleEditor: View {
         return result.count == ScheduleRow.phases.count ? result : nil
     }
 
-    private func canAutoDecide(_ round: MatchingRound, at now: Date) -> Bool {
-        guard round.autoDecisionExecutedAt == nil else { return false }
-        // Random eligibility depends on an actual third-round publication. Its timestamp is
-        // absent from the read contract, so the command server performs that final check.
-        if round.phase == "RANDOM_MATCHING" {
-            guard let third = existing.first(where: { $0.phase == "THIRD" }) else { return false }
-            let earliest = MatchingLabel.date(third.resultPublishAt ?? third.decisionDeadline)
-            return earliest.map { $0 <= now } ?? false
-        }
-        return MatchingLabel.date(round.decisionDeadline).map { $0 < now } ?? false
-    }
-
     private func perform(_ action: Action) {
         guard allowed, !working else { return }
         working = true
@@ -216,13 +215,29 @@ struct MatchingScheduleEditor: View {
                     guard !isLocked(.now) else { return }
                     try await repository.deleteSchedule(chapterId: chapterId, type: type)
                 case .auto(let round):
-                    guard canAutoDecide(round, at: .now) else { return }
+                    guard round.canReviewAutoDecision(in: rounds, at: .now) else { return }
                     try await repository.autoDecide(roundId: round.id)
                 }
                 onSaved()
                 dismiss()
             } catch { self.error = error.localizedDescription }
         }
+    }
+}
+
+extension MatchingRound {
+    func canReviewAutoDecision(in rounds: [MatchingRound], at now: Date) -> Bool {
+        guard autoDecisionExecutedAt == nil else { return false }
+        // Random eligibility depends on an actual third-round publication. Its timestamp is
+        // absent from the read contract, so the command server performs that final check.
+        if phase == "RANDOM_MATCHING" {
+            guard let third = rounds.first(where: {
+                $0.chapterId == chapterId && $0.type == type && $0.phase == "THIRD"
+            }) else { return false }
+            let earliest = MatchingLabel.date(third.resultPublishAt ?? third.decisionDeadline)
+            return earliest.map { $0 <= now } ?? false
+        }
+        return MatchingLabel.date(decisionDeadline).map { $0 < now } ?? false
     }
 }
 

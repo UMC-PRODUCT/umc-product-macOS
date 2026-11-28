@@ -18,6 +18,124 @@ import CoreNetwork
 @MainActor
 struct AppDependenciesTests {
     #if DEBUG
+    @Test("미리보기 재진입과 종료는 로그아웃 경로와 로그인한 계정의 토큰·현재 탭을 보존한다")
+    func dataPreviewRestoresOriginalAccount() async throws {
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [LogoutLifecycleProtocol.self]
+        let transport = URLSession(configuration: config)
+        defer { transport.invalidateAndCancel() }
+        let app = AppDependencies(arguments: ["--local-api-port", "19620"], session: transport)
+        let client = app.container.resolve(NetworkClient.self)
+        let tokens = app.container.resolve(TokenStore.self)
+        let preview = DataPreviewMode()
+        app.selectSection(.projects)
+        preview.select(.feature(.threads))
+        preview.end()
+        #expect(preview.session == nil)
+        #expect(app.navigation.pendingSection == .projects)
+        #expect(app.navigation.account == nil)
+        #expect(await tokens.getAccessToken() == nil)
+
+        try await client.signIn { TokenPair(accessToken: "second", refreshToken: "second-refresh") }
+        try await app.refreshAccount()
+        app.selectSection(.activity)
+        preview.select(.settings)
+        let workspace = try #require(preview.session)
+        for destination in DataPreviewDestination.all { preview.select(destination) }
+        let isolated = workspace.settings.preferences
+        let theme = app.settingsPreferences.theme
+        isolated.theme = theme == .dark ? .light : .dark
+        #expect(app.settingsPreferences.theme == theme)
+        #expect(workspace.account.memberID != app.navigation.account?.memberID)
+        await workspace.settings.logout()
+        #expect(preview.session == nil)
+        #expect(app.navigation.account?.memberID == "202")
+        #expect(app.navigation.section == .activity)
+        #expect(await tokens.getAccessToken() == "second")
+        #expect(await tokens.getRefreshToken() == "second-refresh")
+        preview.select(.profile)
+        #expect(preview.session !== workspace)
+        preview.end()
+    }
+
+    @Test("빈 미리보기 재선택·전환·종료는 고객센터의 작성 중인 내용을 보호한다")
+    func emptyPreviewSwitching() async throws {
+        let preview = DataPreviewMode()
+        preview.select(.support, isEmpty: true)
+        let first = try #require(preview.session)
+        #expect(first.support.tickets.isEmpty)
+        #expect(first.support.drafts.isEmpty)
+        #expect(first.support.publishedArticles.isEmpty)
+        first.supportExitGate.hasChanges = true
+        preview.select(.feature(.home), isEmpty: false)
+        #expect(first.supportExitGate.needsConfirmation)
+        first.supportExitGate.stay()
+        #expect(preview.session === first)
+        first.openMatching(.applications)
+        #expect(first.supportExitGate.needsConfirmation)
+        first.supportExitGate.stay()
+        preview.end()
+        #expect(first.supportExitGate.needsConfirmation)
+        first.supportExitGate.stay()
+        preview.select(.support, isEmpty: true)
+        #expect(preview.session === first)
+        first.supportExitGate.discard()
+        let second = try #require(preview.session)
+        #expect(second !== first)
+        #expect(second.destination == .support)
+        #expect(second.isEmpty)
+        preview.select(.settings)
+        #expect(preview.session === second)
+        preview.select(.matching, isEmpty: false)
+        let populated = try #require(preview.session)
+        #expect(!populated.isEmpty)
+        #expect(!populated.support.tickets.isEmpty)
+    }
+
+    @Test("전체 미리보기는 현재 탭에서 새 세션을 시작하고 탐색 중에 같은 데이터를 사용한다")
+    func globalPreviewSwitching() throws {
+        let preview = DataPreviewMode()
+        preview.selectAll(isEmpty: true)
+        let empty = try #require(preview.session)
+        #expect(empty.destination == .feature(.home))
+        #expect(empty.isEmpty)
+        empty.select(.feature(.activity))
+        #expect(preview.session === empty)
+        preview.selectAll(isEmpty: false)
+        let filled = try #require(preview.session)
+        #expect(filled !== empty)
+        #expect(!filled.isEmpty)
+        #expect(filled.destination == .feature(.activity))
+        filled.select(.support)
+        filled.supportExitGate.hasChanges = true
+        preview.selectAll(isEmpty: false)
+        #expect(filled.supportExitGate.needsConfirmation)
+        filled.supportExitGate.stay()
+        #expect(preview.session === filled)
+        preview.selectAll(isEmpty: false)
+        filled.supportExitGate.discard()
+        let fresh = try #require(preview.session)
+        #expect(fresh !== filled)
+        #expect(fresh.destination == .support)
+        #expect(!fresh.isEmpty)
+    }
+
+    @Test("빈 매칭 미리보기에는 프로젝트와 지원 진행 내역이 없다")
+    func matchingEmptyPreview() async throws {
+        let session = DataPreviewSession(isEmpty: true)
+        let projects = try await session.matching.projects(gisuId: "10", keyword: nil, page: 0)
+        #expect(projects.content.isEmpty)
+        #expect(projects.totalElements == "0")
+        #expect(try await session.matching.rounds(chapterId: nil).isEmpty)
+        #expect(try await session.matching.overview(chapterId: "1", adjustment: false).isEmpty)
+        let candidates = try await session.matching.pmCandidates(gisuId: "10", keyword: nil, page: 0)
+        #expect(candidates.people.isEmpty)
+        await session.progress.refreshOnce()
+        #expect(session.progress.lastChecked != nil)
+        #expect(session.progress.card == nil)
+        #expect(!session.progress.unavailable)
+    }
+
     @Test("로그인 대기 중 탭을 바꾸면 마지막으로 선택한 목적지만 남는다")
     func latestTabReplacesPendingDestination() {
         let navigation = AppNavigation(launchPage: .login)
@@ -86,6 +204,18 @@ struct AppDependenciesTests {
         #expect(try await account.client.currentAccessToken() == "fixture-access")
         #expect(await store.getRefreshToken() == "fixture-refresh")
         #expect(barrier.profileCount.withLock { $0 } == 2)
+    }
+
+    @Test func matchingRestorationPreservesTheExplicitEntryIdentifier() {
+        let navigation = AppNavigation(launchPage: .login)
+        navigation.openMatching(.explore, memberId: "101")
+        let first = navigation.matchingNavigationID
+        navigation.openMatching(.explore, memberId: "101")
+        let second = navigation.matchingNavigationID
+        #expect(first != second)
+        navigation.openMatching(.applications, memberId: "101", isRestoring: true)
+        #expect(navigation.matchingNavigationID == second)
+        #expect(navigation.matchingDestination == .applications)
     }
 
     @Test("두 설정 창의 로그아웃은 갱신 대기 중 이전 계정을 숨기고 늦은 철회 응답에서 새 계정을 보호한다")

@@ -51,6 +51,8 @@ View ←→ ViewModel(@Observable) → UseCase(Protocol) → Repository → Data
    (Request/Encodable DTO는 제외 — Int 그대로 OK)
 4. **모듈 간 노출 타입은 `public`** — Domain Model의 프로퍼티/이니셜라이저에 `public` 필수.
 5. **Mock 데이터는 `#if DEBUG` 가드** — 정식 릴리스 빌드 미포함.
+   일반 앱의 **보기 → 데이터 미리보기**에는 세션 전용 로컬 예시 데이터를 포함한다.
+   이 메뉴의 저장소·권한·위치·네트워크 처리는 실제 계정과 격리한다(#162).
    승인된 인증 디자인·타이포·흐름 프리뷰만 `#if DEBUG || UMC_PRERELEASE`를 사용한다.
    `UMC_PRERELEASE`는 프로젝트 생성 시 `TUIST_PRERELEASE=1`로 켜며 일반 Mock에 확대하지 않는다.
 6. **Network Router에 인라인 딕셔너리 금지** — 파라미터는 Query/Body DTO로 캡슐화.
@@ -102,6 +104,13 @@ View ←→ ViewModel(@Observable) → UseCase(Protocol) → Repository → Data
     `State`·`Binding`·`PreferenceKey` 등으로 전달한 뒤 다시 프레임에 반영하는 우회도 금지한다.
     지원 컨테이너와 예시는 [디자인 시스템 가이드](docs/Codex/design-system.md#창-크기에-맞춘-레이아웃)를 따른다.
 
+13. **공지 탭을 개선할 때는 같은 PR에서 [공지 탭 구현 명세](docs/specs/공지_공지%20탭_구현명세.md)도 갱신한다.**
+    화면·문구·조작 흐름·목록 필터·권한·API 계약 중 바뀐 내용을 해당 절에 반영한다.
+    공통 모듈을 수정해 공지 탭 동작이 달라지는 경우에도 적용한다.
+14. **우측 상단 도구 버튼과 패널은 사용자가 직접 변경을 지시할 때만 수정한다.**
+    실데이터·데이터 미리보기와 매칭 현황 별도 창 모두에 적용한다. 변경 범위와 원본은
+    [우측 상단 도구 버튼과 패널](docs/Codex/design-system.md#우측-상단-도구-버튼과-패널)을 따른다.
+
 ## 코딩 스타일 (요약)
 
 - 들여쓰기 4 spaces(탭 금지) · 줄 길이 최대 99자 · 외부 불필요 상태는 `private`
@@ -149,6 +158,9 @@ make doctor     # 환경 진단
 | Network Router (Moya) | `docs/Codex/network-router.md` | API 엔드포인트/DTO 추가 |
 | Response DTO 디코딩 | `docs/Codex/response-dto-decoding.md` | Response DTO 작성/수정 |
 | 디자인 시스템 & 성능 | `docs/Codex/design-system.md` | UI/토큰/Glass/렌더링 최적화 |
+| 활동 탭 | [활동 탭 결정 이력](docs/specs/활동_활동%20탭%20결정%20이력_설계.md) | 활동 작업을 시작할 때 먼저 읽고, 동작·권한 정책·시안이 바뀌면 같은 PR에서 결정 이유와 근거를 갱신한다. |
+| 홈 탭 | [홈 탭 결정 이력](docs/specs/홈_홈%20탭%20결정%20이력_설계.md) | 홈 작업 전에 먼저 읽고, 화면·탐색·기록이 달라지면 같은 PR에서 이유와 검증 근거를 갱신한다. |
+| 도구 패널과 텍스트 필드 | [패널](docs/Codex/tool-panels.md) · [입력](docs/Codex/text-fields.md) | 탭별 명령·빈 상태·검색·폼·포커스 변경 |
 | 홈 아케이드 | [첫 부두 구역 설계 원본](docs/Codex/dock-action-game.md) | 부두 한 판의 규칙, Mac 입력·성능 검수, 세 게임의 공통 완료 기준 |
 | 코딩 스타일 & 네이밍 | `docs/Codex/coding-style.md` | 네이밍 판단이 필요할 때 |
 | Git Workflow | `docs/Codex/git-workflow.md` | 브랜치/커밋/PR/이슈(템플릿·Type·Priority)/배포 |
@@ -168,8 +180,12 @@ Apple 프레임워크 API — 신규 Apple API를 다룰 때:
 |------|------|--------------|
 | 서버 전달용 명세 | `docs/server/` | 서버팀에 넘길 API·푸시 명세를 읽거나 **새로 쓸 때** |
 | 기능 설계 스펙 · PRD | `docs/specs/` | 기능 설계·요구사항 정의를 읽거나 **새로 쓸 때** |
+| macOS 스레드 | [스레드 기준 문서](<docs/specs/스레드_macOS 스레드 기준_설계.md>) | 스레드 기획·디자인·구현·리뷰를 시작할 때 먼저 읽는다. |
 | 구현 계획 | `docs/plans/` | 구현 순서·작업 분해를 읽거나 **새로 쓸 때** |
 
+- 스레드 동작·Figma 시안·권한·서버 계약 또는 설계와 실제 구현의 차이가 바뀌면,
+  같은 변경 PR에서 스레드 기준 문서의 해당 항목에 변경 내용과 근거 링크, 확인일을 기록한다.
+  Figma 시안만 바뀐 경우에도 문서를 갱신한다.
 - 파일명: `{기능}_{제목}_{종류}.md` — 밑줄 3분할. (예: `푸시_푸시 딥링크_서버명세.md`)
   맨 앞 기능 이름으로 정렬되므로 같은 기능의 문서가 한자리에 모인다.
   종류는 `설계` · `PRD` · `구현계획` · `설계리뷰` · `서버명세` · `서버갭`.

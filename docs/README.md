@@ -16,12 +16,24 @@
 | [아키텍처](Codex/architecture.md) | 계층 경계, 상태·DI·에러 처리 |
 | [디자인 시스템](Codex/design-system.md) | Figma 기준, Light/Dark 토큰, 공통 UI |
 | [macOS 탭 공통 버튼 가이드](Codex/tab-button-guide.md) | 목록·상세·작성 버튼 배치, 상태별 예외와 키보드·VoiceOver 검수 |
-| [홈 아케이드 · 소인이 찍겠습니다!](Codex/dock-action-game.md) | 꾹이·살랑·찰박의 게임플레이 동작과 첫 부두 설계, 세 게임의 공통 품질 기준과 Mac 실측 기록표 |
+| [홈 아케이드 · 소인이 찍겠습니다!](Codex/dock-action-game.md) | 홈에서 실행하는 첫 부두의 규칙·입력·Mac 검수 기준과 후속 후보 두 작품 |
+| [홈 아케이드 원화와 키포즈 제작](Codex/arcade-art-production.md) | 첫 부두의 손짓·위험 예고·날인을 실제 게임 크기에서 판독하는 방법 |
 | [코딩 스타일](Codex/coding-style.md) | 네이밍·접근 제어·파일 규약 |
 | [Network Router](Codex/network-router.md) | API·Query·Body 구성 |
 | [Response DTO](Codex/response-dto-decoding.md) | 호환 디코딩과 응답 타입 규약 |
 | [Git Workflow](Codex/git-workflow.md) | 이슈·브랜치·커밋·PR·배포 규칙 |
 | [PR 리뷰](Codex/pr-review.md) | 리뷰 범위와 확인 기준 |
+
+## 기능 설계
+
+| 문서 | 내용 |
+| --- | --- |
+| [문의 채널 Figma 원본 재현](specs/문의_문의%20채널%20Figma%20원본%20재현_설계.md) | 사용자·운영 문의 화면의 Light/Dark 원본과 현재 고객센터의 구현 차이 |
+| [문의 채널 디자인 개선](specs/문의_문의%20채널%20디자인%20개선_설계.md) | 통과 원본을 기준으로 한 창 폭·글자 배율별 배치와 문의 상태·접근성 검수 |
+| [공지 탭 내부 디자인 개선](specs/공지_공지%20탭%20내부%20디자인%20개선_설계.md) | 최신 공지 코드·공식 시안 비교, 목록/읽기/운영 화면의 우선순위와 토큰·수용 기준 |
+| [홈 탭 결정 이력](specs/홈_홈%20탭%20결정%20이력_설계.md) | 오늘의 업무 요약과 첫 부두 진입·기록, 이전 게임의 변경 이력 |
+| [활동 탭 결정 이력](specs/활동_활동%20탭%20결정%20이력_설계.md) | 출석·스터디·구성원의 9월 Mid-fi 결정과 11월 실제 동작, 후속 변경 기록 기준 |
+| [활동 탭 내부 디자인 개선](specs/활동_활동%20탭%20내부%20디자인%20개선_설계.md) | 일정·출석·스터디·명단·시트의 위계, 현재 동작 보존과 크기·접근성 수용 기준 |
 
 ## API·배포·레퍼런스
 

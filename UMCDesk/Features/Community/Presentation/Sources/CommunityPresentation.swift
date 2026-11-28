@@ -7,8 +7,11 @@
 
 import AppKit
 import CommunityDomain
+import CoreUIComponents
 import CoreDesignSystem
+import CoreRouting
 import SwiftUI
+import UMCFoundation
 
 public struct CommunityThreadsView: View {
     private let accountID: String
@@ -36,6 +39,59 @@ public struct CommunityThreadsView: View {
     }
 }
 
+/// Restoring a paginated thread fetches its detail independently of the current list.
+@MainActor @Observable
+final class ThreadRestoration {
+    private(set) var state: Loadable<CommunityThread> = .idle
+
+    func load(id: String, repository: any CommunityThreadRepository) async {
+        state = .loading
+        do {
+            let thread = try await repository.thread(id: id)
+            if !Task.isCancelled { state = .loaded(thread) }
+        } catch {
+            if !Task.isCancelled { state = .failed(error) }
+        }
+    }
+}
+
+struct RestoredThreadPane<Content: View>: View {
+    let id: String
+    let listed: CommunityThread?
+    let repository: any CommunityThreadRepository
+    let content: (CommunityThread) -> Content
+    @State private var restoration = ThreadRestoration()
+    @State private var attempt = 0
+
+    private var thread: CommunityThread? {
+        if let listed { return listed }
+        if case .loaded(let restored) = restoration.state { return restored }
+        return nil
+    }
+
+    var body: some View {
+        Group {
+            // Keep the editor at the same SwiftUI identity when pagination supplies this row.
+            if let thread { content(thread) }
+            else if case .failed(let error) = restoration.state {
+                ContentUnavailableView {
+                    Label("스레드를 열지 못했어요", systemImage: "bubble.left")
+                } description: {
+                    Text(error.localizedDescription)
+                } actions: {
+                    Button("다시 시도") { attempt += 1 }
+                }
+            } else {
+                ProgressView("스레드를 불러오는 중")
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .task(id: listed == nil ? attempt : nil) {
+            if thread == nil { await restoration.load(id: id, repository: repository) }
+        }
+    }
+}
+
 private struct ThreadBrowser: View {
     let accountID: String
     let repository: any CommunityThreadRepository
@@ -43,14 +99,16 @@ private struct ThreadBrowser: View {
     let management: any ThreadManagementRepository
     let defaults: UserDefaults
 
+    @Environment(\.threadNotificationCenter) private var notifications
     @FocusState private var resultsFocused: Bool
     @State private var query = ""
     @State private var filter = ThreadListFilter.all
     @State private var participation = ThreadParticipationFilter.all
     @State private var focusRequest = 0
+    @State private var toolsOpen = false
     @State private var threads: [CommunityThread] = []
     @State private var next: String?
-    @State private var selection: String?
+    @WindowDetailSelection private var selection: String?
     @State private var reload = 0
     @State private var loading = false
     @State private var failure: String?
@@ -63,21 +121,9 @@ private struct ThreadBrowser: View {
     var body: some View {
         HSplitView {
             VStack(alignment: .leading, spacing: UMCSpacing.value12) {
-                HStack {
-                    Text("스레드").umcTypography(.title1Bold)
-                    Spacer()
-                    ThreadBrowserTools(filter: $filter, participation: $participation,
-                                       focusSearch: { focusRequest += 1 },
-                                       create: { creating = true }, showAll: showAll)
-                        .menuStyle(.borderlessButton)
-                        .menuIndicator(.visible)
-                        .foregroundStyle(.primary)
-                        .fixedSize()
-                        .accessibilityLabel("스레드 도구")
-                        .help("스레드 도구")
-                }
+                Text("스레드").umcTypography(.title1Bold)
                 ThreadSearchField(query: $query, focusRequest: focusRequest, selectResult: selectFirst)
-                    .frame(height: 28)
+                    .disabled(toolsOpen)
                 if filter != .all || participation != .all {
                     Text([filter == .all ? nil : filter.title,
                           participation == .all ? nil : participation.rawValue]
@@ -114,11 +160,10 @@ private struct ThreadBrowser: View {
             .padding(UMCSpacing.value16)
             .frame(minWidth: 220, idealWidth: 344, maxWidth: 344,
                    minHeight: 0, maxHeight: .infinity, alignment: .topLeading)
-            if let item = threads.first(where: { $0.id == selection }) {
-                ThreadDestination(accountID: accountID, thread: item, detached: false,
-                                  repository: repository, conversations: conversations,
-                                  management: management, defaults: defaults)
-                    .id(item.id)
+            if let selection {
+                RestoredThreadPane(id: selection, listed: threads.first { $0.id == selection },
+                                   repository: repository, content: destination)
+                    .id(selection)
             } else {
                 ContentUnavailableView(threads.isEmpty && !loading && failure == nil
                     ? "표시할 스레드가 없어요" : "스레드를 선택하세요",
@@ -127,15 +172,34 @@ private struct ThreadBrowser: View {
             }
         }
         .communitySplitContent()
+        .background {
+            if !toolsOpen, !creating {
+                Button("제목·소개 검색") { focusRequest += 1 }
+                    .keyboardShortcut("f")
+                    .hidden()
+                    .accessibilityHidden(true)
+            }
+        }
+        .umcTabTools(AppLocalization.string("스레드 도구"), width: .wide, isPresented: $toolsOpen) { dismiss in
+            Text(AppLocalization.string("대화를 찾고 새로운 공간을 만드세요."))
+                .font(.caption).foregroundStyle(.secondary)
+            ThreadSearchField(query: $query, focusRequest: 1, placeholder: "제목, 소개 검색") {
+                dismiss()
+                selectFirst()
+            }
+            ThreadBrowserTools(filter: $filter, participation: $participation,
+                               create: { dismiss(); creating = true },
+                               showAll: { dismiss(); showAll() })
+        }
         .task(id: search + [String(reload)]) {
             if loadedSearch != search {
                 threads = []
-                selection = nil
+                if loadedSearch != nil { selection = nil }
                 next = nil
             }
             await load(offset: nil)
         }
-        .onReceive(NotificationCenter.default.publisher(for: .threadBrowserChanged)) { notice in
+        .onReceive(notifications.publisher(for: .threadBrowserChanged)) { notice in
             guard let key = notice.object as? ThreadWindowKey, key.accountID == accountID else { return }
             if notice.userInfo?["exit"] as? Bool == true && selection == key.threadID {
                 selection = nil
@@ -171,13 +235,14 @@ private struct ThreadBrowser: View {
                 Text(item.icon).accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 3) {
                     HStack(spacing: 5) {
-                        Text(item.title).font(.headline).lineLimit(1).foregroundStyle(title)
+                        Text(item.title)
+                            .umcTypography(item.unread == "0" ? .headlineRegular : .headlineBold)
+                            .lineLimit(2).foregroundStyle(title)
                             .layoutPriority(1)
                         if item.isPinned {
                             Image(systemName: "pin.fill").font(.caption2).accessibilityLabel("고정됨")
                         }
                         Spacer(minLength: 2)
-                        Text(status).font(.caption2).lineLimit(1).fixedSize()
                         if item.unread != "0" {
                             Text(item.unread).font(.caption2.bold())
                                 .foregroundStyle(UMCColor.Semantic.textBrandStrong)
@@ -186,7 +251,8 @@ private struct ThreadBrowser: View {
                                 .accessibilityLabel("안 읽은 메시지 " + item.unread)
                         }
                     }
-                    if !preview.isEmpty { Text(preview).font(.caption).lineLimit(1) }
+                    Text([status, preview].filter { !$0.isEmpty }.joined(separator: " · "))
+                        .umcTypography(.captionRegular).lineLimit(1)
                 }
             }
             .foregroundStyle(detail)
@@ -203,6 +269,13 @@ private struct ThreadBrowser: View {
             .listRowBackground(UMCColor.Custom.backgroundDefault)
             .tag(item.id)
         }
+    }
+
+    private func destination(for item: CommunityThread) -> some View {
+        ThreadDestination(accountID: accountID, thread: item, detached: false,
+                          repository: repository, conversations: conversations,
+                          management: management, defaults: defaults)
+            .id(item.id)
     }
 
     private func showAll() {
@@ -263,35 +336,27 @@ private struct ThreadBrowser: View {
 struct ThreadBrowserTools: View {
     @Binding var filter: ThreadListFilter
     @Binding var participation: ThreadParticipationFilter
-    let focusSearch: () -> Void
     let create: () -> Void
     let showAll: () -> Void
 
     var body: some View {
-        Menu("도구") {
-            Button("제목·소개 검색", systemImage: "magnifyingglass") {
-                focusSearch()
-            }.keyboardShortcut("f")
-            Button("스레드 만들기", systemImage: "plus") { create() }
+        Button(AppLocalization.string("스레드 만들기"), systemImage: "plus.bubble", action: create)
+            .buttonStyle(UMCToolPrimaryButtonStyle())
+        Divider()
+        UMCToolGroupHeading(AppLocalization.string("목록 보기"))
+        Menu {
+            Picker(AppLocalization.string("분류"), selection: $filter) {
+                ForEach(ThreadListFilter.allCases, id: \.self) { Text($0.title).tag($0) }
+            }.pickerStyle(.inline)
             Divider()
-            Menu("분류 · 참여 상태 필터") {
-                Picker("분류", selection: $filter) {
-                    ForEach(ThreadListFilter.allCases, id: \.self) { value in
-                        Text(value.title).tag(value)
-                    }
-                }.pickerStyle(.inline)
-                Divider()
-                Picker("참여 상태", selection: $participation) {
-                    ForEach(ThreadParticipationFilter.allCases, id: \.self) { value in
-                        Text(value.rawValue).tag(value)
-                    }
-                }.pickerStyle(.inline)
-            }
-            .toggleStyle(.automatic)
-            Button("전체 스레드") {
-                showAll()
-            }
+            Picker(AppLocalization.string("참여 상태"), selection: $participation) {
+                ForEach(ThreadParticipationFilter.allCases, id: \.self) { Text(AppLocalization.string(.init($0.rawValue))).tag($0) }
+            }.pickerStyle(.inline)
+        } label: {
+            Label(AppLocalization.string("분류 · 참여 상태 필터"), systemImage: "line.3.horizontal.decrease")
         }
+        .toggleStyle(.automatic)
+        Button(AppLocalization.string("전체 스레드"), systemImage: "list.bullet", action: showAll)
     }
 }
 
@@ -304,12 +369,12 @@ enum ThreadListFilter: String, CaseIterable {
 
     var title: String {
         switch self {
-        case .all: "모든 분류"
-        case .unread: "읽지 않음"
-        case .study: "스터디"
-        case .question: "질문"
-        case .project: "프로젝트"
-        case .free: "자유"
+        case .all: AppLocalization.string("모든 분류")
+        case .unread: AppLocalization.string("읽지 않음")
+        case .study: AppLocalization.string("스터디")
+        case .question: AppLocalization.string("질문")
+        case .project: AppLocalization.string("프로젝트")
+        case .free: AppLocalization.string("자유")
         }
     }
 }
@@ -343,8 +408,10 @@ private struct ThreadComposer: View {
         Form {
             Text("새 스레드").umcTypography(.title1Bold)
             TextField("이름", text: $title)
+                .umcInputField()
             TextField("설명", text: $description, axis: .vertical)
             TextField("아이콘", text: $icon)
+                .umcInputField()
             Picker("카테고리", selection: $category) {
                 Text("자유").tag("FREE")
                 Text("스터디").tag("STUDY")

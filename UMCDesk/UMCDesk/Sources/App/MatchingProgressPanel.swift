@@ -6,20 +6,51 @@
 //
 
 import CoreDesignSystem
+import CoreUIComponents
 import MatchingDomain
 import SwiftUI
 
 struct MatchingProgressPanel: View {
     let controller: MatchingProgressController
+    var onClose: (() -> Void)? = nil
 
     var body: some View {
+        progress
+            .frame(maxWidth: 520, maxHeight: 254)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .umcTabTools("매칭 현황 도구", inlineTrigger: onClose == nil) { dismiss in
+                if controller.isSignedIn, controller.card != nil, let open = controller.openApplications {
+                    Button("내 지원 보기", systemImage: "doc.text") {
+                        dismiss()
+                        controller.closeExpanded()
+                        open()
+                    }
+                }
+                if let open = onClose ?? controller.openExplorer {
+                    Button("프로젝트 매칭으로 이동", systemImage: "person.2") {
+                        dismiss()
+                        controller.closeExpanded()
+                        open()
+                    }
+                }
+                if controller.isSignedIn {
+                    Divider()
+                    Button("새로고침", systemImage: "arrow.clockwise") {
+                        dismiss()
+                        Task { await controller.refreshOnce() }
+                    }
+                }
+            }
+    }
+
+    private var progress: some View {
         TimelineView(.periodic(from: .now, by: 30)) { timeline in
             let stage = MatchingProgressStage(controller: controller, now: timeline.date)
             VStack(alignment: .leading, spacing: 12) {
                 HStack {
                     Text(controller.round?.name ?? "프로젝트 매칭").font(.caption)
                     Spacer()
-                    Button("닫기  esc") { controller.closeExpanded() }
+                    Button("닫기  esc") { if let onClose { onClose() } else { controller.closeExpanded() } }
                         .buttonStyle(.plain)
                         .keyboardShortcut(.cancelAction)
                 }
@@ -51,13 +82,14 @@ struct MatchingProgressPanel: View {
                         }
                     }
                     Spacer()
-                    Button("내 지원 보기") {
-                        controller.closeExpanded()
-                        controller.openApplications?()
+                    if controller.isSignedIn, controller.card != nil, let open = controller.openApplications {
+                        Button("내 지원 보기") {
+                            controller.closeExpanded()
+                            open()
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .controlSize(.large)
                     }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.large)
-                    .disabled(!controller.isSignedIn)
                 }
             }
             .padding(24)
@@ -83,40 +115,6 @@ struct MatchingProgressPanel: View {
         }
         .frame(maxWidth: .infinity)
         .foregroundStyle(active ? UMCColor.Semantic.textBrandDefault : UMCColor.Semantic.textNeutralDefault)
-    }
-}
-
-struct MatchingProgressWing: View {
-    let controller: MatchingProgressController
-    let leading: Bool
-
-    var body: some View {
-        TimelineView(.periodic(from: .now, by: 30)) { context in
-            let stage = MatchingProgressStage(controller: controller, now: context.date)
-            Button(action: controller.showExpanded) {
-                HStack(spacing: 4) {
-                    if leading {
-                        Image(systemName: "doc.text")
-                        Image(systemName: "minus")
-                        Image(systemName: "person.text.rectangle")
-                        Image(systemName: "minus")
-                        Image(systemName: "clock")
-                        Text(stage.title).lineLimit(1)
-                    } else if let next = stage.next {
-                        Text(next.formatted(date: .omitted, time: .shortened) + " 예정")
-                    } else {
-                        Text("매칭 현황")
-                    }
-                }
-                .font(.caption)
-                .foregroundStyle(leading ? UMCColor.Semantic.textBrandDefault : UMCColor.Semantic.textNeutralDefault)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(UMCColor.Custom.backgroundDefault)
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("매칭 진행 현황 펼치기")
-            .environment(\.colorScheme, .dark)
-        }
     }
 }
 

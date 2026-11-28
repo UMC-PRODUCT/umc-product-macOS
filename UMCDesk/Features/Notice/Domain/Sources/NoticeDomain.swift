@@ -212,7 +212,7 @@ public struct NoticeVote: Codable, Sendable {
         isAnonymous = try values.decode(Bool.self, forKey: .isAnonymous)
         allowMultipleChoice = try values.decode(Bool.self, forKey: .allowMultipleChoice)
         status = try values.decode(String.self, forKey: .status)
-        endsAtExclusive = try values.decode(String.self, forKey: .endsAtExclusive)
+        endsAtExclusive = (try? values.decode(String.self, forKey: .endsAtExclusive)) ?? ""
         totalParticipants = try values.decodeFlexibleString(forKey: .totalParticipants)
         options = try values.decode([NoticeVoteOption].self, forKey: .options)
         mySelectedOptionIds = values.decodeFlexibleStringArray(forKey: .mySelectedOptionIds)

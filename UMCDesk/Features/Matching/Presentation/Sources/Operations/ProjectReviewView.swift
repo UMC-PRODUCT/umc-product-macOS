@@ -6,6 +6,7 @@
 //
 
 import CoreDesignSystem
+import CoreUIComponents
 import MatchingDomain
 import SwiftUI
 
@@ -226,6 +227,7 @@ struct ProjectTeamView: View {
                     Text("팀원 관리").umcTypography(.title3Bold)
                     if canEditTeam {
                         TextField("추가할 회원 ID", text: $memberId)
+                            .umcInputField()
                         Picker("파트", selection: $part) {
                             ForEach(["PLAN"] + (canManageRegularMembers ? OperationsPart.selectable : []), id: \.self) {
                                 Text(MatchingLabel.part($0)).tag($0)
@@ -243,6 +245,7 @@ struct ProjectTeamView: View {
                             Text("활동 중단").tag("DISMISSED")
                         }
                         TextField("상태 변경 사유", text: $reason)
+                            .umcInputField()
                     }
                     if !canEditTeam {
                         Text("팀원 정보를 조회할 수 있어요.").foregroundStyle(.secondary)

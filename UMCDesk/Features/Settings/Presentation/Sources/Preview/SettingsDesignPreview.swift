@@ -5,7 +5,6 @@
 //  Created by euijjang97 on 10/20/26.
 //
 
-#if DEBUG || UMC_PRERELEASE
 import Foundation
 import SettingsDomain
 
@@ -15,6 +14,17 @@ public enum SettingsDesignPreview {
         PreviewSettingsSystemActions()
     }
 
+    public static func workspace(
+        preferences: SettingsPreferences, isEmpty: Bool = false
+    ) -> SettingsViewModel {
+        let profile = makeProfile(isEmpty: isEmpty, showsAllRoles: true)
+        let model = SettingsViewModel(useCase: PreviewSettingsUseCase(profile: profile),
+            preferences: preferences, systemActions: PreviewSettingsSystemActions())
+        model.seedDesignProfile(profile)
+        return model
+    }
+
+    #if DEBUG || UMC_PRERELEASE
     public static let ids = [
         "757:12600", "766:2895", "770:4216", "770:14893", "771:15573", "771:15714",
         "771:15995", "776:16447", "776:16803", "765:15045", "776:17026", "911:19103",
@@ -70,12 +80,14 @@ public enum SettingsDesignPreview {
         return model
     }
 
+    #endif
+
     public static func prepareViewModel(_ model: SettingsViewModel, page: SettingsPage) {
         guard model.isDesignPreview, !model.isAccountBusy, !model.isClearingCache else { return }
         model.dismissDialog()
         model.toast = nil
-        if model.profile == nil {
-            model.seedDesignProfile(makeProfile(isEmpty: false, showsAllRoles: true))
+        if model.profile == nil, let previewProfile = model.previewProfile {
+            model.seedDesignProfile(previewProfile)
         }
         model.navigate(to: page)
     }
@@ -92,11 +104,11 @@ public enum SettingsDesignPreview {
             "WEB_PRODUCT_ENGINEER", "MOBILE_PRODUCT_ENGINEER",
         ]
         let roleActivities = roles.enumerated().map { index, role in
-            SettingsActivity(id: role, generation: "11", part: parts[index % parts.count],
-                roles: [role])
+            SettingsActivity(id: role, generation: String(11 - index / 4), part: parts[index % parts.count],
+                roles: index == 0 ? [role, "PRODUCT", "CENTRAL_OPERATING_TEAM_MEMBER"] : [role])
         }
-        return SettingsProfile(id: "preview-member", name: "김유엠", nickname: "유엠",
-            email: "umc@example.com", schoolName: "00대학교",
+        return SettingsProfile(id: "101", name: "김유엠", nickname: "유엠",
+            email: "umc@example.com", schoolName: "한빛대학교",
             links: isEmpty ? .init() : .init(github: "https://github.com/umc-member",
                 linkedIn: "https://linkedin.com/in/umc-member",
                 blog: "https://umc-member.example.com"),
@@ -151,4 +163,3 @@ private final class PreviewSettingsSystemActions: SettingsSystemActions {
     func latestRelease() async throws -> SettingsRelease? { nil }
     func clearAccountNotifications() async {}
 }
-#endif

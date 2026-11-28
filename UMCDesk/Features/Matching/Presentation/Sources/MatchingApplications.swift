@@ -119,9 +119,14 @@ struct MatchingApplications: View {
                 .id(card.projectId)
             }
             HStack {
-                MatchingBadge(text: card.project?.name ?? "프로젝트")
-                if let round = card.matchingRound { Text(roundLabel(round)).umcTypography(.title3Bold) }
-                Text(MatchingLabel.status(card.status)).umcTypography(.bodyRegular)
+                VStack(alignment: .leading, spacing: UMCSpacing.value4) {
+                    Text(card.project?.name ?? "프로젝트").umcTypography(.title3Bold)
+                    if let round = card.matchingRound {
+                        Text(roundLabel(round)).umcTypography(.bodyRegular).foregroundStyle(.secondary)
+                    }
+                }
+                Spacer()
+                MatchingBadge(text: MatchingLabel.status(card.status))
             }
             if let applicationId = card.applicationId {
                 let item = MatchingApplicationRoute(id: applicationId, projectId: card.projectId,
@@ -294,6 +299,35 @@ private struct MatchingAssignmentResult: View {
         .focused($teamButtonFocused)
         .keyboardShortcut(teamShortcut ? KeyboardShortcut("t", modifiers: .option) : nil)
         .help(teamShortcut ? "공개 팀 구성 보기 (⌥T)" : "공개 팀 구성 보기")
+    }
+}
+
+public struct PublishedMatchingTeamSheet: View {
+    let repository: any MatchingUseCase
+    let projectId: String
+    let memberId: String
+    @State private var request = MatchingRequest<OperationsTeam?>()
+    @State private var attempt = 0
+
+    public init(repository: any MatchingUseCase, projectId: String, memberId: String) {
+        self.repository = repository
+        self.projectId = projectId
+        self.memberId = memberId
+    }
+
+    public var body: some View {
+        MatchingTeamPanel {
+            MatchingRequestView(request: request, retry: { attempt += 1 }) { team in
+                if let team, team.publishedMember(withID: memberId) != nil {
+                    MatchingRosterList(team: team)
+                } else {
+                    Text("공개 팀 명단에서 참여를 확인할 수 없어요.")
+                }
+            }
+        }
+        .task(id: attempt) {
+            await request.load { try await repository.publishedTeam(projectId: projectId) }
+        }
     }
 }
 

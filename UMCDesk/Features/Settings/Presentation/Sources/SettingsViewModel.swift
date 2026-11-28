@@ -77,16 +77,11 @@ public final class SettingsViewModel {
     private(set) var releaseCheckedAt: Date?
     private(set) var releaseMessage: String?
     private(set) var releaseFailed = false
-    @ObservationIgnored private var history: [SettingsPage] = [.general]
-    private(set) var historyIndex = 0
     @ObservationIgnored private var accountGeneration = 0
     @ObservationIgnored private var hasLoaded = false
-    #if DEBUG || UMC_PRERELEASE
-    var isDesignPreview = false
+    private(set) var previewProfile: SettingsProfile?
+    var isDesignPreview: Bool { previewProfile != nil }
     var previewShowsProfileMenu = false
-    #else
-    var isDesignPreview: Bool { false }
-    #endif
 
     public init(
         useCase: any SettingsUseCase,
@@ -98,20 +93,16 @@ public final class SettingsViewModel {
         self.systemActions = systemActions
     }
 
-    #if DEBUG || UMC_PRERELEASE
     func seedDesignProfile(_ value: SettingsProfile) {
         profile = value
         profileState = .loaded(value)
         hasLoaded = true
-        isDesignPreview = true
+        previewProfile = value
         systemStatus = .init(loginItem: .disabled, notifications: .authorized,
             location: .authorized)
         cacheBytes = 128_000_000
     }
-    #endif
 
-    var canGoBack: Bool { historyIndex > 0 }
-    var canGoForward: Bool { historyIndex + 1 < history.count }
     var isAccountBusy: Bool { isSaving || isRegistering || isLoggingOut }
     var canSubmitCode: Bool {
         challengerCode.trimmingCharacters(in: .whitespacesAndNewlines).count == 6
@@ -163,23 +154,7 @@ public final class SettingsViewModel {
     }
 
     public func navigate(to destination: SettingsPage) {
-        guard destination != page else { return }
-        history = Array(history.prefix(historyIndex + 1))
-        history.append(destination)
-        historyIndex = history.count - 1
         page = destination
-    }
-
-    func goBack() {
-        guard canGoBack else { return }
-        historyIndex -= 1
-        page = history[historyIndex]
-    }
-
-    func goForward() {
-        guard canGoForward else { return }
-        historyIndex += 1
-        page = history[historyIndex]
     }
 
     func load() async {

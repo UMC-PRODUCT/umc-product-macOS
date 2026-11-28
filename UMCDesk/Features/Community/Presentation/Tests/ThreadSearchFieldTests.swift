@@ -31,6 +31,11 @@ struct ThreadSearchFieldTests {
             context: nil, characters: "f", charactersIgnoringModifiers: "f",
             isARepeat: false, keyCode: 3))
         #expect(window.performKeyEquivalent(with: findKey))
+        let focusDeadline = ContinuousClock.now + .seconds(2)
+        while field.currentEditor() == nil, ContinuousClock.now < focusDeadline {
+            try await Task.sleep(for: .milliseconds(10))
+            host.layoutSubtreeIfNeeded()
+        }
         let editor = try #require(field.currentEditor() as? NSTextView)
         editor.insertText("한글", replacementRange: .init(location: NSNotFound, length: 0))
         editor.doCommand(by: #selector(NSResponder.insertNewline(_:)))
@@ -45,6 +50,67 @@ struct ThreadSearchFieldTests {
         window.contentView = nil
     }
 
+    @Test func disabledBrowserSearchYieldsCommandFToTheToolsPanel() throws {
+        let host = NSHostingView(rootView: ThreadSearchField(query: .constant(""),
+                                                             selectResult: {}).disabled(true))
+        let window = NSWindow(contentRect: .init(x: 0, y: 0, width: 320, height: 60),
+                              styleMask: [.titled], backing: .buffered, defer: false)
+        window.contentView = host
+        defer { window.contentView = nil }
+        host.layoutSubtreeIfNeeded()
+        let field = try #require(find(NSSearchField.self, in: host))
+        let event = try #require(NSEvent.keyEvent(with: .keyDown, location: .zero,
+            modifierFlags: .command, timestamp: 0, windowNumber: window.windowNumber,
+            context: nil, characters: "f", charactersIgnoringModifiers: "f",
+            isARepeat: false, keyCode: 3))
+        #expect(!field.isEnabled)
+        #expect(!field.performKeyEquivalent(with: event))
+    }
+
+    @Test func retryRestoresTheSelectedThreadAfterAnIndependentFetchFailure() async {
+        let fixture = ThreadSearchRepository()
+        await fixture.failNextDetailFetch()
+        let restoration = ThreadRestoration()
+        await restoration.load(id: "42", repository: fixture)
+        guard case .failed = restoration.state else {
+            Issue.record("상세 조회 실패가 복원 패널에 표시되어야 합니다.")
+            return
+        }
+        await restoration.load(id: "42", repository: fixture)
+        guard case .loaded(let thread) = restoration.state else {
+            Issue.record("다시 시도하면 같은 스레드가 복원되어야 합니다.")
+            return
+        }
+        #expect(thread.id == "42")
+        #expect(await fixture.detailRequests == ["42", "42"])
+    }
+
+    @Test func paginationPreservesUnsavedEditsInTheRestoredThread() async throws {
+        let fixture = ThreadSearchRepository()
+        let state = DraftProbeState()
+        let view = DraftProbeHost(repository: fixture, state: state)
+        let controller = NSHostingController(rootView: view)
+        let window = NSWindow(contentViewController: controller)
+        defer { window.contentView = nil }
+        func waitFor(_ condition: () -> Bool) async throws {
+            let deadline = ContinuousClock.now + .seconds(3)
+            while !condition(), ContinuousClock.now < deadline {
+                controller.view.layoutSubtreeIfNeeded()
+                try await Task.sleep(for: .milliseconds(20))
+            }
+            try #require(condition())
+        }
+        try await waitFor { state.edit != nil }
+        state.edit?("아직 보내지 않은 수정")
+        try await waitFor { state.rendered == "한글 결과:아직 보내지 않은 수정" }
+        state.listed = CommunityThread(id: "42", title: "추가 페이지 결과", description: nil,
+            icon: "💬", isPinned: false, isMuted: false, isJoined: false,
+            membershipState: nil, unread: "0")
+        try await waitFor { state.rendered.hasPrefix("추가 페이지 결과:") }
+        #expect(state.rendered == "추가 페이지 결과:아직 보내지 않은 수정")
+        #expect(await fixture.detailRequests == ["42"])
+    }
+
     @Test func filterMenuShowsOneNativeMarkPerGroupAfterReopening() throws {
         var category = ThreadListFilter.all
         var participation = ThreadParticipationFilter.all
@@ -53,10 +119,9 @@ struct ThreadSearchFieldTests {
             let tools = ThreadBrowserTools(
                 filter: .init(get: { category }, set: { category = $0 }),
                 participation: .init(get: { participation }, set: { participation = $0 }),
-                focusSearch: {}, create: {}, showAll: {}
+                create: {}, showAll: {}
             )
-            let root = NSHostingMenu(rootView: tools.toggleStyle(UMCCheckboxStyle()))
-            let menu = try #require(root.item(withTitle: "도구")?.submenu)
+            let menu = NSHostingMenu(rootView: tools.toggleStyle(UMCCheckboxStyle()))
             return try #require(menu.item(withTitle: "분류 · 참여 상태 필터")?.submenu)
         }
 
@@ -85,30 +150,25 @@ struct ThreadSearchFieldTests {
         try verifyRows(in: openFilters())
     }
 
-    @Test func toolsAndSharingUseNativeMenuActionsAndServerPayload() throws {
-        var activated: [String] = []
-        var filter = ThreadListFilter.all
-        var participation = ThreadParticipationFilter.all
-        let tools = ThreadBrowserTools(filter: .init(get: { filter }, set: { filter = $0 }),
-            participation: .init(get: { participation }, set: { participation = $0 }),
-            focusSearch: { activated.append("search") }, create: { activated.append("create") },
-            showAll: { activated.append("all") })
-        let root = NSHostingMenu(rootView: tools)
-        let menu = try #require(root.item(withTitle: "도구")?.submenu)
-        for title in ["제목·소개 검색", "스레드 만들기", "전체 스레드"] {
-            let action = try #require(menu.item(withTitle: title))
-            menu.performActionForItem(at: menu.index(of: action))
+    @Test func emptyThreadToolsKeepBothFiltersAndAllThreads() throws {
+        var actions: [String] = []
+        let tools = ThreadBrowserTools(filter: .constant(.all), participation: .constant(.all),
+            create: { actions.append("create") }, showAll: { actions.append("all") })
+        let menu = NSHostingMenu(rootView: tools)
+        for title in ["스레드 만들기", "전체 스레드"] {
+            let item = try #require(menu.item(withTitle: title))
+            menu.performActionForItem(at: menu.index(of: item))
         }
-        #expect(activated == ["search", "create", "all"])
-        let search = try #require(menu.item(withTitle: "제목·소개 검색"))
-        #expect(search.keyEquivalent == "f" && search.keyEquivalentModifierMask.contains(.command))
-        let filters = try #require(menu.item(withTitle: "분류 · 참여 상태 필터")?.submenu)
-        for title in ["프로젝트", "미참여"] {
-            let action = try #require(filters.item(withTitle: title))
-            filters.performActionForItem(at: filters.index(of: action))
-        }
-        #expect(filter == .project && participation == .unjoined)
+        #expect(actions == ["create", "all"])
+        #expect(menu.items.compactMap(\.submenu).contains {
+            $0.item(withTitle: ThreadListFilter.project.title) != nil
+        })
+        #expect(menu.items.compactMap(\.submenu).contains {
+            $0.item(withTitle: ThreadParticipationFilter.unjoined.rawValue) != nil
+        })
+    }
 
+    @Test func sharingUsesNativeMenuActionsAndServerPayload() throws {
         func share(_ url: URL?) -> ThreadShareMenu {
             .init(thread: .init(id: "42", title: "스터디", description: "이번 주 소개", icon: "💬",
                                 isPinned: false, isMuted: false, isJoined: true,
@@ -144,12 +204,16 @@ struct ThreadSearchFieldTests {
         let control = ThreadSearchField(query: .init(get: { query }, set: { query = $0 })) {
             selectedQueries.append(query)
         }
-        let delegate = control.makeCoordinator()
+        let host = NSHostingView(rootView: control)
         let window = NSWindow(contentRect: .init(x: 0, y: 0, width: 320, height: 120),
                               styleMask: [.titled], backing: .buffered, defer: false)
-        let field = NSSearchField(frame: .init(x: 0, y: 70, width: 240, height: 32))
-        field.delegate = delegate
-        window.contentView?.addSubview(field)
+        window.contentView = host
+        defer { window.contentView = nil }
+        host.layoutSubtreeIfNeeded()
+        let field = try #require(find(NSSearchField.self, in: host))
+        let delegate = try #require(field.delegate)
+        #expect(field.focusRingType == .none)
+        #expect(!field.isBordered)
         #expect(window.makeFirstResponder(field))
         let editor = try #require(field.currentEditor() as? NSTextView)
         let cursor = NSRange(location: 1, length: 0)
@@ -158,8 +222,8 @@ struct ThreadSearchFieldTests {
         editor.setMarkedText("한", selectedRange: cursor, replacementRange: insertion)
         #expect(editor.hasMarkedText())
         #expect(query.isEmpty)
-        #expect(!delegate.control(field, textView: editor,
-                                  doCommandBy: #selector(NSResponder.insertNewline(_:))))
+        #expect(delegate.control?(field, textView: editor,
+                                  doCommandBy: #selector(NSResponder.insertNewline(_:))) == false)
         #expect(selectedQueries.isEmpty)
         editor.insertText("한", replacementRange: insertion)
         #expect(query == "한")
@@ -170,15 +234,56 @@ struct ThreadSearchFieldTests {
     }
 }
 
+@MainActor @Observable
+private final class DraftProbeState {
+    var listed: CommunityThread?
+    var edit: ((String) -> Void)?
+    var rendered = ""
+}
+
+private struct DraftProbeHost: View {
+    let repository: any CommunityThreadRepository
+    let state: DraftProbeState
+
+    var body: some View {
+        RestoredThreadPane(id: "42", listed: state.listed, repository: repository) { thread in
+            DraftProbe(title: thread.title, state: state)
+        }
+    }
+}
+
+private struct DraftProbe: View {
+    let title: String
+    let state: DraftProbeState
+    @State private var draft = ""
+
+    var body: some View {
+        TextField(title, text: $draft)
+            .onAppear { state.edit = { draft = $0 } }
+            .onChange(of: title + ":" + draft, initial: true) { _, value in
+                state.rendered = value
+            }
+    }
+}
+
 private actor ThreadSearchRepository:
     CommunityThreadRepository, ThreadConversationRepository, ThreadManagementRepository
 {
     var selected = ""
+    private var failDetail = false
+    private(set) var detailRequests: [String] = []
+
+    func failNextDetailFetch() { failDetail = true }
     let row = CommunityThread(id: "42", title: "한글 결과", description: nil, icon: "💬",
                               isPinned: false, isMuted: false, isJoined: false,
                               membershipState: nil, unread: "0")
 
     func thread(id: String) async throws -> CommunityThread {
+        detailRequests.append(id)
+        if failDetail {
+            failDetail = false
+            throw URLError(.timedOut)
+        }
         selected = id
         return row
     }
