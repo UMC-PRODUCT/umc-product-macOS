@@ -18,6 +18,31 @@ struct SupportFlowTests {
     }
 
     #if DEBUG
+    @Test func staleEditorCannotRestoreArchivedPublication() throws {
+        let fixture = SupportFixture()
+        var older = try #require(fixture.drafts.first)
+        fixture.apply(.archive, draft: older)
+        older.article.answer = "두 번째 창의 초안"
+        let saved = fixture.apply(.save, draft: older)
+        #expect(saved.archived && saved.published == nil)
+        #expect(!fixture.publishedArticles.contains { $0.id == older.id })
+        #expect(saved.article.answer == older.article.answer)
+    }
+
+    @Test func concurrentLabelEditsAppendHistoryOncePerMutation() throws {
+        var ticket = try #require(SupportFixture().tickets.first)
+        let initial = ticket.labels
+        let originalCount = ticket.history.count
+        ticket.applyLabels(original: initial, selected: initial)
+        #expect(ticket.history.count == originalCount)
+        ticket.applyLabels(original: initial, selected: initial + ["기능 요청"])
+        ticket.applyLabels(original: initial, selected: initial.filter { $0 != "정보 확인" })
+        #expect(ticket.labels.contains("기능 요청"))
+        #expect(!ticket.labels.contains("정보 확인"))
+        #expect(ticket.history.count == originalCount + 2)
+        #expect(Set(ticket.history.map(\.id)).count == ticket.history.count)
+    }
+
     @Test func localInquiryLifecycle() throws {
         let fixture = SupportFixture()
         let otherWindow = SupportFixture()

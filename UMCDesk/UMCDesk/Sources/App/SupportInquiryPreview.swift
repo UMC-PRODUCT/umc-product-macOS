@@ -10,6 +10,8 @@ import SwiftUI
 
 struct SupportInquiryPreview: View {
     @Bindable var fixture: SupportFixture
+    var scene = SupportScene.home
+    var selectTicket: (UUID?) -> Void = { _ in }
     var isOperator = false
     let showAnswers: () -> Void
     @State private var status: SupportInquiryStatus?
@@ -31,7 +33,10 @@ struct SupportInquiryPreview: View {
     @State private var initialDraft: SupportDraft?
 
     init(fixture: SupportFixture, isOperator: Bool = false, initialTicket: UUID? = nil,
+         scene: SupportScene = .home, selectTicket: @escaping (UUID?) -> Void = { _ in },
          showAnswers: @escaping () -> Void) {
+        self.scene = scene
+        self.selectTicket = selectTicket
         self.fixture = fixture
         self.isOperator = isOperator
         self.showAnswers = showAnswers
@@ -74,11 +79,12 @@ struct SupportInquiryPreview: View {
                 managingFAQ = false
             }
         } else if let ticket = selectedTicket {
-            SupportTicketDetail(ticket: ticket, isOperator: isOperator, articles: fixture.publishedArticles) {
+            SupportTicketDetail(ticket: ticket, scene: scene, isOperator: isOperator, articles: fixture.publishedArticles) {
                 highlightedID = selectedID
                 selectedID = nil
             }
             .id(ticket.wrappedValue.id)
+            .onAppear { selectTicket(ticket.wrappedValue.id) }
         } else {
             HStack {
                 Text(isOperator ? "접수된 문의" : "내 문의 현황")
@@ -113,6 +119,7 @@ struct SupportInquiryPreview: View {
                         operatorFilters
                     }
 
+                    HStack(alignment: .top, spacing: 24) {
                     ticketTable
                         .overlay {
                             if isOperator && tickets.isEmpty {
@@ -128,11 +135,12 @@ struct SupportInquiryPreview: View {
                                 }
                             }
                         }
-                    if isOperator, let suggestion = tickets.first(where: needsDraft) {
-                        HStack {
+                    if isOperator, let suggestion = tickets.first {
+                        VStack(alignment: .leading, spacing: 16) {
                             VStack(alignment: .leading, spacing: UMCSpacing.value4) {
                                 Text("답변 준비 필요").umcTypography(.headlineBold)
-                                Text(suggestion.subject).umcTypography(.bodyRegular)
+                                Text("알림이 오지 않아요").umcTypography(.bodyRegular)
+                                Text("최근 24시간 · 6명 문의")
                             }
                             Spacer()
                             Button("FAQ 초안 작성") {
@@ -144,9 +152,8 @@ struct SupportInquiryPreview: View {
                                 managingFAQ = true
                             }
                         }
-                        .padding(UMCSpacing.value12)
-                        .background(UMCColor.Custom.backgroundSurfaceGreyWeaker,
-                                    in: .rect(cornerRadius: UMCRadius.value12))
+                        .frame(maxWidth: .infinity, alignment: .leading).supportCard().frame(width: 298)
+                    }
                     }
                 }
             }
@@ -196,19 +203,25 @@ struct SupportInquiryPreview: View {
     private var ticketTable: some View {
         Table(tickets, selection: $highlightedID) {
             TableColumn("문의") { ticket in
-                Button(ticket.subject) { selectedID = ticket.id }
-                    .buttonStyle(.link)
+                Button {
+                    selectedID = ticket.id
+                } label: {
+                    VStack(alignment: .leading) {
+                        Text(ticket.subject).inquiryFont(16, weight: .medium)
+                        if isOperator { Text(ticket.category + " · " + ticket.team.rawValue).inquiryFont(13) }
+                    }
+                }.buttonStyle(.plain)
             }
+            TableColumn("상태") { Text($0.status.rawValue) }
             if isOperator {
                 TableColumn("담당자") { Text($0.assignee) }
                 TableColumn("라벨") { Text($0.label) }
-                TableColumn("받는 팀") { Text($0.team.rawValue) }
             }
-            TableColumn("상태") { Text($0.status.rawValue) }
             TableColumn("접수일") {
                 Text($0.createdAt, format: .dateTime.month().day()).monospacedDigit()
             }
         }
+        .environment(\.defaultMinListRowHeight, 64)
         .alternatingRowBackgrounds(.disabled)
         .focused($tableFocused)
         .onAppear { tableFocused = true }
@@ -239,12 +252,17 @@ struct SupportComposePreview: View {
         reference ?? articles.first { $0.category == category }
     }
 
-    init(articles: [SupportArticle], cancel: @escaping () -> Void,
+    init(articles: [SupportArticle], scene: SupportScene = .home, cancel: @escaping () -> Void,
          submit: @escaping (String, String, SupportTeam, String, SupportArticle?, String?) -> Void, reference: SupportArticle? = nil) {
         self.articles = articles
         self.cancel = cancel
         self.submit = submit
-        _reference = State(initialValue: reference)
+        if [.compose, .reference, .team].contains(scene) {
+            _content = State(initialValue: "앱에서 출석 기록이 실제와 다르게 표시돼요.\n새로고침해도 같아서 앱 버전과 오류 화면을 보내드립니다.")
+            _attachment = State(initialValue: "오류 화면.png")
+        }
+        _choosingTeam = State(initialValue: scene == .team)
+        _reference = State(initialValue: reference ?? (scene == .reference ? articles.first : nil))
         _category = State(initialValue: reference?.category ?? "출석·과제")
     }
 
@@ -260,6 +278,7 @@ struct SupportComposePreview: View {
                 Text("서비스 이용 중 겪은 문제를 알려주시면 UMC PRODUCT가 확인해 드려요.")
                 HStack(alignment: .top, spacing: 24) {
                     VStack(alignment: .leading, spacing: 16) {
+                        HStack(spacing: 20) {
                         Picker("카테고리", selection: $category) {
                             ForEach(Array(Set(articles.map(\.category))).sorted(), id: \.self) {
                                 Text($0).tag($0)
@@ -267,18 +286,20 @@ struct SupportComposePreview: View {
                         }
                         Text("받는 팀").umcTypography(.headlineBold)
                         Button(team?.rawValue ?? "받는 팀 선택") { choosingTeam = true }
+                        }
+                        Text("문의와 가까운 팀을 선택해 주세요. 잘 모르겠다면 UMC PRODUCT에서 확인해 드려요.")
                         Text("문의 내용").umcTypography(.headlineBold)
                         TextEditor(text: $content)
-                            .accessibilityLabel("문의 내용").frame(minHeight: 120)
+                            .accessibilityLabel("문의 내용").frame(height: 156)
                             .border(UMCColor.Semantic.borderNeutralWeak200)
                         Text("첨부").umcTypography(.headlineBold)
                         Button(attachment ?? "예시 오류 화면 첨부") {
                             attachment = attachment == nil ? "오류 화면.png" : nil
                         }
-                        if let reference {
-                            Text("참고한 답변 · " + reference.question)
-                        }
+                        Text("이미지·문서, 최대 50MB").inquiryFont(13)
+                        Spacer()
                         HStack {
+                            Spacer()
                             Button("취소", action: cancel)
                             Button("문의 보내기") {
                                 guard let team else { choosingTeam = true; return }
@@ -290,20 +311,29 @@ struct SupportComposePreview: View {
                             .disabled(content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                         }
                     }
-                    .padding(24)
+                    .frame(maxWidth: .infinity, alignment: .leading).supportCard()
                     if let suggestion {
                         VStack(alignment: .leading, spacing: 16) {
                             Text("먼저 확인해 보세요").umcTypography(.headlineBold)
                             Text(suggestion.question)
                             Text("검증된 답변 · UMC PRODUCT")
                             Button("답변 확인하기") { reading = true }
+                            Text("답변을 읽지 않아도 문의를 보낼 수 있어요. 작성하던 내용과 첨부는 유지돼요.")
+                            if let reference {
+                                Text("참고한 답변\n" + reference.question).padding(16)
+                                    .background(UMCColor.Semantic.surfaceBrandWeak, in: .rect(cornerRadius: 12))
+                            }
                         }
-                        .padding(24).frame(width: 360, alignment: .leading)
-                        .background(UMCColor.Custom.backgroundSurfaceGreyWeak, in: .rect(cornerRadius: 16))
+                        .frame(maxWidth: .infinity, alignment: .leading).supportCard().frame(width: 360)
                     }
                 }
             }
-            .sheet(isPresented: $choosingTeam) {
+            .disabled(choosingTeam).accessibilityHidden(choosingTeam)
+            .overlay {
+                if choosingTeam {
+                ZStack {
+                UMCColor.Custom.backgroundDimmed
+                    .onTapGesture { choosingTeam = false }
                 VStack(alignment: .leading, spacing: 20) {
                     HStack {
                         Text("어느 팀에 문의할까요?").umcTypography(.title2Bold)
@@ -331,6 +361,9 @@ struct SupportComposePreview: View {
                         }
                     }
                 }.padding(25).frame(width: 816, height: 587)
+                    .background(UMCColor.Custom.backgroundSurface, in: .rect(cornerRadius: 16))
+                }
+                }
             }
         }
     }

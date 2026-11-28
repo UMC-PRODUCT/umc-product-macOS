@@ -10,10 +10,13 @@ import SwiftUI
 
 struct SupportTicketDetail: View {
     @Binding var ticket: SupportTicket
+    var scene = SupportScene.home
+    @State private var editingAssignee = false
     let isOperator: Bool
     var articles: [SupportArticle] = []
     let back: () -> Void
     @State private var editingLabel = false
+    @State private var initialLabels: [String] = []
     @State private var pendingLabels: [String] = []
     @State private var message = ""
     @FocusState private var inputFocused: Bool
@@ -43,10 +46,11 @@ struct SupportTicketDetail: View {
                 ScrollViewReader { scroll in
                     ScrollView {
                         VStack(alignment: .leading, spacing: UMCSpacing.value16) {
-                            if ticket.status == .received && !ticket.replies.contains(where: { $0.author == .agent }) {
-                                Label("답변 대기 · 담당자가 문의를 확인하고 있어요.", systemImage: "clock")
-                            }
                             bubble(ticket.content, author: .requester, date: ticket.createdAt)
+                            if ticket.status == .received && !ticket.replies.contains(where: { $0.author == .agent }) {
+                                Text("문의가 접수됐어요. 이 대화에서 답변을 확인할 수 있어요.")
+                                    .inquiryFont(13).foregroundStyle(UMCColor.Semantic.textNeutralMedium600)
+                            }
                             if let file = ticket.attachmentName { Label(file, systemImage: "paperclip") }
                             if let reference = ticket.reference { Text("참고한 답변 · " + reference.question) }
                             ForEach(ticket.replies) { reply in
@@ -78,7 +82,7 @@ struct SupportTicketDetail: View {
                         .accessibilityIdentifier("support.send")
                         .disabled(message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                     }
-                    .padding(UMCSpacing.value16)
+                    .padding(16).frame(minHeight: 104)
                     .background(UMCColor.Custom.backgroundSurface,
                                 in: .rect(cornerRadius: UMCRadius.value12))
                     if ticket.status == .closed {
@@ -94,10 +98,11 @@ struct SupportTicketDetail: View {
             if isOperator { operations.frame(width: 360) }
             }
         }
-        .onChange(of: ticket.labels) { ticket.history.append("라벨 · " + ticket.label) }
-        .onChange(of: ticket.assignee) { ticket.history.append("담당자 · " + ticket.assignee) }
-        .onChange(of: ticket.status) { ticket.history.append(ticket.status.rawValue) }
-        .onAppear { inputFocused = ticket.status != .closed }
+        .onAppear {
+            inputFocused = ticket.status != .closed
+            editingAssignee = scene == .assignee
+            if scene == .labels { initialLabels = ticket.labels; pendingLabels = ticket.labels; editingLabel = true }
+        }
     }
 
     private func bubble(_ text: String, author: SupportTicket.Author, date: Date) -> some View {
@@ -105,35 +110,50 @@ struct SupportTicketDetail: View {
         let time = date.formatted(date: .omitted, time: .shortened)
         let surface = own
             ? UMCColor.Semantic.surfaceBrandMedium : UMCColor.Custom.backgroundSurface
-        return VStack(alignment: own ? .trailing : .leading, spacing: UMCSpacing.value4) {
+        return HStack(alignment: .top, spacing: 12) {
+            if !own {
+                Text(isOperator ? "유" : "운").frame(width: 32, height: 32)
+                    .background(UMCColor.Semantic.surfaceBrandWeak, in: .circle)
+            }
+            VStack(alignment: own ? .trailing : .leading, spacing: UMCSpacing.value4) {
             Text("\(own ? "나" : author.rawValue) · \(time)")
                 .umcTypography(.footnoteRegular)
                 .foregroundStyle(.secondary)
-            Text(text).textSelection(.enabled)
-                .padding(UMCSpacing.value12)
+            Text(text).inquiryFont(14).textSelection(.enabled)
+                .padding(14)
                 .background(surface, in: .rect(cornerRadius: UMCRadius.value12))
         }
-        .frame(maxWidth: 580, alignment: own ? .trailing : .leading)
+        .frame(maxWidth: 660, alignment: own ? .trailing : .leading)
+        }
         .frame(maxWidth: .infinity, alignment: own ? .trailing : .leading)
         .accessibilityElement(children: .combine)
     }
 
     private var operations: some View {
         GroupBox("처리 정보") {
-            Form {
+            VStack(alignment: .leading, spacing: 12) {
                 Picker("받는 팀", selection: $ticket.team) {
                     ForEach(SupportTeam.allCases, id: \.self) { Text($0.rawValue).tag($0) }
                 }
-                Picker("담당자", selection: $ticket.assignee) {
-                    Text("미배정").tag("미배정")
-                    Text("예시 담당자").tag("예시 담당자")
-                }
+                Button(ticket.assignee + " ▾") { editingAssignee.toggle(); editingLabel = false }
+                    .overlay(alignment: .topTrailing) {
+                        if editingAssignee {
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text("담당자 선택")
+                                ForEach(["이지원", "예시 담당자", "미배정"], id: \.self) { name in
+                                    Button(name) { ticket.assignee = name; editingAssignee = false }
+                                }
+                            }.frame(width: 180).supportCard(padding: 16).offset(y: 36)
+                        }
+                    }.zIndex(editingAssignee ? 2 : 0)
                 Button("내가 맡기") { ticket.assignee = "예시 담당자" }
                 Button("라벨 · " + ticket.label) {
+                    initialLabels = ticket.labels
                     pendingLabels = ticket.labels
                     editingLabel = true
                 }
-                .popover(isPresented: $editingLabel) {
+                .overlay(alignment: .topTrailing) {
+                    if editingLabel {
                     VStack(alignment: .leading, spacing: 12) {
                         Text("라벨 편집").umcTypography(.headlineBold)
                         ForEach(["출석 오류", "정보 확인", "기능 요청", "로그인"], id: \.self) { name in
@@ -147,22 +167,28 @@ struct SupportTicketDetail: View {
                         }
                         HStack {
                             Button("취소") { editingLabel = false }.keyboardShortcut(.cancelAction)
-                            Button("적용") { ticket.labels = pendingLabels; editingLabel = false }
+                            Button("적용") { ticket.applyLabels(original: initialLabels, selected: pendingLabels); editingLabel = false }
                         }
-                    }.padding(20)
-                }
+                    }.frame(width: 220).supportCard(padding: 20).offset(y: 36)
+                    }
+                }.zIndex(editingLabel ? 2 : 0)
                 Picker("대표 질문 연결", selection: $ticket.linkedQuestion) {
                     Text("미분류").tag(String?.none)
                     ForEach(articles) { Text($0.question).tag(Optional($0.id)) }
                 }
-                ForEach(Array(ticket.history.enumerated()), id: \.offset) { Text($0.element) }
+                Text("처리 이력").umcTypography(.headlineBold)
+                Text("문의 접수 · 담당자 미배정")
+                ForEach(ticket.history) { event in
+                    Text(event.time.formatted(date: .omitted, time: .shortened)
+                         + " · " + event.actor + " · " + event.message)
+                }
             }
             .padding(UMCSpacing.value12)
         }
     }
 
     private func send() {
-        ticket.reply(message, from: isOperator ? .agent : .requester)
+        guard ticket.reply(message, from: isOperator ? .agent : .requester) else { return }
         message = ""
         inputFocused = true
     }
