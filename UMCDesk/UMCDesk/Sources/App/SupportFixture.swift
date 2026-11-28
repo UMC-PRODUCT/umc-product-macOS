@@ -47,7 +47,14 @@ struct SupportTicket: Identifiable {
     var operatorTitle: String?
     var teamDisplayName: String?
     var visibleTeam: String { teamDisplayName ?? team.rawValue }
-    var team: SupportTeam { didSet { if oldValue != team { teamDisplayName = nil; record("받는 팀 · " + team.rawValue) } } }
+    var team: SupportTeam {
+        didSet {
+            if oldValue != team {
+                teamDisplayName = nil
+                record("받는 팀 · " + team.rawValue)
+            }
+        }
+    }
     var category = "기타"
     var assignee = "미배정" { didSet { if oldValue != assignee { record("담당자 · " + assignee) } } }
     var labels: [String] = [] { didSet { if oldValue != labels { record("라벨 · " + label) } } }
@@ -79,7 +86,8 @@ struct SupportTicket: Identifiable {
     var status = SupportInquiryStatus.received
 
     mutating func changeStatus(_ next: SupportInquiryStatus, by author: Author) {
-        guard next != status else { return }
+        guard next != status, status != .closed || author == .requester && belongsToCurrentUser
+        else { return }
         status = next
         record(next.rawValue, actor: author == .agent ? "이지원" : "문의자")
     }
@@ -157,6 +165,15 @@ enum SupportQueue: String, CaseIterable {
 
 @Observable
 final class SupportFixture {
+    @discardableResult
+    func modifyOpenTicket(_ id: UUID, change: (inout SupportTicket) -> Void) -> Bool {
+        guard transport.access == .granted, let index = tickets.firstIndex(where: { $0.id == id }),
+            tickets[index].status != .closed
+        else { return false }
+        change(&tickets[index])
+        return true
+    }
+
     let transport = SupportPreviewTransport()
     var tickets = [
         SupportTicket(

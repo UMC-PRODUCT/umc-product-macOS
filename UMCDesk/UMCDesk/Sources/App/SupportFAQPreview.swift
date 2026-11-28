@@ -40,7 +40,7 @@ struct SupportFAQPreview: View {
                 }
             }
         _filter = State(initialValue: selected?.published != nil ? "발행" : selected?.status ?? "초안")
-        _editing = State(initialValue: selected)
+        _editing = State(initialValue: selected.flatMap { Self.savedInput(for: $0, in: fixture) })
         _verified = State(
             initialValue: selected?.published != nil && selected?.published == selected?.article)
         _showEditor = State(
@@ -54,7 +54,9 @@ struct SupportFAQPreview: View {
                 Text("FAQ 관리").inquiryFont(28, weight: .bold).accessibilityAddTraits(.isHeader)
                 Button("문의 관리로") { leave { back() } }
                 if !feedback.isEmpty { Text(feedback) }
-                SupportCommandStatus(command: command, transport: fixture.transport)
+                SupportCommandStatus(
+                    command: command, transport: fixture.transport, scope: editing?.id ?? "",
+                    isOperator: true)
                 SupportActionRow {
                     ForEach(["초안", "발행", "보관"], id: \.self) { name in
                         Button((name == filter ? "✓ " : "") + name) {
@@ -116,8 +118,25 @@ struct SupportFAQPreview: View {
         }
     }
 
+    private static func savedInput(for draft: SupportDraft, in fixture: SupportFixture)
+        -> SupportDraft
+    {
+        fixture.transport.pendingFAQs.first { key, _ in
+            key.scope == draft.id && fixture.transport.state(key)?.acknowledged == false
+        }?.value ?? draft
+    }
+
     private var records: [SupportDraft] {
-        fixture.drafts.filter { ($0.published != nil ? "발행" : $0.status) == filter }
+        var records = fixture.drafts.filter { ($0.published != nil ? "발행" : $0.status) == filter }
+        if filter == "초안" {
+            for draft in fixture.transport.pendingFAQs.values
+            where !fixture.drafts.contains(where: { $0.id == draft.id })
+                && !records.contains(where: { $0.id == draft.id })
+            {
+                records.append(draft)
+            }
+        }
+        return records
     }
 
     private var list: some View {
@@ -158,16 +177,23 @@ struct SupportFAQPreview: View {
                     case .publish: "FAQ 발행"
                     case .archive: "FAQ 보관"
                     }
-                command.run(name, scope: draft.id, transport: fixture.transport, isOperator: true)
-                { _ in
+                let transport = fixture.transport
+                let key = SupportPreviewTransport.Key(
+                    scope: draft.id, action: name, isOperator: true)
+                guard !transport.blocked(key) else { return }
+                transport.pendingFAQs[key] = draft
+                command.run(name, scope: draft.id, transport: transport, isOperator: true) { _ in
                     guard action == .archive || draft.isValid else { return false }
-                    let latest = fixture.apply(action, draft: draft)
-                    if editing?.id == latest.id {
-                        filter = latest.published != nil ? "발행" : latest.status
-                        if editing?.article == draft.article { select(latest, open: true) }
-                    }
-                    feedback = name + "을 완료했어요."
+                    _ = fixture.apply(action, draft: draft)
                     return true
+                } success: { _ in
+                    transport.pendingFAQs[key] = nil
+                    guard editing?.id == draft.id,
+                        let latest = fixture.drafts.first(where: { $0.id == draft.id })
+                    else { return }
+                    filter = latest.published != nil ? "발행" : latest.status
+                    if editing?.article == draft.article { select(latest, open: true) }
+                    feedback = name + "을 완료했어요."
                 }
             }.id(binding.wrappedValue.id)
         } else {
@@ -176,7 +202,7 @@ struct SupportFAQPreview: View {
     }
 
     private func select(_ draft: SupportDraft?, open: Bool) {
-        editing = draft
+        editing = draft.map { Self.savedInput(for: $0, in: fixture) }
         showEditor = open
         verified = draft?.published != nil && draft?.published == draft?.article
     }

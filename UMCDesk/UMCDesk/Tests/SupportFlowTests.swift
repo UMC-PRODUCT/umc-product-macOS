@@ -147,6 +147,142 @@ struct SupportFlowTests {
         #expect(transport.hasSnapshot)
     }
 
+    @MainActor @Test func sharedWindowsVerifyOneOperationWithoutReplayingTheWrite() async throws {
+        for action in ["답변 보내기", "FAQ 발행", "FAQ 보관"] {
+            let shared = SupportPreviewTransport()
+            let key = SupportPreviewTransport.Key(
+                scope: "record", action: action, isOperator: true)
+            let first = SupportCommand()
+            let other = SupportCommand()
+            var writes = 0
+            shared.nextWrite = .lostAfterApply
+            first.run(action, scope: "record", transport: shared, isOperator: true) { _ in
+                writes += 1
+                return true
+            }
+            other.run(action, scope: "record", transport: shared, isOperator: true) { _ in
+                writes += 1
+                return true
+            }
+            try await Task.sleep(for: .milliseconds(200))
+            #expect(shared.requests.count == 1 && shared.receipts.count == 1 && writes == 1)
+            let originalID = shared.requests[key]
+            #expect(shared.state(key) == .uncertain)
+            shared.nextReadFails = true
+            await shared.reload(verifying: key)
+            #expect(shared.blocked(key))
+            let reopened = SupportCommand()
+            reopened.run(action, scope: "record", transport: shared, isOperator: true) { _ in
+                writes += 1
+                return true
+            }
+            await shared.reload(verifying: key)
+            #expect(
+                shared.state(key) == .success && writes == 1 && originalID == shared.requests[key])
+            let separateSession = SupportPreviewTransport()
+            #expect(separateSession.state(key) == nil)
+        }
+    }
+
+    @MainActor @Test func verifiedAbsencePermitsOnlyAnExplicitRetryWithOriginalID() async throws {
+        let shared = SupportPreviewTransport()
+        let key = SupportPreviewTransport.Key(scope: "record", action: "답변", isOperator: false)
+        var writes = 0
+        let command = SupportCommand()
+        shared.nextWrite = .lostBeforeApply
+        command.run(key.action, scope: key.scope, transport: shared, isOperator: false) { _ in
+            writes += 1
+            return true
+        }
+        try await Task.sleep(for: .milliseconds(200))
+        let original = shared.requests[key]
+        await shared.reload(verifying: key)
+        #expect(shared.state(key) == .failed && writes == 0)
+        SupportCommand().run(key.action, scope: key.scope, transport: shared, isOperator: false) {
+            _ in
+            writes += 1
+            return true
+        }
+        try await Task.sleep(for: .milliseconds(200))
+        #expect(shared.requests[key] == original && shared.receipts.count == 1 && writes == 1)
+        let unverified = SupportPreviewTransport.Key(
+            scope: "other", action: key.action, isOperator: false)
+        shared.nextWrite = .uncertain
+        _ = await shared.send(id: UUID(), key: unverified) { _ in
+            writes += 1
+            return true
+        }
+        await shared.reload(verifying: unverified)
+        #expect(shared.blocked(unverified) && !shared.blocked(key) && writes == 1)
+    }
+
+    @MainActor @Test func closedTicketRejectsStaleOperatorActionsAndOwnerCanReopen() async {
+        let fixture = SupportFixture()
+        let id = fixture.tickets[0].id
+        let key = SupportPreviewTransport.Key(
+            scope: id.uuidString, action: "라벨 적용", isOperator: true)
+        let pending = Task { @MainActor in
+            await fixture.transport.send(id: UUID(), key: key, requiresOperator: true) { _ in
+                fixture.modifyOpenTicket(id) {
+                    $0.applyLabels(original: $0.labels, selected: ["기능 요청"])
+                }
+            }
+        }
+        while fixture.transport.state(key) == nil { await Task.yield() }
+        fixture.tickets[0].changeStatus(.closed, by: .agent)
+        let closed = fixture.tickets[0]
+        #expect(await pending.value == .failed)
+        #expect(
+            !fixture.modifyOpenTicket(id) {
+                $0.assignee = "이지원"
+                $0.linkedQuestion = "login"
+            })
+        fixture.tickets[0].changeStatus(.active, by: .agent)
+        #expect(
+            fixture.tickets[0].status == .closed
+                && fixture.tickets[0].history.count == closed.history.count
+                && fixture.tickets[0].labels == closed.labels)
+        let reopened = fixture.tickets[0].reply("다시 문의할게요.", from: .requester)
+        #expect(reopened)
+        #expect(fixture.tickets[0].id == id && fixture.tickets[0].status == .active)
+    }
+
+    @MainActor @Test func leavingEditedWorkspaceNeedsOneDecision() {
+        let gate = SupportExitGate()
+        var destination = "고객센터"
+        gate.hasChanges = true
+        gate.request { destination = "홈" }
+        #expect(gate.needsConfirmation && destination == "고객센터")
+        gate.stay()
+        #expect(gate.hasChanges && destination == "고객센터")
+        var departures = 0
+        gate.request {
+            destination = "매칭"
+            departures += 1
+        }
+        gate.discard()
+        gate.discard()
+        #expect(!gate.hasChanges && destination == "매칭" && departures == 1)
+        gate.request { destination = "홈" }
+        #expect(destination == "홈")
+    }
+
+    @Test func menuPlacementFlipsOrLimitsItsScrollingArea() {
+        for (height, prefix, field, menu) in [
+            (600.0, 60.0, 44.0, 280.0), (600, 440, 44, 280), (320, 170, 48, 450),
+        ] {
+            let result = SupportFieldMenuPlacement.position(
+                height: height, prefix: prefix, field: field, menu: menu)
+            #expect(result.menuY >= 0 && result.menuY + result.menuHeight <= height)
+            #expect(
+                result.menuY >= result.fieldY + field
+                    || result.menuY + result.menuHeight <= result.fieldY)
+            #expect(
+                abs(result.menuHeight - min(menu, max(prefix - 6, height - prefix - field - 6)))
+                    < 0.001)
+        }
+    }
+
     @Test func ordinaryPreviewQueueAndSuggestedDraftUseSharedRecords() throws {
         let preview = SupportFixture()
         var selectedQueue = SupportQueue.all

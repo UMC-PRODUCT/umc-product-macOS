@@ -240,21 +240,30 @@ struct SupportInquiryPreview: View {
         }
     }
 
-    private var ticketTable: some View {
+    private enum Columns { case compact, medium, full }
+
+    @ViewBuilder private var ticketTable: some View {
+        if isOperator {
+            ViewThatFits(in: .horizontal) {
+                SupportTableWidth(minimum: SupportLayoutMetrics.fullTable(scale)) { rows(.full) }
+                SupportTableWidth(minimum: SupportLayoutMetrics.mediumTable(scale)) {
+                    rows(.medium)
+                }
+                rows(.compact)
+            }
+        } else {
+            rows(.compact)
+        }
+    }
+
+    private func rows(_ columns: Columns) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             if isOperator {
-                ViewThatFits(in: .horizontal) {
-                    HStack {
-                        Text("문의")
-                        Spacer()
-                        Text("상태 · 담당자 · 라벨 · 접수일")
-                    }.frame(minWidth: SupportLayoutMetrics.fullTable(scale))
-                    HStack {
-                        Text("문의")
-                        Spacer()
-                        Text("상태 · 담당자")
-                    }.frame(minWidth: SupportLayoutMetrics.mediumTable(scale))
+                HStack {
                     Text("문의")
+                    Spacer()
+                    if columns == .full { Text("상태 · 담당자 · 라벨 · 접수일") }
+                    if columns == .medium { Text("상태 · 담당자") }
                 }.inquiryFont(13, weight: .medium).foregroundStyle(
                     UMCColor.Semantic.textNeutralStrong800)
             }
@@ -263,8 +272,8 @@ struct SupportInquiryPreview: View {
                     highlightedID = ticket.id
                     selectedID = ticket.id
                 } label: {
-                    ViewThatFits(in: .horizontal) {
-                        if isOperator {
+                    Group {
+                        if columns == .full {
                             HStack(alignment: .top, spacing: 12) {
                                 VStack(alignment: .leading, spacing: 4) {
                                     Text(ticket.subject).inquiryFont(16, weight: .medium)
@@ -275,7 +284,8 @@ struct SupportInquiryPreview: View {
                                 Text(ticket.label).frame(width: 120 * scale)
                                 Text(ticket.createdAt, format: .dateTime.month().day()).frame(
                                     width: 85 * scale)
-                            }.frame(minWidth: SupportLayoutMetrics.fullTable(scale))
+                            }
+                        } else if columns == .medium {
                             HStack(alignment: .top, spacing: 12) {
                                 VStack(alignment: .leading, spacing: 4) {
                                     Text(ticket.subject).inquiryFont(16, weight: .medium)
@@ -283,19 +293,20 @@ struct SupportInquiryPreview: View {
                                 }.frame(maxWidth: .infinity, alignment: .leading)
                                 Text(ticket.status.rawValue)
                                 Text(ticket.assignee)
-                            }.frame(minWidth: SupportLayoutMetrics.mediumTable(scale))
-                        }
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(ticket.subject).inquiryFont(16, weight: .medium)
-                            Text(
-                                isOperator
-                                    ? ticket.status.rawValue + " · " + ticket.assignee
-                                    : ticket.status.rawValue)
-                            if isOperator {
-                                metadata(ticket)
-                            } else {
-                                Text(ticket.createdAt, format: .dateTime.year().month().day())
-                                    .inquiryFont(13)
+                            }
+                        } else {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(ticket.subject).inquiryFont(16, weight: .medium)
+                                Text(
+                                    isOperator
+                                        ? ticket.status.rawValue + " · " + ticket.assignee
+                                        : ticket.status.rawValue)
+                                if isOperator {
+                                    metadata(ticket)
+                                } else {
+                                    Text(ticket.createdAt, format: .dateTime.year().month().day())
+                                        .inquiryFont(13)
+                                }
                             }
                         }
                     }.fixedSize(horizontal: false, vertical: true)
@@ -336,6 +347,10 @@ struct SupportInquiryPreview: View {
     var referenceID: String?
     var readingID: String?
     var submitting = false
+    var resultTicket: UUID?
+    var submitKey: SupportPreviewTransport.Key {
+        .init(scope: id.uuidString, action: "문의 보내기", isOperator: false)
+    }
     var receipt: SupportPreviewTransport.Receipt?
     var edited: Bool {
         !subject.isEmpty || !content.isEmpty || team != nil || attachment != nil
@@ -506,37 +521,43 @@ struct SupportTeamOptions: View {
     }
 
     private func teamGrid(columns: Int) -> some View {
-        LazyVGrid(
-            columns: Array(
-                repeating: GridItem(.flexible(minimum: 0), spacing: 12), count: columns),
-            spacing: 12
-        ) {
-            ForEach(SupportTeam.allCases, id: \.self) { option in
-                Button {
-                    recipient.team = option
-                    recipient.isOpen = false
-                } label: {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text(recipient.teamNames[option] ?? option.rawValue).fixedSize(
-                            horizontal: false, vertical: true
-                        ).inquiryFont(14, weight: .medium)
-                        Text(option.summary).inquiryFont(13)
-                        if recipient.team == option { Image(systemName: "checkmark") }
+        let options = SupportTeam.allCases
+        return VStack(spacing: 12) {
+            ForEach(Array(stride(from: 0, to: options.count, by: columns)), id: \.self) { index in
+                HStack(alignment: .top, spacing: 12) {
+                    ForEach(options[index..<min(index + columns, options.count)], id: \.self) {
+                        option in
+                        teamButton(option)
                     }
-                    .padding(14).frame(
-                        maxWidth: .infinity, minHeight: 96, alignment: .leading
-                    )
-                    .background(
-                        UMCColor.Custom.backgroundSurfaceGreyWeaker,
-                        in: .rect(cornerRadius: 10)
-                    )
-                    .overlay {
-                        RoundedRectangle(cornerRadius: 10)
-                            .strokeBorder(UMCColor.Semantic.borderNeutralMedium300)
-                    }
-                }.buttonStyle(.plain).focused($focused, equals: option)
-                    .accessibilityAddTraits(recipient.team == option ? .isSelected : [])
+                }
             }
         }
+    }
+
+    private func teamButton(_ option: SupportTeam) -> some View {
+        Button {
+            recipient.team = option
+            recipient.isOpen = false
+        } label: {
+            VStack(alignment: .leading, spacing: 8) {
+                Text(recipient.teamNames[option] ?? option.rawValue).fixedSize(
+                    horizontal: false, vertical: true
+                ).inquiryFont(14, weight: .medium)
+                Text(option.summary).inquiryFont(13)
+                if recipient.team == option { Image(systemName: "checkmark") }
+            }
+            .padding(14).frame(
+                maxWidth: .infinity, minHeight: 96, alignment: .leading
+            )
+            .background(
+                UMCColor.Custom.backgroundSurfaceGreyWeaker,
+                in: .rect(cornerRadius: 10)
+            )
+            .overlay {
+                RoundedRectangle(cornerRadius: 10)
+                    .strokeBorder(UMCColor.Semantic.borderNeutralMedium300)
+            }
+        }.buttonStyle(.plain).focused($focused, equals: option)
+            .accessibilityAddTraits(recipient.team == option ? .isSelected : [])
     }
 }

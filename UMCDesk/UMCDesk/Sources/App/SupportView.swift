@@ -28,11 +28,12 @@ struct SupportView: View {
     @State private var searchRequest = 0
     @State private var toolsOpen = false
     @State private var dirtyFAQ = false
-    @State private var pendingLeave: (() -> Void)?
+    @State private var exitGate = SupportExitGate()
     @State private var receiptMessage = ""
     @State private var searchState = SupportSearchState()
     @Environment(\.umcBodyTextScale) private var scale
     @FocusState private var toolsFocused: Bool
+    @FocusState private var firstToolFocused: Bool
 
     @State private var fixture: SupportFixture?
 
@@ -46,11 +47,13 @@ struct SupportView: View {
         _page = State(initialValue: emptyInquiries ? .inquiries : .answers)
     }
 
-    init(fixture: SupportFixture, scene: SupportScene = .home) {
+    init(fixture: SupportFixture, scene: SupportScene = .home, exitGate: SupportExitGate? = nil) {
         self.scene = scene
+        if let exitGate { _exitGate = State(initialValue: exitGate) }
         _fixture = State(initialValue: fixture)
         let operations: [SupportScene] = [
-            .operations, .longOperations, .operatorDetail, .assignee, .labels, .operatorTools,
+            .operations, .longOperations, .operatorClosed, .operatorDetail, .assignee, .labels,
+            .operatorTools,
             .assigned,
             .labelsApplied, .labelsCancelled, .labelsChanged, .mine, .unassigned, .unclassified,
         ]
@@ -88,11 +91,30 @@ struct SupportView: View {
             recipient.attachment = "오류 화면.png"
             if scene == .reference { recipient.referenceID = fixture.publishedArticles.first?.id }
         }
+        if [.sendPending, .sendFailed, .sendUnknown].contains(scene) {
+            recipient.subject = "출석 기록 확인"
+            recipient.content = "출석 기록이 달라 확인을 요청해요."
+            recipient.team = .learning
+            recipient.attachment = "오류 화면.png"
+            recipient.submitting = scene == .sendPending
+            recipient.receipt =
+                scene == .sendPending ? .sending : (scene == .sendFailed ? .failed : .uncertain)
+        }
+        if scene == .partialAttachment || scene == .postWriteReadFailure {
+            _page = State(initialValue: .inquiries)
+            _receiptMessage = State(
+                initialValue: scene == .partialAttachment
+                    ? "문의는 접수했어요. 예시 파일 첨부는 실패했어요." : "접수했어요. 목록을 다시 불러와 주세요.")
+        }
         _recipient = State(initialValue: recipient)
-        _composing = State(initialValue: [.compose, .team, .longTeam, .reference].contains(scene))
+        _composing = State(
+            initialValue: [
+                .compose, .team, .longTeam, .reference, .sendPending, .sendFailed, .sendUnknown,
+            ].contains(scene))
         _toolsOpen = State(initialValue: [.userTools, .operatorTools].contains(scene))
         if [
-            .operatorDetail, .assignee, .labels, .assigned, .labelsChanged, .labelsApplied,
+            .operatorClosed, .operatorDetail, .assignee, .labels, .assigned, .labelsChanged,
+            .labelsApplied,
             .labelsCancelled,
         ].contains(scene) {
             _operatorTicket = State(initialValue: fixture.tickets.first?.id)
@@ -193,7 +215,7 @@ struct SupportView: View {
                             articles: articles, draft: recipient,
                             cancel: { leaveComposition { composing = false } },
                             submit: { submitComposition(fixture) },
-                            reload: { Task { await fixture.transport.reload() } })
+                            reload: { verifyComposition(fixture) })
                     } else if fixture?.transport.hasSnapshot == false {
                         Spacer()
                     } else {
@@ -263,15 +285,16 @@ struct SupportView: View {
         }
         .alert(
             dirtyFAQ ? "FAQ 편집을 취소할까요?" : "작성 중인 문의를 취소할까요?",
-            isPresented: Binding(
-                get: { pendingLeave != nil }, set: { if !$0 { pendingLeave = nil } })
+            isPresented: Binding(get: { exitGate.needsConfirmation }, set: { _ in })
         ) {
-            Button("계속 작성", role: .cancel) { pendingLeave = nil }
-            Button("작성 취소", role: .destructive) {
-                let action = pendingLeave
-                pendingLeave = nil
-                action?()
-            }
+            Button("계속 작성", role: .cancel) { exitGate.stay() }
+            Button("작성 취소", role: .destructive) { exitGate.discard() }
+        }
+        .onChange(of: (composing && recipient.edited) || dirtyFAQ, initial: true) {
+            exitGate.hasChanges = (composing && recipient.edited) || dirtyFAQ
+        }
+        .onChange(of: recipient.submitting, initial: true) {
+            exitGate.sending = recipient.submitting
         }
         .onChange(of: fixture?.transport.access) {
             guard fixture?.transport.access != .granted else { return }
@@ -279,7 +302,7 @@ struct SupportView: View {
             operatorEntry = UUID()
             toolsOpen = false
             dirtyFAQ = false
-            pendingLeave = nil
+            exitGate.stay()
             if page == .operations || page == .faq {
                 page = .answers
                 composing = false
@@ -297,7 +320,12 @@ struct SupportView: View {
             modalHost.content =
                 recipient.isOpen ? AnyView(SupportTeamOptions(recipient: recipient)) : nil
         }
-        .onDisappear { if recipient.isOpen { modalHost?.content = nil } }
+        .onDisappear {
+            if recipient.isOpen { modalHost?.content = nil }
+            exitGate.hasChanges = false
+            exitGate.sending = false
+            exitGate.stay()
+        }
     }
 
     private var toolsPanel: some View {
@@ -312,6 +340,10 @@ struct SupportView: View {
                     Image(systemName: "xmark")
                 }
                 .buttonStyle(.plain).accessibilityLabel("닫기").keyboardShortcut(.cancelAction)
+                .focused($firstToolFocused).task {
+                    await Task.yield()
+                    firstToolFocused = true
+                }
             }
             Text(operating ? "UMC PRODUCT 구성원만 사용할 수 있는 관리 도구예요." : "답을 찾아보고 내 문의를 이어가세요.")
                 .inquiryFont(12)
@@ -387,7 +419,8 @@ struct SupportView: View {
     private func leaveComposition(_ action: @escaping () -> Void) {
         toolsOpen = false
         guard !recipient.submitting else { return }
-        if (composing && recipient.edited) || dirtyFAQ { pendingLeave = action } else { action() }
+        exitGate.hasChanges = (composing && recipient.edited) || dirtyFAQ
+        exitGate.request(action)
     }
 
     private func navigate(_ next: Page) {
@@ -402,31 +435,50 @@ struct SupportView: View {
         }
     }
 
+    private func verifyComposition(_ fixture: SupportFixture) {
+        let draft = recipient
+        Task { @MainActor in
+            await fixture.transport.reload(verifying: draft.submitKey)
+            guard let state = fixture.transport.state(draft.submitKey) else { return }
+            finish(draft, state: state)
+        }
+    }
+
     private func submitComposition(_ fixture: SupportFixture) {
         let draft = recipient
-        guard draft.valid, let team = draft.team, !draft.submitting else { return }
+        guard draft.valid, let team = draft.team, !draft.submitting,
+            !fixture.transport.blocked(draft.submitKey)
+        else { return }
+        let subject = draft.subject
+        let content = draft.content
+        let category = draft.category
+        let reference = draft.referenceID
+        let attachment = draft.attachment
         draft.submitting = true
         Task { @MainActor in
-            var id: UUID?
             let result = await fixture.transport.send(
-                id: draft.id, hasAttachment: draft.attachment != nil
-            ) { attach in
-                id = fixture.create(
-                    subject: draft.subject, content: draft.content, team: team,
-                    category: draft.category,
-                    reference: draft.referenceID.flatMap(fixture.publishedArticle(id:)),
-                    attachmentName: attach ? draft.attachment : nil)
-                return id != nil
+                id: draft.id, key: draft.submitKey, hasAttachment: attachment != nil
+            ) { includeFile in
+                draft.resultTicket = fixture.create(
+                    subject: subject, content: content, team: team, category: category,
+                    reference: reference.flatMap(fixture.publishedArticle(id:)),
+                    attachmentName: includeFile ? attachment : nil)
+                return draft.resultTicket != nil
             }
-            draft.receipt = result
             draft.submitting = false
-            guard result.acknowledged, recipient === draft, composing, let id else { return }
-            createdTicket = id
-            if result == .refreshFailed { receiptMessage = "접수했어요. 목록을 다시 불러와 주세요." }
-            if result == .attachmentFailed { receiptMessage = "문의는 접수했어요. 예시 파일 첨부는 실패했어요." }
-            composing = false
-            page = .inquiries
+            finish(draft, state: result)
         }
+    }
+
+    private func finish(_ draft: SupportComposition, state: SupportPreviewTransport.Receipt) {
+        draft.receipt = state
+        guard state.acknowledged, recipient === draft, composing, let id = draft.resultTicket
+        else { return }
+        createdTicket = id
+        if state == .refreshFailed { receiptMessage = "접수했어요. 목록을 다시 불러와 주세요." }
+        if state == .attachmentFailed { receiptMessage = "문의는 접수했어요. 예시 파일 첨부는 실패했어요." }
+        composing = false
+        page = .inquiries
     }
 
     private var articles: [SupportArticle] {
@@ -919,6 +971,7 @@ struct SupportAnswerDetail: View {
                         SupportActionRow {
                             Button("해결됐어요") {
                                 resolved = true
+                                if fromComposition { back() }
                                 AccessibilityNotification.Announcement("해결 응답을 기록했어요.").post()
                             }.disabled(resolved)
                             Button(fromComposition ? "참고 답변으로 추가" : "담당자에게 문의하기", action: inquire)

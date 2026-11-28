@@ -13,6 +13,8 @@ import Observation
         case success = "성공"
         case rejected = "쓰기 실패"
         case uncertain = "결과 확인 필요"
+        case lostAfterApply = "응답 유실 · 조회로 반영 확인"
+        case lostBeforeApply = "응답 유실 · 조회로 미반영 확인"
         case refreshFailed = "쓰기 성공 · 조회 실패"
         case attachmentFailed = "접수 성공 · 첨부 실패"
     }
@@ -24,6 +26,30 @@ import Observation
         }
     }
 
+    struct Key: Hashable {
+        let scope: String
+        let action: String
+        let isOperator: Bool
+    }
+
+    struct ReplyInput: Equatable {
+        var text: String
+        var attachment: Bool
+    }
+
+    private(set) var requests: [Key: UUID] = [:]
+    private var authoritative: [UUID: Receipt] = [:]
+    var pendingReplies: [Key: ReplyInput] = [:]
+    var pendingFAQs: [Key: SupportDraft] = [:]
+
+    func state(_ key: Key) -> Receipt? {
+        requests[key].flatMap { receipts[$0] }
+    }
+
+    func blocked(_ key: Key) -> Bool {
+        state(key) == .sending || state(key) == .uncertain
+    }
+
     enum Access: String, CaseIterable {
         case checking = "권한 확인 중"
         case granted = "운영 허용"
@@ -32,7 +58,14 @@ import Observation
 
     enum Read: Equatable { case loading, refreshing, ready, failed }
     var access = Access.granted {
-        didSet { if oldValue != access { authorizationGeneration += 1 } }
+        didSet {
+            guard oldValue != access else { return }
+            authorizationGeneration += 1
+            if access != .granted {
+                pendingReplies = pendingReplies.filter { !$0.key.isOperator }
+                pendingFAQs.removeAll()
+            }
+        }
     }
     var nextWrite = Outcome.success
     var nextReadFails = false
@@ -42,7 +75,8 @@ import Observation
     private var authorizationGeneration = 0
     private(set) var receipts: [UUID: Receipt] = [:]
 
-    @MainActor func reload() async {
+    @MainActor func reload(verifying key: Key? = nil) async {
+        let submitted = key.flatMap { requests[$0] }
         readRequest += 1
         let request = readRequest
         let failure = nextReadFails
@@ -51,12 +85,19 @@ import Observation
         try? await Task.sleep(for: .milliseconds(120))
         guard request == readRequest, !Task.isCancelled else { return }
         read = failure ? .failed : .ready
-        if !failure { hasSnapshot = true }
+        guard !failure else { return }
+        hasSnapshot = true
+        if let key, let submitted, requests[key] == submitted, receipts[submitted] == .uncertain,
+            !key.isOperator || access == .granted, let actual = authoritative[submitted]
+        {
+            receipts[submitted] = actual
+            if actual == .success { pendingFAQs[key] = nil }
+        }
     }
 
-    func simulateFailedRead() {
+    func simulateFailedRead(hasSnapshot: Bool = false) {
         read = .failed
-        hasSnapshot = false
+        self.hasSnapshot = hasSnapshot
     }
 
     func prepareInitialRead() {
@@ -66,11 +107,13 @@ import Observation
 
     /// Each user intent has one ID, including retries after a confirmed rejection.
     @MainActor func send(
-        id: UUID, requiresOperator: Bool = false, hasAttachment: Bool = false,
+        id: UUID, key: Key? = nil, requiresOperator: Bool = false, hasAttachment: Bool = false,
         apply: (Bool) -> Bool
     ) async -> Receipt {
+        if let key, blocked(key), let result = state(key) { return result }
         if let existing = receipts[id], existing != .failed { return existing }
         guard !requiresOperator || access == .granted else { return .failed }
+        if let key { requests[key] = id }
         let generation = authorizationGeneration
         let outcome = nextWrite
         nextWrite = .success
@@ -86,6 +129,12 @@ import Observation
         switch outcome {
         case .rejected: result = .failed
         case .uncertain: result = .uncertain
+        case .lostBeforeApply:
+            authoritative[id] = .failed
+            result = .uncertain
+        case .lostAfterApply:
+            authoritative[id] = apply(true) ? .success : .failed
+            result = .uncertain
         case .success, .refreshFailed, .attachmentFailed:
             let failedAttachment = hasAttachment && outcome == .attachmentFailed
             if apply(!failedAttachment) {
@@ -99,5 +148,26 @@ import Observation
         }
         receipts[id] = result
         return result
+    }
+}
+
+/// One navigation decision per workspace. Other windows receive their own gate.
+@MainActor @Observable final class SupportExitGate {
+    var hasChanges = false
+    var sending = false
+    private var pending: (() -> Void)?
+    var needsConfirmation: Bool { pending != nil }
+
+    func request(_ action: @escaping () -> Void) {
+        guard !sending, pending == nil else { return }
+        if hasChanges { pending = action } else { action() }
+    }
+
+    func stay() { pending = nil }
+    func discard() {
+        let action = pending
+        pending = nil
+        hasChanges = false
+        action?()
     }
 }

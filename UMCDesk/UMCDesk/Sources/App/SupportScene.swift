@@ -16,6 +16,8 @@ enum SupportScene: String {
     case search, results, noResults, waiting, resolved, reference, refreshed
     case weekly, weeklyRefreshed, mine, unassigned, unclassified, reopened, conversationReference
     case labelsChanged, labelsCancelled, labelsApplied, assigned, faqDraft, faqArchived, faqEditing
+    case operatorClosed, sendPending, sendFailed, sendUnknown, partialAttachment,
+        postWriteReadFailure
     case longFAQ, longConversation, longTeam, longOperations, denied, readFailure
 }
 
@@ -105,6 +107,8 @@ extension SupportFixture {
                 String(repeating: "운영 담당 ", count: 8).prefix(40).description
             tickets[0].status = .active
         }
+        if scene == .operatorClosed { tickets[0].status = .closed }
+        if scene == .postWriteReadFailure { transport.simulateFailedRead(hasSnapshot: true) }
         if scene == .denied { transport.access = .denied }
         if scene == .readFailure { transport.simulateFailedRead() }
         if [.conversation, .closed, .reopened, .conversationReference].contains(scene) {

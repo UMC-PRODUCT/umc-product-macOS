@@ -171,6 +171,76 @@ struct SupportWidePanels: Layout {
     }
 }
 
+/// Uses the table width for all rows even when a single title has a large ideal width.
+struct SupportTableWidth: Layout {
+    let minimum: CGFloat
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let width = max(minimum, proposal.width ?? minimum)
+        return .init(
+            width: width,
+            height: subviews.first?.sizeThatFits(.init(width: width, height: nil)).height ?? 0)
+    }
+    func placeSubviews(
+        in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()
+    ) {
+        subviews.first?.place(at: bounds.origin, anchor: .topLeading, proposal: .init(bounds.size))
+    }
+}
+
+/// Positions a panel against its field in the visible processing viewport.
+/// The menu receives the larger remaining interval if neither side can fit its natural height.
+struct SupportFieldMenuPlacement: Layout {
+    struct Placement {
+        let fieldY: CGFloat
+        let menuY: CGFloat
+        let menuHeight: CGFloat
+    }
+
+    static func position(height: CGFloat, prefix: CGFloat, field: CGFloat, menu: CGFloat)
+        -> Placement
+    {
+        let gap: CGFloat = 6
+        let fieldY = min(max(0, prefix), max(0, height - field))
+        let above = max(0, fieldY - gap)
+        let below = max(0, height - fieldY - field - gap)
+        if below >= menu || (above < menu && below >= above) {
+            return .init(fieldY: fieldY, menuY: fieldY + field + gap, menuHeight: min(below, menu))
+        }
+        let shown = min(above, menu)
+        return .init(fieldY: fieldY, menuY: fieldY - gap - shown, menuHeight: shown)
+    }
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        proposal.replacingUnspecifiedDimensions(by: .init(width: 360, height: 480))
+    }
+
+    func placeSubviews(
+        in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()
+    ) {
+        guard subviews.count == 4 else { return }
+        let width = max(0, bounds.width - 48)
+        let column = ProposedViewSize(width: width, height: nil)
+        let field = subviews[1].sizeThatFits(column).height
+        let menuWidth = min(312, width)
+        let menu = subviews[3].sizeThatFits(.init(width: menuWidth, height: nil)).height
+        let placement = Self.position(
+            height: bounds.height, prefix: 36 + subviews[0].sizeThatFits(column).height,
+            field: field, menu: menu)
+        let left = bounds.minX + 24
+        subviews[0].place(
+            at: .init(x: left, y: bounds.minY + 24), anchor: .topLeading, proposal: column)
+        subviews[1].place(
+            at: .init(x: left, y: bounds.minY + placement.fieldY),
+            anchor: .topLeading, proposal: .init(width: width, height: field))
+        subviews[2].place(
+            at: .init(x: left, y: bounds.minY + placement.fieldY + field + 12),
+            anchor: .topLeading, proposal: column)
+        subviews[3].place(
+            at: .init(x: left, y: bounds.minY + placement.menuY), anchor: .topLeading,
+            proposal: .init(width: menuWidth, height: placement.menuHeight))
+    }
+}
+
 @Observable @MainActor final class SupportCommand {
     struct Feedback: Identifiable {
         let id: String
@@ -181,25 +251,30 @@ struct SupportWidePanels: Layout {
     private(set) var actions: [Feedback] = []
 
     var isSending: Bool { actions.contains { $0.receipt == .sending } }
-    func blocked(_ key: String) -> Bool {
-        actions.contains { $0.id == key && ($0.receipt == .sending || $0.receipt == .uncertain) }
-    }
-
     func run(
         _ name: String, scope: String = "", transport: SupportPreviewTransport, isOperator: Bool,
         attachment: Bool = false, apply: @escaping (Bool) -> Bool,
         success: @escaping (SupportPreviewTransport.Receipt) -> Void = { _ in }
     ) {
+        let destination = SupportPreviewTransport.Key(
+            scope: scope, action: name, isOperator: isOperator)
+        guard !transport.blocked(destination) else { return }
         let key = scope + name
-        guard !blocked(key) else { return }
+        guard !actions.contains(where: { $0.id == key && $0.receipt == .sending }) else { return }
         actions.removeAll { $0.id == key }
         actions.append(Feedback(id: key, name: name, receipt: .sending))
-        let id = UUID()
+        let id =
+            transport.state(destination) == .failed
+            ? transport.requests[destination] ?? UUID() : UUID()
         Task { @MainActor [self] in
             let result = await transport.send(
-                id: id, requiresOperator: isOperator,
+                id: id, key: destination, requiresOperator: isOperator,
                 hasAttachment: attachment, apply: apply)
             guard let index = actions.firstIndex(where: { $0.id == key }) else { return }
+            if result == .sending {
+                actions.remove(at: index)
+                return
+            }
             actions[index].receipt = result
             if result.acknowledged { success(result) }
             if result == .failed {
@@ -216,25 +291,37 @@ struct SupportWidePanels: Layout {
 struct SupportCommandStatus: View {
     let command: SupportCommand
     let transport: SupportPreviewTransport
+    let scope: String
+    let isOperator: Bool
     var body: some View {
-        ForEach(command.actions) { item in
-            switch item.receipt {
-            case .sending: Text(item.name + " 중…")
+        let keys = transport.requests.keys.filter {
+            $0.scope == scope && $0.isOperator == isOperator
+        }
+        ForEach(keys.sorted { $0.action < $1.action }, id: \.self) { key in
+            switch transport.state(key) {
+            case .sending: Text(key.action + " 중…")
             case .failed:
                 VStack(alignment: .leading) {
-                    Text(item.name + "에 실패했어요.")
-                    Button(item.name + " 다시 시도") { item.retry?() }
+                    Text(key.action + "이 반영되지 않았어요.")
+                    if let retry = command.actions.first(where: { $0.id == scope + key.action })?
+                        .retry
+                    {
+                        Button(key.action + " 다시 시도", action: retry)
+                    } else {
+                        Text("입력을 확인한 뒤 " + key.action + " 동작을 다시 선택해 주세요.")
+                    }
                 }
             case .uncertain, .refreshFailed:
                 VStack(alignment: .leading) {
                     Text(
-                        item.receipt == .uncertain
-                            ? item.name + " 결과를 확인할 수 없어요."
-                            : item.name + "를 완료했어요. 목록을 다시 불러와 주세요.")
-                    Button("다시 불러오기") { Task { await transport.reload() } }
+                        transport.state(key) == .uncertain
+                            ? key.action + " 결과를 확인할 수 없어요."
+                            : key.action + "를 완료했어요. 목록을 다시 불러와 주세요.")
+                    Button("다시 불러오기") { Task { await transport.reload(verifying: key) } }
                 }
-            case .attachmentFailed: Text(item.name + "를 완료했어요. 예시 첨부는 실패했어요.")
-            case .success: EmptyView()
+            case .attachmentFailed: Text(key.action + "를 완료했어요. 예시 첨부는 실패했어요.")
+            case .success: Text(key.action + " 완료").font(.caption)
+            case nil: EmptyView()
             }
         }
     }
