@@ -107,6 +107,9 @@ View ←→ ViewModel(@Observable) → UseCase(Protocol) → Repository → Data
 13. **공지 탭을 개선할 때는 같은 PR에서 [공지 탭 구현 명세](docs/specs/공지_공지%20탭_구현명세.md)도 갱신한다.**
     화면·문구·조작 흐름·목록 필터·권한·API 계약 중 바뀐 내용을 해당 절에 반영한다.
     공통 모듈을 수정해 공지 탭 동작이 달라지는 경우에도 적용한다.
+14. **우측 상단 도구 버튼과 패널은 사용자가 직접 변경을 지시할 때만 수정한다.**
+    실데이터·데이터 미리보기와 매칭 현황 별도 창 모두에 적용한다. 변경 범위와 원본은
+    [우측 상단 도구 버튼과 패널](docs/Codex/design-system.md#우측-상단-도구-버튼과-패널)을 따른다.
 
 ## 코딩 스타일 (요약)
 
@@ -157,6 +160,7 @@ make doctor     # 환경 진단
 | 디자인 시스템 & 성능 | `docs/Codex/design-system.md` | UI/토큰/Glass/렌더링 최적화 |
 | 활동 탭 | [활동 탭 결정 이력](docs/specs/활동_활동%20탭%20결정%20이력_설계.md) | 활동 작업을 시작할 때 먼저 읽고, 동작·권한 정책·시안이 바뀌면 같은 PR에서 결정 이유와 근거를 갱신한다. |
 | 홈 탭 | [홈 탭 결정 이력](docs/specs/홈_홈%20탭%20결정%20이력_설계.md) | 홈 작업 전에 먼저 읽고, 화면·탐색·기록이 달라지면 같은 PR에서 이유와 검증 근거를 갱신한다. |
+| 도구 패널과 텍스트 필드 | [패널](docs/Codex/tool-panels.md) · [입력](docs/Codex/text-fields.md) | 탭별 명령·빈 상태·검색·폼·포커스 변경 |
 | 홈 아케이드 | [첫 부두 구역 설계 원본](docs/Codex/dock-action-game.md) | 부두 한 판의 규칙, Mac 입력·성능 검수, 세 게임의 공통 완료 기준 |
 | 코딩 스타일 & 네이밍 | `docs/Codex/coding-style.md` | 네이밍 판단이 필요할 때 |
 | Git Workflow | `docs/Codex/git-workflow.md` | 브랜치/커밋/PR/이슈(템플릿·Type·Priority)/배포 |

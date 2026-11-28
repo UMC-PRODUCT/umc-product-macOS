@@ -9,12 +9,14 @@ import CoreDesignSystem
 import MatchingDomain
 import SwiftUI
 
+enum MatchingStatusSection: Hashable { case statistics, roster }
+
 struct MatchingStatisticsView: View {
     let service: any MatchingUseCase
     let chapterId: String?
     let canReadAdjustment: Bool
     @State private var rosterType = MatchingRosterType.all
-    @State private var adjustment = false
+    @Binding var adjustment: Bool
     @State private var revision = 0
     @State private var selectedId: String?
     @State private var request: ProjectConfirmation?
@@ -24,7 +26,7 @@ struct MatchingStatisticsView: View {
     var body: some View {
         if let chapterId {
             VStack(alignment: .leading, spacing: UMCSpacing.value16) {
-                Text("매칭 현황").umcTypography(.title1Bold)
+                Text("매칭 현황").umcTypography(.title1Bold).id(MatchingStatusSection.statistics)
                 OperationsLoad(key: chapterId, load: {
                     try await service.publicStatistics(chapterId: chapterId)
                 }) { stats in
@@ -66,7 +68,7 @@ struct MatchingStatisticsView: View {
                     Text("전체 파트").tag(MatchingRosterType.all)
                     Text("기획–디자인").tag(MatchingRosterType.design)
                     Text("기획–개발자").tag(MatchingRosterType.developer)
-                }.frame(maxWidth: 300)
+                }.frame(maxWidth: 300).id(MatchingStatusSection.roster)
                 if canReadAdjustment {
                     Picker("명단", selection: $adjustment) {
                         Text("공개 명단").tag(false)
@@ -119,7 +121,9 @@ struct MatchingStatisticsView: View {
                     }
                 }
             }
+            .scrollTargetLayout()
             .onChange(of: rosterType) { _, _ in selectedId = nil }
+            .onChange(of: chapterId) { adjustment = false }
             .onChange(of: adjustment) { _, _ in selectedId = nil }
             .disabled(sending)
             .alert(item: $request) { item in

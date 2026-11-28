@@ -5,6 +5,7 @@
 //  Created by euijjang97 on 11/25/26.
 //
 
+import AppKit
 import Foundation
 import ProjectWorkspaceDomain
 import Testing
@@ -12,6 +13,69 @@ import Testing
 
 @MainActor
 struct DataPreviewTests {
+    @Test func previewMenusShowTabToolsInBothDataModes() async throws {
+        func menu(_ root: NSMenu, named names: [String]) -> NSMenu? {
+            for item in root.items {
+                guard let submenu = item.submenu else { continue }
+                if names.contains(item.title) { return submenu }
+                if let nested = menu(submenu, named: names) { return nested }
+            }
+            return nil
+        }
+
+        func press(_ menu: NSMenu, named names: [String]) throws {
+            menu.update()
+            let index = try #require(menu.items.firstIndex { names.contains($0.title) },
+                                     "Menu items: \(menu.items.map(\.title))")
+            menu.performActionForItem(at: index)
+        }
+
+        func trigger(in view: NSView) -> NSButton? {
+            if let button = view as? NSButton,
+               button.accessibilityIdentifier() == "sidebar.right" { return button }
+            return view.subviews.lazy.compactMap { trigger(in: $0) }.first
+        }
+
+        let mainMenu = try #require(NSApp.mainMenu)
+        let preview = try #require(menu(mainMenu, named: ["데이터 미리보기", "Data Preview"]))
+        defer {
+            if let end = preview.items.firstIndex(where: { ["미리보기 종료", "End Preview"].contains($0.title) }) {
+                preview.performActionForItem(at: end)
+            }
+        }
+
+        for empty in [false, true] {
+            try press(preview, named: empty ? ["전체 빈 화면", "All Empty Screens"] :
+                      ["전체 데이터 있음", "All With Data"])
+            try await Task.sleep(for: .milliseconds(350))
+            let tabs = try #require(menu(mainMenu, named: ["탭 이동", "Go to Tab", "Switch Tab"]))
+            for (tab, english) in [("공지", "Notice"), ("스레드", "Threads")] {
+                try press(tabs, named: [tab, english, english + "s"])
+                try await Task.sleep(for: .milliseconds(400))
+                let window = try #require(NSApp.windows.first { $0.contentView?.superview.flatMap(trigger(in:)) != nil },
+                                          "Windows: \(NSApp.windows.map { ($0.title, $0.identifier?.rawValue) })")
+                let content = try #require(window.contentView)
+                let frame = try #require(content.superview)
+                let button = try #require(trigger(in: frame))
+                #expect(!button.isBordered)
+                #expect(button.image != nil)
+                #expect(button.state == .off)
+                button.performClick(nil)
+                try await Task.sleep(for: .milliseconds(200))
+                #expect(button.state == .on)
+                let bitmap = try #require(content.bitmapImageRepForCachingDisplay(in: content.bounds))
+                content.cacheDisplay(in: content.bounds, to: bitmap)
+                let png = try #require(bitmap.representation(using: .png, properties: [:]))
+                let file = "umc-preview-\(english)-\(empty ? "empty" : "populated").png"
+                try png.write(to: URL(fileURLWithPath: NSTemporaryDirectory()).appending(path: file))
+                print("Captured", NSTemporaryDirectory() + file)
+                button.performClick(nil)
+                try await Task.sleep(for: .milliseconds(120))
+                #expect(button.state == .off)
+            }
+        }
+    }
+
     @Test func matchingCommandsReplaceTheDisplayedPageEvenFromTheSameTab() {
         let preview = DataPreviewMode()
         preview.select(.matching)

@@ -6,10 +6,20 @@
 //
 
 import CoreDesignSystem
+import CoreUIComponents
 import MatchingDomain
 import SwiftUI
+import UMCFoundation
 
 enum MatchingOperationsSection { case projects, statistics }
+
+@MainActor
+@Observable
+final class ManagedProjectSearch {
+    var keyword = ""
+    var search = ""
+    var page = 0
+}
 
 struct MatchingOperationsView: View {
     let section: MatchingOperationsSection
@@ -19,25 +29,16 @@ struct MatchingOperationsView: View {
     let canCreateOwn: Bool
     let canChooseOther: Bool
     let canReadAdjustment: Bool
-    @State private var projectStatusValue: String?
-    @State private var projectId: String?
-    @State private var keyword = ""
-    @State private var search = ""
-    @State private var page = 0
-    @State private var revision = 0
+    @Binding var adjustment: Bool
+    @Bindable var query: ManagedProjectSearch
+    let openProject: (String, String) -> Void
     @State private var creating = false
 
     var body: some View {
         if section == .statistics {
             MatchingStatisticsView(service: service, chapterId: chapterId,
-                                   canReadAdjustment: canReadAdjustment)
+                                   canReadAdjustment: canReadAdjustment, adjustment: $adjustment)
                 .id(chapterId)
-        } else if let projectId {
-            ProjectOperationsView(service: service, projectId: projectId, status: projectStatusValue) {
-                self.projectId = nil
-                revision += 1
-            }
-            .id(projectId)
         } else {
             VStack(alignment: .leading, spacing: UMCSpacing.value16) {
                 HStack {
@@ -48,12 +49,14 @@ struct MatchingOperationsView: View {
                     }
                 }
                 HStack {
-                    TextField("프로젝트 검색", text: $search)
-                        .onSubmit { page = 0; keyword = search }
-                    Button("검색") { page = 0; keyword = search }
+                    UMCSearchField(
+                        AppLocalization.string("프로젝트 검색"), text: $query.search
+                    )
+                        .onSubmit { query.page = 0; query.keyword = query.search }
+                    Button("검색") { query.page = 0; query.keyword = query.search }
                 }
-                OperationsLoad(key: [keyword, String(page), String(revision)], load: {
-                    try await service.managedProjects(gisuId: gisuId, keyword: keyword, page: page)
+                OperationsLoad(key: [query.keyword, String(query.page)], load: {
+                    try await service.managedProjects(gisuId: gisuId, keyword: query.keyword, page: query.page)
                 }) { result in
                     if result.projects.isEmpty {
                         ContentUnavailableView("관리 프로젝트가 없어요", systemImage: "folder")
@@ -68,8 +71,7 @@ struct MatchingOperationsView: View {
                             ForEach(result.projects, id: \.id) { project in
                                 Divider()
                                 Button {
-                                    projectStatusValue = project.status
-                                    projectId = project.id
+                                    openProject(project.id, project.status)
                                 } label: {
                                     HStack {
                                         Text(project.name ?? "제목 없는 초안")
@@ -84,8 +86,8 @@ struct MatchingOperationsView: View {
                                 .buttonStyle(.plain)
                             }
                             HStack {
-                                Button("이전") { page -= 1 }.disabled(page == 0)
-                                Button("다음") { page += 1 }.disabled(!result.hasNext)
+                                Button("이전") { query.page -= 1 }.disabled(query.page == 0)
+                                Button("다음") { query.page += 1 }.disabled(!result.hasNext)
                             }
                         }
                         .matchingPanel()
@@ -96,8 +98,7 @@ struct MatchingOperationsView: View {
                 MatchingDraftComposer(service: service, gisuId: gisuId,
                                       canCreateOwn: canCreateOwn, canChooseOther: canChooseOther) { id in
                     creating = false
-                    projectStatusValue = "DRAFT"
-                    projectId = id
+                    openProject(id, "DRAFT")
                 }
             }
         }

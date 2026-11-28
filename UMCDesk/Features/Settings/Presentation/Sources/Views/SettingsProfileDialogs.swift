@@ -7,6 +7,7 @@
 
 import UMCFoundation
 import CoreDesignSystem
+import CoreUIComponents
 import SettingsDomain
 import CoreRouting
 import AppKit
@@ -157,6 +158,7 @@ struct SettingsDialogContent: View {
         return HStack(spacing: UMCSpacing.value8) {
             TextField("https://...", text: value)
                 .textFieldStyle(.plain)
+                .focusEffectDisabled()
                 .umcTypography(.title3Regular)
                 .focused($linkFocus, equals: .field(kind))
                 .background {
@@ -183,20 +185,13 @@ struct SettingsDialogContent: View {
                 .accessibilityLabel(AppLocalization.string("\(kind.title) 지우기"))
             }
         }
-        .padding(.horizontal, UMCSpacing.value16)
-        .frame(minHeight: 50)
-        .background {
-            RoundedRectangle(cornerRadius: UMCRadius.value12).fill(palette.backgroundSurfaceWhite)
-            if active {
-                RoundedRectangle(cornerRadius: UMCRadius.value12)
-                    .fill(palette.fillPrimaryWeak75.opacity(0.35))
-            }
-        }
-        .overlay {
-            RoundedRectangle(cornerRadius: UMCRadius.value12).strokeBorder(
-                viewModel.linkErrors[kind] != nil ? UMCColor.Semantic.borderErrorStrong500 :
-                    active ? palette.borderPrimaryStrong500 : palette.borderNeutralMedium300)
-        }
+        .umcInputField(
+            isFocused: active, isInvalid: viewModel.linkErrors[kind] != nil, minHeight: 50,
+            background: active ? palette.backgroundSurfaceWhite.mix(
+                with: palette.fillPrimaryWeak75, by: 0.35
+            ) : palette.backgroundSurfaceWhite,
+            border: palette.borderNeutralMedium300, focusBorder: palette.borderPrimaryStrong500
+        )
         .disabled(viewModel.isSaving)
     }
 
@@ -250,20 +245,15 @@ struct SettingsDialogContent: View {
                     Text(AppLocalization.string("활동 코드")).umcTypography(.headlineBold)
                     TextField(AppLocalization.string("6자리 코드"), text: $viewModel.challengerCode)
                         .textFieldStyle(.plain)
+                        .focusEffectDisabled()
                         .umcTypography(.headlineRegular)
-                        .padding(.horizontal, UMCSpacing.value12)
-                        .padding(.vertical, UMCSpacing.value8)
-                        .frame(minHeight: 40)
-                        .background(palette.backgroundSurfaceWhite,
-                            in: .rect(cornerRadius: UMCRadius.value8))
-                        .overlay {
-                            RoundedRectangle(cornerRadius: UMCRadius.value8)
-                                .strokeBorder(viewModel.dialogMessage != nil ?
-                                    UMCColor.Semantic.borderErrorStrong500 :
-                                    focusesCode ? palette.borderPrimaryStrong500 :
-                                        palette.borderNeutralMedium300)
-                        }
                         .focused($focusesCode)
+                        .umcInputField(
+                            isFocused: focusesCode, isInvalid: viewModel.dialogMessage != nil,
+                            minHeight: 40, background: palette.backgroundSurfaceWhite,
+                            border: palette.borderNeutralMedium300,
+                            focusBorder: palette.borderPrimaryStrong500
+                        )
                         .accessibilityLabel(AppLocalization.string("활동 코드"))
                         .accessibilityHint(
                             viewModel.dialogMessage ?? AppLocalization.string("6자리 활동 코드")

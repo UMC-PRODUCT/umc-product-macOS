@@ -105,6 +105,7 @@ private struct ThreadBrowser: View {
     @State private var filter = ThreadListFilter.all
     @State private var participation = ThreadParticipationFilter.all
     @State private var focusRequest = 0
+    @State private var toolsOpen = false
     @State private var threads: [CommunityThread] = []
     @State private var next: String?
     @WindowDetailSelection private var selection: String?
@@ -122,7 +123,7 @@ private struct ThreadBrowser: View {
             VStack(alignment: .leading, spacing: UMCSpacing.value12) {
                 Text("스레드").umcTypography(.title1Bold)
                 ThreadSearchField(query: $query, focusRequest: focusRequest, selectResult: selectFirst)
-                    .frame(height: 28)
+                    .disabled(toolsOpen)
                 if filter != .all || participation != .all {
                     Text([filter == .all ? nil : filter.title,
                           participation == .all ? nil : participation.rawValue]
@@ -172,14 +173,21 @@ private struct ThreadBrowser: View {
         }
         .communitySplitContent()
         .background {
-            Button("제목·소개 검색") { focusRequest += 1 }
-                .keyboardShortcut("f")
-                .hidden()
-                .accessibilityHidden(true)
+            if !toolsOpen, !creating {
+                Button("제목·소개 검색") { focusRequest += 1 }
+                    .keyboardShortcut("f")
+                    .hidden()
+                    .accessibilityHidden(true)
+            }
         }
-        .umcTabTools("스레드 도구", description: "대화를 찾고 새로운 공간을 만드세요.") { dismiss in
+        .umcTabTools(AppLocalization.string("스레드 도구"), width: .wide, isPresented: $toolsOpen) { dismiss in
+            Text(AppLocalization.string("대화를 찾고 새로운 공간을 만드세요."))
+                .font(.caption).foregroundStyle(.secondary)
+            ThreadSearchField(query: $query, focusRequest: 1, placeholder: "제목, 소개 검색") {
+                dismiss()
+                selectFirst()
+            }
             ThreadBrowserTools(filter: $filter, participation: $participation,
-                               focusSearch: { dismiss(); focusRequest += 1 },
                                create: { dismiss(); creating = true },
                                showAll: { dismiss(); showAll() })
         }
@@ -328,69 +336,27 @@ private struct ThreadBrowser: View {
 struct ThreadBrowserTools: View {
     @Binding var filter: ThreadListFilter
     @Binding var participation: ThreadParticipationFilter
-    let focusSearch: () -> Void
     let create: () -> Void
     let showAll: () -> Void
 
     var body: some View {
-        Group {
-            Button(action: focusSearch) {
-                HStack {
-                    Label("제목·소개 검색", systemImage: "magnifyingglass")
-                    Spacer()
-                    Text("⌘F").accessibilityHidden(true)
-                }
-                .padding(.horizontal, UMCSpacing.value12)
-                .frame(minHeight: UMCSpacing.value40)
-                .background(UMCColor.Custom.backgroundSurfaceGreyWeaker,
-                            in: .rect(cornerRadius: UMCRadius.value8))
-            }
-            .buttonStyle(.plain)
-            .keyboardShortcut("f")
-            Button(action: create) {
-                Text("스레드 만들기")
-                    .frame(maxWidth: .infinity, minHeight: UMCSpacing.value40)
-                    .foregroundStyle(UMCColor.Semantic.textInverse)
-                    .background(UMCColor.Semantic.textBrandDefault,
-                                in: .rect(cornerRadius: UMCRadius.value8))
-            }
-            .buttonStyle(.plain)
+        Button(AppLocalization.string("스레드 만들기"), systemImage: "plus.bubble", action: create)
+            .buttonStyle(UMCToolPrimaryButtonStyle())
+        Divider()
+        UMCToolGroupHeading(AppLocalization.string("목록 보기"))
+        Menu {
+            Picker(AppLocalization.string("분류"), selection: $filter) {
+                ForEach(ThreadListFilter.allCases, id: \.self) { Text($0.title).tag($0) }
+            }.pickerStyle(.inline)
             Divider()
-            Text("목록 보기").umcTypography(.captionRegular).foregroundStyle(.secondary)
-            Menu {
-                Picker("분류", selection: $filter) {
-                    ForEach(ThreadListFilter.allCases, id: \.self) { value in
-                        Text(value.title).tag(value)
-                    }
-                }.pickerStyle(.inline)
-                Divider()
-                Picker("참여 상태", selection: $participation) {
-                    ForEach(ThreadParticipationFilter.allCases, id: \.self) { value in
-                        Text(value.rawValue).tag(value)
-                    }
-                }.pickerStyle(.inline)
-            } label: {
-                row("분류 · 참여 상태 필터")
-            }
-            .menuStyle(.button)
-            .buttonStyle(.plain)
-            .menuIndicator(.hidden)
-            .frame(maxWidth: .infinity, minHeight: UMCSpacing.value40)
-            .toggleStyle(.automatic)
-            Button(action: showAll) { row("전체 스레드") }
-                .buttonStyle(.plain)
+            Picker(AppLocalization.string("참여 상태"), selection: $participation) {
+                ForEach(ThreadParticipationFilter.allCases, id: \.self) { Text(AppLocalization.string(.init($0.rawValue))).tag($0) }
+            }.pickerStyle(.inline)
+        } label: {
+            Label(AppLocalization.string("분류 · 참여 상태 필터"), systemImage: "line.3.horizontal.decrease")
         }
-    }
-
-    private func row(_ title: String) -> some View {
-        HStack {
-            Text(title)
-            Spacer()
-            Image(systemName: "chevron.right").foregroundStyle(.secondary)
-        }
-        .padding(.horizontal, UMCSpacing.value12)
-        .frame(minHeight: UMCSpacing.value40)
-        .contentShape(.rect)
+        .toggleStyle(.automatic)
+        Button(AppLocalization.string("전체 스레드"), systemImage: "list.bullet", action: showAll)
     }
 }
 
@@ -403,12 +369,12 @@ enum ThreadListFilter: String, CaseIterable {
 
     var title: String {
         switch self {
-        case .all: "모든 분류"
-        case .unread: "읽지 않음"
-        case .study: "스터디"
-        case .question: "질문"
-        case .project: "프로젝트"
-        case .free: "자유"
+        case .all: AppLocalization.string("모든 분류")
+        case .unread: AppLocalization.string("읽지 않음")
+        case .study: AppLocalization.string("스터디")
+        case .question: AppLocalization.string("질문")
+        case .project: AppLocalization.string("프로젝트")
+        case .free: AppLocalization.string("자유")
         }
     }
 }
@@ -442,8 +408,10 @@ private struct ThreadComposer: View {
         Form {
             Text("새 스레드").umcTypography(.title1Bold)
             TextField("이름", text: $title)
+                .umcInputField()
             TextField("설명", text: $description, axis: .vertical)
             TextField("아이콘", text: $icon)
+                .umcInputField()
             Picker("카테고리", selection: $category) {
                 Text("자유").tag("FREE")
                 Text("스터디").tag("STUDY")

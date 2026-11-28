@@ -258,8 +258,8 @@ struct DataPreviewWindow: View {
                 session.projectID = id
                 session.select(.feature(.projects))
             }).id(session.matchingNavigationID))
-        case .progress: AnyView(MatchingProgressPanel(controller: session.progress, onClose: { session.select(.matching) })
-            .frame(maxWidth: 520, maxHeight: 254).task { await session.progress.refreshOnce() })
+        case .progress: AnyView(MatchingProgressPanel(controller: session.progress, onClose: { session.openMatching(.explore) })
+            .task { await session.progress.refreshOnce() })
         case .support:
             AnyView(SupportView(fixture: session.support, scene: session.isEmpty ? .empty : .home,
                                 exitGate: session.supportExitGate))
@@ -271,7 +271,7 @@ struct DataPreviewWindow: View {
         let account = session.account
         switch section {
         case .home:
-            HomeView(repository: account.home, memberID: account.memberID, defaults: session.defaults) {
+            HomeView(repository: account.home) {
                 switch $0 {
                 case .activity: session.select(.feature(.activity))
                 case .notice: session.select(.feature(.notice))
@@ -293,6 +293,10 @@ struct DataPreviewWindow: View {
                                  loadProjects: account.projects,
                                  loadGitHub: { url in
                                      session.isEmpty ? [] : DataPreviewAccount.recentWork(repository: url)
+                                 },
+                                 teamContent: { id in
+                                     AnyView(PublishedMatchingTeamSheet(repository: session.matching,
+                                         projectId: id, memberId: account.memberID))
                                  },
                                  openMatching: { session.select(.matching) })
         }

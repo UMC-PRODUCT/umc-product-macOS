@@ -8,7 +8,6 @@
 import CommunityDomain
 import CoreNetwork
 import Foundation
-import HomePresentation
 import ProjectWorkspaceDomain
 
 enum DataPreviewAccount {
@@ -54,7 +53,6 @@ enum DataPreviewAccount {
     }
 
     @MainActor static func seedWorkspace(in defaults: UserDefaults) {
-        HomeView.seedPreviewGameRecords(in: defaults, memberID: memberID)
         for (id, slug, completed, next) in [
             ("1", "moa", "취향 태그 선택 화면 인터뷰 정리", "추천 상품 카드의 가격 표시 확인"),
             ("3", "sai", "공동 구매 참여 흐름 시연 녹화", "모집 마감 직전 참여 취소 테스트")

@@ -302,6 +302,35 @@ private struct MatchingAssignmentResult: View {
     }
 }
 
+public struct PublishedMatchingTeamSheet: View {
+    let repository: any MatchingUseCase
+    let projectId: String
+    let memberId: String
+    @State private var request = MatchingRequest<OperationsTeam?>()
+    @State private var attempt = 0
+
+    public init(repository: any MatchingUseCase, projectId: String, memberId: String) {
+        self.repository = repository
+        self.projectId = projectId
+        self.memberId = memberId
+    }
+
+    public var body: some View {
+        MatchingTeamPanel {
+            MatchingRequestView(request: request, retry: { attempt += 1 }) { team in
+                if let team, team.publishedMember(withID: memberId) != nil {
+                    MatchingRosterList(team: team)
+                } else {
+                    Text("공개 팀 명단에서 참여를 확인할 수 없어요.")
+                }
+            }
+        }
+        .task(id: attempt) {
+            await request.load { try await repository.publishedTeam(projectId: projectId) }
+        }
+    }
+}
+
 extension OperationsTeam {
     func publishedMember(withID memberId: String) -> (person: OperationsPerson, role: String)? {
         guard !memberId.isEmpty else { return nil }

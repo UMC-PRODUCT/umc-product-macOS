@@ -11,7 +11,6 @@ import ProjectDescriptionHelpers
 let project = featureProject(
     name: "Home",
     presentationResources: ["Presentation/Resources/**"],
-    includesDomainTests: true,
     includesDataTests: true,
     includesPresentationTests: true
 )

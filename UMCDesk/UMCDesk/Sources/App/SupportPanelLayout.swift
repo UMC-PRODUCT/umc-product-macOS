@@ -49,8 +49,6 @@ struct SupportDiscardAlert: ViewModifier {
 }
 
 enum SupportLayoutMetrics {
-    static let toolWidth: CGFloat = 390
-    static let edge: CGFloat = 16
     static let teamWidth: CGFloat = 816
     static let teamInset: CGFloat = 25
     static func teamGridMinimum(_ scale: CGFloat) -> CGFloat { 600 * scale + 12 }
@@ -224,28 +222,6 @@ struct SupportTableWidth: Layout {
         in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()
     ) {
         subviews.first?.place(at: bounds.origin, anchor: .topLeading, proposal: .init(bounds.size))
-    }
-}
-
-/// The trigger is in the workspace toolbar. Keep the panel inside the safe edges when enlarged.
-struct SupportToolsPlacement: Layout {
-    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
-        proposal.replacingUnspecifiedDimensions(by: .init(width: 422, height: 480))
-    }
-    func placeSubviews(
-        in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()
-    ) {
-        guard let menu = subviews.first else { return }
-        let edge = SupportLayoutMetrics.edge
-        let width = min(SupportLayoutMetrics.toolWidth, max(0, bounds.width - 2 * edge))
-        let natural = menu.sizeThatFits(.init(width: width, height: nil)).height
-        let safe = bounds.insetBy(dx: edge, dy: edge)
-        let position = SupportFieldMenuPlacement.position(
-            height: max(0, safe.height),
-            prefix: max(0, 4 - edge), field: 26, menu: natural)
-        menu.place(
-            at: .init(x: safe.maxX - width, y: safe.minY + position.menuY), anchor: .topLeading,
-            proposal: .init(width: width, height: position.menuHeight))
     }
 }
 

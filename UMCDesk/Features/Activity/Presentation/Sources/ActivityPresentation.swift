@@ -6,6 +6,7 @@
 
 import ActivityDomain
 import CoreDesignSystem
+import CoreUIComponents
 import MapKit
 import SwiftUI
 import UMCFoundation
@@ -173,8 +174,17 @@ public struct ActivityView: View {
     @State private var model: ActivityViewModel
     @State private var selectedGroup: String?
     @State private var selectedSchedule: String?
+    @State private var scrollPosition = ScrollPosition()
     @State private var memberProfile: ActivityRow?
     @State private var memberSearch = ""
+    @State private var directoryKeyword = ""
+    @State private var directoryPart: String?
+    @State private var directoryResult: ActivityMemberPage?
+    @State private var directoryPage = 0
+    @State private var studyPermissions: StudyTools?
+    @State private var permissionGroupID: String?
+    @State private var studySheet: StudyToolsView.Tool?
+    @State private var reviewStatus: String?
     @State private var presented: Panel?
     @State private var retry = UUID()
 
@@ -185,17 +195,7 @@ public struct ActivityView: View {
     public var body: some View {
         VStack(spacing: 0) {
             VStack(alignment: .leading, spacing: 12) {
-                ActivityAdaptiveRow(minimumLeadingWidth: 100) {
-                    Text("활동").umcTypography(.title2Bold)
-                    HStack(spacing: 12) {
-                        Button("새로고침", systemImage: "arrow.clockwise") { retry = UUID() }
-                            .labelStyle(.iconOnly).frame(minWidth: 28, minHeight: 28)
-                            .help(AppLocalization.string("활동 새로고침")).disabled(model.submitting)
-                        if model.capabilities?.canCreate == true {
-                            Button("일정 만들기", systemImage: "plus") { presented = .create }
-                        }
-                    }
-                }
+                Text("활동").umcTypography(.title2Bold)
                 ViewThatFits(in: .horizontal) {
                     tabPicker.pickerStyle(.segmented).fixedSize(horizontal: true, vertical: false)
                     tabPicker.pickerStyle(.menu)
@@ -225,23 +225,18 @@ public struct ActivityView: View {
                         Text("스터디 그룹").umcTypography(.title4Bold)
                         loaded(model.groups, section: "스터디 그룹") { groups in
                             if groups.isEmpty {
-                                StudyToolsView(model: model, group: nil) { retry = UUID() }
+                                ActivityFlow { studyTools {} }
                                 empty("표시할 스터디가 없어요")
                             } else {
-                                let id =
-                                    selectedGroup.flatMap { selected in
-                                        groups.first { $0.id == selected }?.id
-                                    } ?? groups[0].id
+                                let id = currentGroup?.id ?? groups[0].id
                                 Picker(
                                     "스터디",
                                     selection: Binding(get: { id }, set: { selectedGroup = $0 })
                                 ) {
                                     ForEach(groups) { Text($0.title).tag($0.id) }
                                 }
-                                StudyToolsView(model: model, group: groups.first { $0.id == id }) {
-                                    retry = UUID()
-                                }
-                                TextField(
+                                ActivityFlow { studyTools {} }
+                                UMCSearchField(
                                     AppLocalization.string("이 그룹 구성원 이름 검색"), text: $memberSearch)
                                 loaded(model.members, section: AppLocalization.string("그룹 구성원")) {
                                     rows in
@@ -265,9 +260,10 @@ public struct ActivityView: View {
                             }
                         }
                     case .members:
-                        MemberDirectory(repository: model.repository, retry: retry) {
-                            memberProfile = $0
-                        }
+                        MemberDirectory(repository: model.repository, retry: retry,
+                                        keyword: $directoryKeyword, part: $directoryPart,
+                                        open: { memberProfile = $0 }, page: $directoryPage,
+                                        result: $directoryResult)
                     case .management:
                         if model.canReview {
                             Text("출석 관리").umcTypography(.title4Bold)
@@ -278,11 +274,96 @@ public struct ActivityView: View {
                     }
                 }.frame(maxWidth: .infinity, alignment: .leading).padding(24)
             }
+            .scrollPosition($scrollPosition)
         }
         .background(UMCColor.Custom.backgroundDefault)
         .tint(UMCColor.Semantic.textBrandDefault)
+        .umcTabTools(AppLocalization.string("활동 도구"), width: .wide, findShortcut: model.tab == .members) { dismiss in
+            if model.tab == .attendance {
+                if case .loaded(let schedules) = model.schedules {
+                    TimelineView(.periodic(from: .now, by: 30)) { timeline in
+                        attendanceTools(schedules, now: timeline.date, dismiss: dismiss)
+                    }
+                }
+                if model.capabilities?.canCreate == true {
+                    Button(AppLocalization.string("일정 만들기"), systemImage: "calendar.badge.plus") {
+                        dismiss()
+                        presented = .create
+                    }
+                }
+            }
+            if model.tab == .study {
+                studyTools(panel: true, dismiss: dismiss)
+            }
+            if model.tab == .members {
+                UMCSearchField(AppLocalization.string("이름 또는 닉네임 검색"), text: $directoryKeyword)
+                Picker(AppLocalization.string("파트"), selection: $directoryPart) {
+                    Text(AppLocalization.string("전체 파트")).tag(String?.none)
+                    ForEach(MemberDirectory.parts, id: \.self) { Text($0).tag(Optional($0)) }
+                }
+                if !directoryKeyword.isEmpty || directoryPart != nil {
+                    Button(AppLocalization.string("검색 조건 초기화"), systemImage: "arrow.counterclockwise") {
+                        directoryKeyword = ""
+                        directoryPart = nil
+                    }
+                }
+                if let result = directoryResult {
+                    Divider()
+                    if result.members.isEmpty { Text(AppLocalization.string("검색 결과가 없어요")) }
+                    ForEach(result.members) { member in
+                        Button(member.title, systemImage: "person.crop.circle") {
+                            dismiss()
+                            memberProfile = member
+                        }
+                    }
+                    MemberPageControls(page: $directoryPage, hasNext: result.hasNext)
+                }
+            }
+            if model.tab == .attendance, model.canReview {
+                Button(AppLocalization.string("출석 관리"), systemImage: "checklist") { dismiss(); model.tab = .management }
+            }
+            if model.tab == .management, model.canReview {
+                if model.capabilities?.canCreate == true {
+                    Button(AppLocalization.string("일정 만들기"), systemImage: "calendar.badge.plus") {
+                        dismiss()
+                        presented = .create
+                    }
+                }
+                if case .loaded(let reviews) = model.reviews {
+                    Picker(AppLocalization.string("출석 상태"), selection: $reviewStatus) {
+                        Text(AppLocalization.string("전체")).tag(String?.none)
+                        ForEach(Set(reviews.flatMap(\.participants).compactMap(\.status))
+                            .union([reviewStatus].compactMap { $0 }).sorted(), id: \.self) {
+                            Text(status($0, fallback: $0)).tag(Optional($0))
+                        }
+                    }
+                }
+            }
+            Button(AppLocalization.string("새로고침"), systemImage: "arrow.clockwise") {
+                dismiss()
+                retry = UUID()
+            }
+            .disabled(model.submitting)
+        }
         .task(id: LoadKey(tab: model.tab, retry: retry)) { await model.load(model.tab) }
         .task(id: retry) { await model.permissions() }
+        .task(id: StudyAccessKey(tab: model.tab, group: currentGroup?.id,
+                                 ready: groupsLoaded, retry: retry)) {
+            studyPermissions = nil
+            studySheet = nil
+            guard model.tab == .study, case .loaded = model.groups else { return }
+            let id = currentGroup?.id
+            let permissions = try? await model.repository.studyTools(groupID: id)
+            guard !Task.isCancelled else { return }
+            permissionGroupID = id
+            studyPermissions = permissions
+        }
+        .sheet(item: $studySheet) { tool in
+            StudyEditor(repository: model.repository, tool: tool, group: currentGroup) {
+                studySheet = nil
+                retry = UUID()
+            }
+        }
         .sheet(item: $memberProfile) { member in
             ActivityMemberDetail(repository: model.repository, member: member)
         }
@@ -306,6 +387,31 @@ public struct ActivityView: View {
             }
         } message: {
             Text($0.name + "님의 출석 요청")
+        }
+    }
+
+    private struct StudyAccessKey: Equatable {
+        let tab: ActivityTab
+        let group: String?
+        let ready: Bool
+        let retry: UUID
+    }
+
+    private var groupsLoaded: Bool {
+        if case .loaded = model.groups { return true }
+        return false
+    }
+
+    private var currentGroup: ActivityRow? {
+        guard case .loaded(let groups) = model.groups else { return nil }
+        return groups.first { $0.id == selectedGroup } ?? groups.first
+    }
+
+    private func studyTools(panel: Bool = false, dismiss: @escaping () -> Void) -> some View {
+        StudyToolsView(permissions: groupsLoaded && permissionGroupID == currentGroup?.id
+            ? studyPermissions : nil, group: currentGroup, panel: panel) { tool in
+            dismiss()
+            studySheet = tool
         }
     }
 
@@ -349,12 +455,7 @@ public struct ActivityView: View {
         if schedules.isEmpty {
             empty("출석할 일정이 없어요")
         } else {
-            let current =
-                schedules.first { $0.id == selectedSchedule }
-                ?? schedules.first {
-                    ($0.opens ?? $0.startsAt) <= now && ($0.closes ?? $0.endsAt) >= now
-                }
-                ?? schedules.first { $0.endsAt > now } ?? schedules[schedules.count - 1]
+            let current = currentSchedule(schedules, now: now) ?? schedules[0]
             hero(current, now: now)
             ActivityColumns(expandedText: textScale > 1 || dynamicTypeSize > .large) {
                 scheduleList(
@@ -364,6 +465,58 @@ public struct ActivityView: View {
                     selected: current.id)
             }
         }
+    }
+
+    @ViewBuilder
+    private func attendanceTools(
+        _ schedules: [ActivitySchedule], now: Date, dismiss: @escaping () -> Void
+    ) -> some View {
+        if let schedule = currentSchedule(schedules, now: now) {
+            let timing = ActivityTiming(schedule: schedule, now: now)
+            Text(schedule.name)
+                .umcTypography(.captionRegular)
+                .foregroundStyle(.secondary)
+            if timing.canAttend {
+                Button(schedule.isOnline ? AppLocalization.string("지금 출석 요청")
+                    : AppLocalization.string("위치 확인 후 출석"),
+                       systemImage: "checkmark.circle") {
+                    dismiss()
+                    selectedSchedule = schedule.id
+                    scrollPosition.scrollTo(edge: .top)
+                    requestAttendance(schedule)
+                }
+                .buttonStyle(UMCToolPrimaryButtonStyle())
+                .disabled(model.submitting)
+            } else {
+                Button(AppLocalization.string("일정 보기"), systemImage: "calendar") {
+                    dismiss()
+                    selectedSchedule = schedule.id
+                    scrollPosition.scrollTo(edge: .top)
+                }
+            }
+            if timing.canSubmitExcuse {
+                Button(AppLocalization.string("사유 제출"), systemImage: "square.and.pencil") {
+                    dismiss()
+                    presented = .excuse(schedule.id)
+                }.disabled(model.submitting)
+            }
+            if let onTime = schedule.onTime, let closes = schedule.closes {
+                LabeledContent(AppLocalization.string("정시 마감"),
+                               value: ActivityTiming.time(onTime, relativeTo: schedule.startsAt))
+                LabeledContent(AppLocalization.string("지각 마감"),
+                               value: ActivityTiming.time(closes, relativeTo: schedule.startsAt))
+            }
+            Divider()
+        } else {
+            Text(AppLocalization.string("등록된 일정이 없어요")).umcTypography(.captionRegular).foregroundStyle(.secondary)
+        }
+    }
+
+    private func currentSchedule(_ schedules: [ActivitySchedule], now: Date) -> ActivitySchedule? {
+        schedules.first { $0.id == selectedSchedule }
+            ?? schedules.first { ActivityTiming(schedule: $0, now: now).canAttend }
+            ?? schedules.first { ($0.opens ?? $0.startsAt) <= now && ($0.closes ?? $0.endsAt) >= now }
+            ?? schedules.first { $0.endsAt >= now } ?? schedules.last
     }
 
     private func hero(_ schedule: ActivitySchedule, now: Date) -> some View {
@@ -431,20 +584,16 @@ public struct ActivityView: View {
                     Text(summary).umcTypography(.calloutRegular)
                 }
                 ActivityFlow {
-                    if schedule.isParticipant, open, schedule.status == nil {
+                    if timing.canAttend {
                         Button(schedule.isOnline ? "지금 출석 요청" : "위치 확인 후 출석") {
-                            if schedule.isOnline {
-                                submitAttendance(schedule)
-                            } else {
-                                presented = .location(schedule)
-                            }
+                            requestAttendance(schedule)
                         }.buttonStyle(.borderedProminent)
                             .tint(
                                 colorScheme == .dark
                                     ? UMCColor.Semantic.fillPrimaryStrong200
                                     : UMCColor.Semantic.textBrandDefault)
                     }
-                    if schedule.isParticipant, [nil, "LATE", "ABSENT"].contains(schedule.status) {
+                    if timing.canSubmitExcuse {
                         Button("사유 제출") { presented = .excuse(schedule.id) }
                     }
                     if schedule.status != nil { Button("결과 다시 확인") { retry = UUID() } }
@@ -458,7 +607,14 @@ public struct ActivityView: View {
         .background(UMCColor.Semantic.surfaceBrandWeak, in: .rect(cornerRadius: UMCRadius.value16))
     }
 
-    private func submitAttendance(_ schedule: ActivitySchedule) {
+    private func requestAttendance(_ schedule: ActivitySchedule) {
+        guard ActivityTiming(schedule: schedule, now: .now).canAttend, !model.submitting else {
+            return
+        }
+        guard schedule.isOnline else {
+            presented = .location(schedule)
+            return
+        }
         Task {
             _ = await model.perform(
                 {
@@ -498,11 +654,17 @@ public struct ActivityView: View {
 
     @ViewBuilder
     private func reviewRows(_ rows: [AttendanceReview]) -> some View {
+        let rows = rows.filter { row in
+            reviewStatus == nil || row.participants.contains { $0.status == reviewStatus }
+        }
         if rows.isEmpty { empty("검토할 일정이 없어요") }
         ForEach(rows) { schedule in
             VStack(alignment: .leading, spacing: 12) {
                 Text(schedule.name).umcTypography(.title4Bold)
-                ForEach(schedule.participants) { member in
+                let participants = schedule.participants.filter {
+                    reviewStatus == nil || $0.status == reviewStatus
+                }
+                ForEach(participants) { member in
                     ActivityAdaptiveRow(minimumLeadingWidth: 360) {
                         VStack(alignment: .leading, spacing: 8) {
                             ActivityFlow {

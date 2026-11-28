@@ -10,6 +10,7 @@ import CoreDesignSystem
 import CoreRouting
 import MatchingDomain
 import SwiftUI
+import UMCFoundation
 
 public enum MatchingDestination: Hashable, Sendable {
     case explore, applications, schedule, status, management
@@ -81,6 +82,7 @@ public struct MatchingView: View {
     private let memberId: String?
     private let onOpenProject: ((String) -> Void)?
     @State private var explorer = MatchingExplorerState()
+    @State private var managedSearch = ManagedProjectSearch()
     @State private var position = ScrollPosition()
     @State private var destination: MatchingDestination
     @State private var organization = MatchingRequest<MatchingOrganization>()
@@ -90,9 +92,13 @@ public struct MatchingView: View {
     @State private var chapterId: String?
     @State private var hasChosenChapter = false
     @State private var editingSchedule = false
+    @State private var scheduleType = MatchingRosterType.developer.rawValue
+    @State private var showsAdjustment = false
+    @State private var statusSection = MatchingStatusSection.statistics
     @State private var authorizedChapter: String?
     @State private var selectedProject: MatchingProject?
-    @State private var draftId: String?
+    @State private var managedId: String?
+    @State private var managedStatus: String?
     @State private var creating = false
     @State private var canChooseOtherPM = false
 
@@ -105,7 +111,8 @@ public struct MatchingView: View {
     private struct Location: Equatable {
         let destination: MatchingDestination
         var project: MatchingProject?
-        var draftId: String?
+        var managedId: String?
+        var managedStatus: String?
     }
 
     public init(
@@ -136,27 +143,20 @@ public struct MatchingView: View {
     #endif
 
     public var body: some View {
-        VStack(spacing: 0) {
-            ScrollView {
-                VStack(alignment: .leading, spacing: UMCSpacing.value16) {
-                    if selectedProject == nil {
-                        Text(destination.heading)
-                            .umcTypography(.largeTitle3Bold)
-                            .accessibilityAddTraits(.isHeader)
-                        matchingTabs
-                        Divider()
-                    }
-                    bodyContent
+        Group {
+            if let managedId, destination == .management {
+                ProjectOperationsView(service: repository, projectId: managedId,
+                                      status: managedStatus, header: { matchingTabs }) {
+                    navigate(.management)
                 }
-                .padding(.horizontal, UMCSpacing.value24)
-                .padding(.vertical, UMCSpacing.value24)
+                .id(managedId)
+            } else {
+                workspace
+                    .umcTabTools(isRoundContext ? "매칭 운영 도구" : "매칭 도구", width: .wide,
+                                 findShortcut: isExploring && !creating) { dismiss in
+                        matchingTools(dismiss)
+                    }
             }
-            .scrollPosition($position)
-        }
-        .umcTabTools("매칭 도구", description: "일정과 지원 현황, 내 프로젝트를 확인하세요.") { dismiss in
-            Button("전체 일정") { dismiss(); navigate(.schedule) }
-            Button("내 지원") { dismiss(); navigate(.applications) }
-            Button("내 프로젝트") { dismiss(); navigate(.management) }
         }
         .toolbar {
             if windowDetail == nil {
@@ -181,11 +181,18 @@ public struct MatchingView: View {
             let target = windowDetail.wrappedValue?.route(as: Location.self) ?? initialLocation
             if current != target { restore(target) }
         }
+        .sheet(isPresented: $editingSchedule) {
+            if let chapterId, authorizedChapter == chapterId {
+                MatchingScheduleEditor(repository: repository, chapterId: chapterId,
+                                       rounds: loadedRounds, initialType: scheduleType, onSaved: { roundAttempt += 1 })
+                    .id(chapterId)
+            }
+        }
         .sheet(isPresented: $creating) {
             MatchingDraftComposer(service: repository, gisuId: gisuId,
                                   canCreateOwn: canCreateOwnDraft, canChooseOther: canChooseOtherPM) { id in
                 creating = false
-                go(.init(destination: .management, draftId: id))
+                go(.init(destination: .management, managedId: id, managedStatus: "DRAFT"))
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -215,6 +222,135 @@ public struct MatchingView: View {
             await rounds.load { try await repository.rounds(chapterId: chapterId) }
             if (try? await repository.canManageSchedule(chapterId: chapterId)) == true,
                !Task.isCancelled, self.chapterId == chapterId { authorizedChapter = chapterId }
+        }
+    }
+
+    private var isExploring: Bool { destination == .explore && selectedProject == nil }
+    private var isRoundContext: Bool { destination == .schedule || destination == .status }
+
+    private var workspace: some View {
+        VStack(spacing: 0) {
+            ScrollView {
+                VStack(alignment: .leading, spacing: UMCSpacing.value16) {
+                    if selectedProject == nil {
+                        Text(destination.heading)
+                            .umcTypography(.largeTitle3Bold)
+                            .accessibilityAddTraits(.isHeader)
+                        matchingTabs
+                        Divider()
+                    }
+                    bodyContent
+                }
+                .padding(.horizontal, UMCSpacing.value24)
+                .padding(.vertical, UMCSpacing.value24)
+            }
+            .scrollPosition($position)
+        }
+    }
+
+    @ViewBuilder private func matchingTools(_ dismiss: @escaping () -> Void) -> some View {
+        @Bindable var explorer = explorer
+        if isExploring {
+            UMCSearchField(
+                AppLocalization.string("프로젝트 이름 검색"), text: $explorer.filters.keyword
+            )
+            if canCreateOwnDraft || canChooseOtherPM {
+                Button("프로젝트 만들기", systemImage: "plus") {
+                    dismiss()
+                    creating = true
+                }.buttonStyle(UMCToolPrimaryButtonStyle())
+            }
+            Divider()
+            UMCToolGroupHeading("찾아보기")
+            MatchingFilterPickers(state: explorer, schools: schools)
+            if explorer.filters != .init() || (hasChosenChapter && chapterId != nil) {
+                Button("검색 조건 초기화", systemImage: "arrow.counterclockwise") {
+                    explorer.filters = .init()
+                    if hasChosenChapter { chapterId = nil }
+                }
+            }
+            Divider()
+        }
+        if isRoundContext {
+            if mayEditChapter, let missing = [MatchingRosterType.developer, .design].first(where: { type in
+                !loadedRounds.contains(where: { $0.type == type.rawValue })
+            }) {
+                Button("매칭 차수 개설", systemImage: "calendar.badge.plus") {
+                    dismiss()
+                    scheduleType = missing.rawValue
+                    editingSchedule = true
+                }.buttonStyle(UMCToolPrimaryButtonStyle())
+                Divider()
+            }
+            UMCToolGroupHeading("차수 운영")
+            Button("전체 차수와 일정", systemImage: "calendar") {
+                dismiss()
+                navigate(.schedule)
+                position.scrollTo(edge: .top)
+            }
+            if mayEditChapter {
+                Button("지부 일정 관리", systemImage: "calendar.badge.clock") {
+                    dismiss()
+                    scheduleType = loadedRounds.first(where: { $0.isOpen(at: .now) })?.type
+                        ?? loadedRounds.first?.type ?? MatchingRosterType.developer.rawValue
+                    editingSchedule = true
+                }
+                if let eligible = loadedRounds.first(where: {
+                    $0.canReviewAutoDecision(in: loadedRounds, at: .now)
+                }) {
+                    Button("자동 선발 검토", systemImage: "person.badge.clock") {
+                        dismiss()
+                        scheduleType = eligible.type
+                        editingSchedule = true
+                    }
+                }
+            }
+            Divider()
+            UMCToolGroupHeading("운영 현황")
+            statusButton("학교 · 프로젝트 통계", .statistics, dismiss)
+            statusButton("공개 매칭 현황", .roster, dismiss)
+        } else {
+            UMCToolGroupHeading("바로 가기")
+            destinationButton("전체 매칭 일정", "calendar", .schedule, dismiss)
+        }
+        if !isExploring {
+            destinationButton("프로젝트 탐색", "magnifyingglass", .explore, dismiss)
+        }
+        if destination != .applications {
+            destinationButton("내 지원 현황", "doc.text", .applications, dismiss)
+        }
+        if !isRoundContext {
+            statusButton("공개 매칭 현황", .roster, dismiss)
+        }
+        if destination != .management {
+            destinationButton("내 프로젝트", "folder", .management, dismiss)
+        }
+    }
+
+    private var mayEditChapter: Bool {
+        guard let chapterId, authorizedChapter == chapterId, case .loaded = rounds.phase else {
+            return false
+        }
+        return true
+    }
+
+    private func statusButton(_ title: String, _ section: MatchingStatusSection,
+                              _ dismiss: @escaping () -> Void) -> some View {
+        Button(title, systemImage: section == .statistics ? "chart.bar" : "person.3") {
+            dismiss()
+            if section == .roster { showsAdjustment = false }
+            statusSection = section
+            navigate(.status)
+            position.scrollTo(id: section, anchor: .top)
+        }
+    }
+
+    private func destinationButton(_ title: String, _ icon: String,
+                                   _ page: MatchingDestination, _ dismiss: @escaping () -> Void)
+        -> some View {
+        Button(title, systemImage: icon) {
+            dismiss()
+            navigate(page)
         }
     }
 
@@ -264,18 +400,20 @@ public struct MatchingView: View {
                                      onOpenProject: onOpenProject, explore: { navigate(.explore) })
             case .schedule:
                 scheduleList
-            case .management where draftId != nil:
-                if let draftId {
-                    ProjectOperationsView(service: repository, projectId: draftId, status: "DRAFT") {
-                        navigate(.management)
-                    }.id(draftId)
-                }
             case .status, .management:
                 chapterPicker
-                MatchingOperationsView(section: destination == .status ? .statistics : .projects,
-                                       service: repository, gisuId: gisuId, chapterId: chapterId,
-                                       canCreateOwn: canCreateOwnDraft, canChooseOther: canChooseOtherPM,
-                                       canReadAdjustment: chapterId != nil && authorizedChapter == chapterId)
+                MatchingOperationsView(
+                    section: destination == .status ? .statistics : .projects,
+                    service: repository, gisuId: gisuId, chapterId: chapterId,
+                    canCreateOwn: canCreateOwnDraft, canChooseOther: canChooseOtherPM,
+                    canReadAdjustment: chapterId != nil && authorizedChapter == chapterId,
+                    adjustment: $showsAdjustment, query: managedSearch
+                ) { id, status in
+                    go(.init(destination: .management, managedId: id, managedStatus: status))
+                }
+                .onChange(of: chapterId, initial: true) {
+                    if destination == .status { position.scrollTo(id: statusSection, anchor: .top) }
+                }
             }
         }
     }
@@ -351,10 +489,7 @@ public struct MatchingView: View {
                 }
                 if loadedRounds.isEmpty { Text("등록된 매칭 일정이 없어요.").matchingPanel() }
             }
-            .sheet(isPresented: $editingSchedule) {
-                MatchingScheduleEditor(repository: repository, chapterId: chapterId,
-                                       rounds: loadedRounds, onSaved: { roundAttempt += 1 })
-            }
+
         }
     }
 
@@ -363,7 +498,7 @@ public struct MatchingView: View {
     }
 
     private var current: Location {
-        Location(destination: destination, project: selectedProject, draftId: draftId)
+        Location(destination: destination, project: selectedProject, managedId: managedId, managedStatus: managedStatus)
     }
 
     private func go(_ target: Location) {
@@ -383,7 +518,8 @@ public struct MatchingView: View {
             explorer.returnProjectId = selectedProject.id
         }
         selectedProject = target.project
-        draftId = target.draftId
+        managedId = target.managedId
+        managedStatus = target.managedStatus
         destination = target.destination
     }
 

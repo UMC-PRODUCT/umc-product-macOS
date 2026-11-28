@@ -119,7 +119,7 @@ struct ThreadSearchFieldTests {
             let tools = ThreadBrowserTools(
                 filter: .init(get: { category }, set: { category = $0 }),
                 participation: .init(get: { participation }, set: { participation = $0 }),
-                focusSearch: {}, create: {}, showAll: {}
+                create: {}, showAll: {}
             )
             let menu = NSHostingMenu(rootView: tools.toggleStyle(UMCCheckboxStyle()))
             return try #require(menu.item(withTitle: "분류 · 참여 상태 필터")?.submenu)
@@ -150,27 +150,25 @@ struct ThreadSearchFieldTests {
         try verifyRows(in: openFilters())
     }
 
-    @Test func toolsAndSharingUseNativeMenuActionsAndServerPayload() throws {
-        var activated: [String] = []
-        var filter = ThreadListFilter.all
-        var participation = ThreadParticipationFilter.all
-        let tools = ThreadBrowserTools(filter: .init(get: { filter }, set: { filter = $0 }),
-            participation: .init(get: { participation }, set: { participation = $0 }),
-            focusSearch: { activated.append("search") }, create: { activated.append("create") },
-            showAll: { activated.append("all") })
+    @Test func emptyThreadToolsKeepBothFiltersAndAllThreads() throws {
+        var actions: [String] = []
+        let tools = ThreadBrowserTools(filter: .constant(.all), participation: .constant(.all),
+            create: { actions.append("create") }, showAll: { actions.append("all") })
         let menu = NSHostingMenu(rootView: tools)
-        for title in ["제목·소개 검색", "스레드 만들기", "전체 스레드"] {
-            let action = try #require(menu.item(withTitle: title))
-            menu.performActionForItem(at: menu.index(of: action))
+        for title in ["스레드 만들기", "전체 스레드"] {
+            let item = try #require(menu.item(withTitle: title))
+            menu.performActionForItem(at: menu.index(of: item))
         }
-        #expect(activated == ["search", "create", "all"])
-        let filters = try #require(menu.item(withTitle: "분류 · 참여 상태 필터")?.submenu)
-        for title in ["프로젝트", "미참여"] {
-            let action = try #require(filters.item(withTitle: title))
-            filters.performActionForItem(at: filters.index(of: action))
-        }
-        #expect(filter == .project && participation == .unjoined)
+        #expect(actions == ["create", "all"])
+        #expect(menu.items.compactMap(\.submenu).contains {
+            $0.item(withTitle: ThreadListFilter.project.title) != nil
+        })
+        #expect(menu.items.compactMap(\.submenu).contains {
+            $0.item(withTitle: ThreadParticipationFilter.unjoined.rawValue) != nil
+        })
+    }
 
+    @Test func sharingUsesNativeMenuActionsAndServerPayload() throws {
         func share(_ url: URL?) -> ThreadShareMenu {
             .init(thread: .init(id: "42", title: "스터디", description: "이번 주 소개", icon: "💬",
                                 isPinned: false, isMuted: false, isJoined: true,
@@ -206,12 +204,16 @@ struct ThreadSearchFieldTests {
         let control = ThreadSearchField(query: .init(get: { query }, set: { query = $0 })) {
             selectedQueries.append(query)
         }
-        let delegate = control.makeCoordinator()
+        let host = NSHostingView(rootView: control)
         let window = NSWindow(contentRect: .init(x: 0, y: 0, width: 320, height: 120),
                               styleMask: [.titled], backing: .buffered, defer: false)
-        let field = NSSearchField(frame: .init(x: 0, y: 70, width: 240, height: 32))
-        field.delegate = delegate
-        window.contentView?.addSubview(field)
+        window.contentView = host
+        defer { window.contentView = nil }
+        host.layoutSubtreeIfNeeded()
+        let field = try #require(find(NSSearchField.self, in: host))
+        let delegate = try #require(field.delegate)
+        #expect(field.focusRingType == .none)
+        #expect(!field.isBordered)
         #expect(window.makeFirstResponder(field))
         let editor = try #require(field.currentEditor() as? NSTextView)
         let cursor = NSRange(location: 1, length: 0)
@@ -220,8 +222,8 @@ struct ThreadSearchFieldTests {
         editor.setMarkedText("한", selectedRange: cursor, replacementRange: insertion)
         #expect(editor.hasMarkedText())
         #expect(query.isEmpty)
-        #expect(!delegate.control(field, textView: editor,
-                                  doCommandBy: #selector(NSResponder.insertNewline(_:))))
+        #expect(delegate.control?(field, textView: editor,
+                                  doCommandBy: #selector(NSResponder.insertNewline(_:))) == false)
         #expect(selectedQueries.isEmpty)
         editor.insertText("한", replacementRange: insertion)
         #expect(query == "한")

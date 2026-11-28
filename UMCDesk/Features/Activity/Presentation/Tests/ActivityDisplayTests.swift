@@ -12,11 +12,13 @@ import Testing
 
 struct ActivityDisplayTests {
     private let start = Date(timeIntervalSince1970: 1_800_000_000)
-    private func schedule(onTime: Date?, closes: Date?) -> ActivitySchedule {
+    private func schedule(
+        onTime: Date?, closes: Date?, participant: Bool = true, status: String? = "PRESENT_PENDING"
+    ) -> ActivitySchedule {
         ActivitySchedule(
             id: "1", name: "경계", startsAt: start,
             endsAt: start.addingTimeInterval(3600), isOnline: true,
-            isParticipant: true, status: "PRESENT_PENDING",
+            isParticipant: participant, status: status,
             opens: start.addingTimeInterval(-600), onTime: onTime,
             closes: closes, location: nil)
     }
@@ -41,6 +43,27 @@ struct ActivityDisplayTests {
         #expect(
             ActivityTiming(schedule: row, now: close.addingTimeInterval(1)).remainingSummary == nil
         )
+    }
+
+    @Test func attendanceActionRequiresOpenWindowAndUnmarkedParticipant() {
+        let closes = start.addingTimeInterval(60)
+        let eligible = schedule(onTime: start, closes: closes, status: nil)
+        let observer = schedule(onTime: start, closes: closes, participant: false, status: nil)
+        #expect(ActivityTiming(schedule: eligible, now: closes).canAttend)
+        #expect(!ActivityTiming(schedule: eligible, now: closes.addingTimeInterval(1)).canAttend)
+        #expect(!ActivityTiming(schedule: observer, now: start).canAttend)
+        #expect(!ActivityTiming(schedule: schedule(onTime: start, closes: closes), now: start).canAttend)
+    }
+
+    @Test func studyWritesRequirePermissionForTheCurrentGroup() {
+        let allowed = StudyTools(create: true, edit: true, mentor: true)
+        let denied = StudyTools(create: false, edit: false, mentor: false)
+        #expect(StudyToolsView.Tool.create.permitted(by: allowed, groupID: nil))
+        for tool in [StudyToolsView.Tool.rename, .assign, .schedule] {
+            #expect(!tool.permitted(by: allowed, groupID: nil))
+            #expect(!tool.permitted(by: denied, groupID: "changed"))
+            #expect(tool.permitted(by: allowed, groupID: "selected"))
+        }
     }
 
     @Test func missingOnTimePreservesFallbackWithoutInventingDeadline() {

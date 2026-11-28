@@ -6,39 +6,38 @@
 
 import ActivityDomain
 import CoreDesignSystem
+import CoreUIComponents
 import SwiftUI
 import UMCFoundation
 
 struct StudyToolsView: View {
-    let model: ActivityViewModel
+    let permissions: StudyTools?
     let group: ActivityRow?
-    let refresh: () -> Void
-    @State private var tools: StudyTools?
-    @State private var sheet: Tool?
+    var panel = false
+    let open: (Tool) -> Void
 
     var body: some View {
-        ActivityFlow {
-            if tools?.create == true {
-                Button("그룹 만들기", systemImage: "plus") { sheet = .create }
-            }
-            if tools?.edit == true, group != nil {
-                Button("그룹 편집") { sheet = .rename }
-                Button("멤버·멘토 배정") { sheet = .assign }
-            }
-            if tools?.mentor == true, group != nil {
-                Button("스터디 일정 등록") { sheet = .schedule }
+        if permissions?.create == true {
+            if panel {
+                Button(AppLocalization.string("그룹 만들기"), systemImage: "plus") { open(.create) }
+                    .buttonStyle(UMCToolPrimaryButtonStyle())
+            } else {
+                Button(AppLocalization.string("그룹 만들기"), systemImage: "plus") { open(.create) }
             }
         }
-        .task(id: group?.id) {
-            tools = nil
-            let permissions = try? await model.repository.studyTools(groupID: group?.id)
-            if !Task.isCancelled { tools = permissions }
+        if panel, let group { Text(group.title).umcTypography(.headlineBold) }
+        if permissions?.edit == true, group != nil {
+            if panel { Divider(); UMCToolGroupHeading(AppLocalization.string("그룹 관리")) }
+            Button(AppLocalization.string("그룹 편집")) { open(.rename) }
+            Button(AppLocalization.string("멤버·멘토 배정")) { open(.assign) }
         }
-        .sheet(item: $sheet) { tool in
-            StudyEditor(repository: model.repository, tool: tool, group: group) {
-                sheet = nil
-                refresh()
+        if permissions?.mentor == true, group != nil {
+            if panel {
+                Divider()
+                UMCToolGroupHeading(AppLocalization.string("스터디 일정"))
+                Text(AppLocalization.string("일정 등록은 담당 멘토에게만 허용됩니다.")).font(.caption).foregroundStyle(.secondary)
             }
+            Button(AppLocalization.string("스터디 일정 등록")) { open(.schedule) }
         }
     }
 
@@ -48,10 +47,18 @@ struct StudyToolsView: View {
         case assign = "멤버·멘토 배정"
         case schedule = "스터디 일정 등록"
         var id: Self { self }
+
+        func permitted(by access: StudyTools, groupID: String?) -> Bool {
+            switch self {
+            case .create: access.create
+            case .rename, .assign: groupID != nil && access.edit
+            case .schedule: groupID != nil && access.mentor
+            }
+        }
     }
 }
 
-private struct StudyEditor: View {
+struct StudyEditor: View {
     let repository: any ActivityRepository
     let tool: StudyToolsView.Tool
     let group: ActivityRow?
@@ -94,6 +101,7 @@ private struct StudyEditor: View {
                     Text(tool.rawValue).umcTypography(.title2Bold)
                     if tool == .create || tool == .rename {
                         TextField("스터디 그룹명", text: $name)
+                            .umcInputField()
                         Text(AppLocalization.string("앞뒤 공백을 제외한 이름 1~50자 · 편집 시 기존 이름과 다르게 입력"))
                             .umcTypography(.calloutRegular)
                     }
@@ -102,7 +110,7 @@ private struct StudyEditor: View {
                             Text("스터디원").tag(false)
                             Text("멘토").tag(true)
                         }.pickerStyle(.segmented)
-                        TextField("이름으로 검색", text: $keyword)
+                        UMCSearchField(AppLocalization.string("이름으로 검색"), text: $keyword)
                         if searching { ProgressView().controlSize(.small) }
                         VStack(alignment: .leading, spacing: 12) {
                             ForEach(results) { row in
@@ -227,6 +235,11 @@ private struct StudyEditor: View {
         working = true
         defer { working = false }
         do {
+            let access = try await repository.studyTools(groupID: group?.id)
+            guard tool.permitted(by: access, groupID: group?.id) else {
+                error = AppLocalization.string("권한이 없습니다")
+                return
+            }
             switch tool {
             case .create, .rename:
                 try await repository.saveGroup(
@@ -290,8 +303,10 @@ struct ActivityMemberDetail: View {
                     if canGrant {
                         Divider()
                         Text("포인트 관리").umcTypography(.headlineBold)
-                        TextField("부여할 점수", text: $amount).disabled(awaitingLedger)
-                        TextField("지급 사유", text: $reason).disabled(awaitingLedger)
+                        TextField("부여할 점수", text: $amount)
+                            .umcInputField().disabled(awaitingLedger)
+                        TextField("지급 사유", text: $reason)
+                            .umcInputField().disabled(awaitingLedger)
                         Button(awaitingLedger ? "지급 원장 다시 확인" : "포인트 지급") {
                             if awaitingLedger { submit() } else { confirming = true }
                         }
@@ -426,15 +441,15 @@ struct ActivityMemberDetail: View {
 struct MemberDirectory: View {
     let repository: any ActivityRepository
     let retry: UUID
+    @Binding var keyword: String
+    @Binding var part: String?
     let open: (ActivityRow) -> Void
-    @State private var keyword = ""
-    @State private var part: String?
-    @State private var page = 0
+    @Binding var page: Int
     @State private var retryRequest = UUID()
-    @State private var result: ActivityMemberPage?
+    @Binding var result: ActivityMemberPage?
     @State private var error: String?
 
-    private let parts = [
+    static let parts = [
         "PLAN", "DESIGN", "WEB_PRODUCT_ENGINEER", "MOBILE_PRODUCT_ENGINEER",
         "WEB", "ANDROID", "IOS", "NODEJS", "SPRINGBOOT", "ADMIN",
     ]
@@ -443,10 +458,10 @@ struct MemberDirectory: View {
         VStack(alignment: .leading, spacing: 12) {
             Text("구성원").umcTypography(.title4Bold)
             ActivityAdaptiveRow(minimumLeadingWidth: 260) {
-                TextField("이름 또는 닉네임 검색", text: $keyword)
+                UMCSearchField(AppLocalization.string("이름 또는 닉네임 검색"), text: $keyword)
                 Picker("파트", selection: $part) {
                     Text("전체 파트").tag(String?.none)
-                    ForEach(parts, id: \.self) { Text($0).tag(Optional($0)) }
+                    ForEach(Self.parts, id: \.self) { Text($0).tag(Optional($0)) }
                 }.fixedSize()
             }
             if let error {
@@ -460,13 +475,7 @@ struct MemberDirectory: View {
                     ActivityMemberRow(member: member) { open(member) }
                     ActivityDivider()
                 }
-                if page > 0 || result.hasNext {
-                    HStack {
-                        Button("이전") { page -= 1 }.disabled(page == 0)
-                        Text("\(page + 1)").monospacedDigit()
-                        Button("다음") { page += 1 }.disabled(!result.hasNext)
-                    }
-                }
+                MemberPageControls(page: $page, hasNext: result.hasNext)
             } else {
                 ProgressView(AppLocalization.string("\("구성원")을 불러오는 중")).controlSize(.small)
             }
@@ -495,5 +504,20 @@ struct MemberDirectory: View {
         let page: Int
         let retry: UUID
         let retryRequest: UUID
+    }
+}
+
+struct MemberPageControls: View {
+    @Binding var page: Int
+    let hasNext: Bool
+
+    var body: some View {
+        if page > 0 || hasNext {
+            HStack {
+                Button("이전") { page -= 1 }.disabled(page == 0)
+                Text("\(page + 1)").monospacedDigit()
+                Button("다음") { page += 1 }.disabled(!hasNext)
+            }
+        }
     }
 }

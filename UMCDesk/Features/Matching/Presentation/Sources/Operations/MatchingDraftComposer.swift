@@ -6,8 +6,10 @@
 //
 
 import CoreDesignSystem
+import CoreUIComponents
 import MatchingDomain
 import SwiftUI
+import UMCFoundation
 
 struct MatchingDraftComposer: View {
     let service: any MatchingUseCase
@@ -46,7 +48,9 @@ struct MatchingDraftComposer: View {
             }
             if needsOwner {
                 HStack {
-                    TextField("PM 이름 또는 닉네임", text: $keyword)
+                    UMCSearchField(
+                        AppLocalization.string("PM 이름 또는 닉네임"), text: $keyword
+                    )
                         .onSubmit { search() }
                     Button("검색") { search() }
                 }

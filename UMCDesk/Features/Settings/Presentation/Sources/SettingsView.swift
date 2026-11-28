@@ -103,10 +103,68 @@ public struct SettingsView: View {
 
     public var body: some View {
         workspace
+            .umcTabToolsHost()
             .environment(\.umcWorkspaceModalHost, workspaceModal)
             .disabled(workspaceModal.content != nil)
             .accessibilityHidden(workspaceModal.content != nil)
             .overlay { if let content = workspaceModal.content { content } }
+    }
+
+    @ViewBuilder
+    private func settingsTools(dismiss: @escaping () -> Void) -> some View {
+        if viewModel.page == .myPage {
+            if let profile = viewModel.profile {
+                if profile.activities.isEmpty {
+                    Button(AppLocalization.string("활동 코드 등록"), systemImage: "plus.circle") {
+                        dismiss()
+                        viewModel.addPermission()
+                    }
+                    .disabled(viewModel.isAccountBusy)
+                }
+                let hasLinks = SettingsLinkKind.allCases.contains {
+                    !profile.links[$0].trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                }
+                Button(AppLocalization.string(hasLinks ? "프로필 링크 편집" : "프로필 링크 추가"),
+                       systemImage: "link") {
+                    dismiss()
+                    viewModel.editLinks()
+                }
+                .disabled(viewModel.isAccountBusy)
+            }
+            Button(AppLocalization.string("새로고침"), systemImage: "arrow.clockwise") {
+                dismiss()
+                Task { await viewModel.refreshProfile() }
+            }
+            .disabled(viewModel.isRefreshing || viewModel.isAccountBusy)
+            Divider()
+            Button(AppLocalization.string("설정"), systemImage: "gearshape") {
+                dismiss()
+                viewModel.showSettings()
+            }
+        } else {
+            Button(AppLocalization.string("설정 검색"), systemImage: "magnifyingglass") {
+                dismiss()
+                searchFocus = .field
+                showsSearchSuggestions = true
+            }
+            if !viewModel.searchText.isEmpty {
+                Button(AppLocalization.string("검색어 지우기"), systemImage: "xmark.circle") {
+                    dismiss()
+                    viewModel.searchText = ""
+                    searchFocus = .field
+                }
+            }
+            Divider()
+            UMCToolGroupHeading(AppLocalization.string("설정 항목"))
+            ForEach(SettingsPage.allCases.filter { $0 != viewModel.page && $0 != .myPage }) { page in
+                Button(page.title, systemImage: page.symbol) {
+                    dismiss()
+                    dismissSearchSuggestions()
+                    viewModel.searchText = ""
+                    viewModel.navigate(to: page)
+                }
+            }
+        }
     }
 
     private var workspace: some View {
@@ -134,7 +192,13 @@ public struct SettingsView: View {
                 }
                 Group {
                     if let featureContent { featureContent }
-                    else { pageContent }
+                    else {
+                        pageContent.umcTabTools(
+                            AppLocalization.string(viewModel.page == .myPage ? "마이페이지 도구" : "설정 도구")
+                        ) { dismiss in
+                            settingsTools(dismiss: dismiss)
+                        }
+                    }
                 }
                     .environment(\.settingsAppearancePalette, palette)
                     .background(palette.backgroundDefault)
@@ -219,6 +283,7 @@ public struct SettingsView: View {
             history.invalidate(WindowVisit(location: location, detail: detail))
         })
         .onChange(of: windowEntry, initial: true) { old, new in
+            if old.location != new.location { tabToolsDismissalRequest += 1 }
             history.arrive(from: old, at: new)
         }
         .toolbar { navigationToolbar }
@@ -597,8 +662,17 @@ public struct SettingsView: View {
     }
 
     private var searchField: some View {
-        HStack(spacing: UMCSpacing.value8) {
-            Image(systemName: "magnifyingglass").accessibilityHidden(true)
+        UMCSearchField(
+            text: $viewModel.searchText, isFocused: searchFocus == .field,
+            background: sidebarPalette.backgroundSurfaceGreyWeak,
+            foreground: sidebarPalette.textNeutralWeak500,
+            focusBorder: sidebarPalette.textBrandDefault,
+            onClear: {
+                viewModel.searchText = ""
+                searchFocus = .field
+                showsSearchSuggestions = true
+            }
+        ) {
             TextField(AppLocalization.string("검색"), text: $viewModel.searchText)
                 .textFieldStyle(.plain)
                 .accessibilityLabel(AppLocalization.string("설정 검색"))
@@ -610,26 +684,6 @@ public struct SettingsView: View {
                         selectSearchResult(result)
                     }
                 }
-            if !viewModel.searchText.isEmpty {
-                Button {
-                    viewModel.searchText = ""
-                    searchFocus = .field
-                    showsSearchSuggestions = true
-                } label: {
-                    Image(systemName: "xmark.circle.fill")
-                }
-                .buttonStyle(SettingsPlainButtonStyle())
-                .accessibilityLabel(AppLocalization.string("검색어 지우기"))
-            }
-        }
-        .umcTypography(.headlineRegular)
-        .foregroundStyle(sidebarPalette.textNeutralWeak500)
-        .padding(.horizontal, UMCSpacing.value16)
-        .frame(minHeight: 36)
-        .background(sidebarPalette.backgroundSurfaceGreyWeak, in: .capsule)
-        .overlay {
-            Capsule().strokeBorder(searchFocus == .field ?
-                sidebarPalette.textBrandDefault : .clear, lineWidth: 2)
         }
         .overlay(alignment: .topLeading) {
             if showsSearchSuggestions && !viewModel.isSearching {
@@ -737,6 +791,11 @@ public struct SettingsView: View {
         }
         let backwards = press.key == .upArrow || press.key == Constants.backTab ||
             press.modifiers.contains(.shift)
+        // With a query, native Tab navigation visits the clear button between field and results.
+        if !viewModel.searchText.isEmpty, press.key == .tab || press.key == Constants.backTab,
+           (index == 0 && !backwards) || (index == 1 && backwards) {
+            return .ignored
+        }
         let next = index + (backwards ? -1 : 1)
         guard positions.indices.contains(next) else {
             if press.key == .tab || press.key == Constants.backTab {

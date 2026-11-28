@@ -5,11 +5,33 @@
 //  Created by euijjang97 on 11/23/26.
 //
 
+import Foundation
 import MatchingDomain
 @testable import MatchingPresentation
 import Testing
 
 struct PublishedMatchingTeamTests {
+    @Test("랜덤 선발 검토는 같은 지부와 유형의 3차 발표가 지난 경우만 허용한다")
+    func autoDecisionReviewScope() {
+        func round(_ phase: String, _ chapter: String, _ type: String,
+                   publication: String? = nil, executed: String? = nil) -> MatchingRound {
+            MatchingRound(id: phase, name: phase, type: type, phase: phase, chapterId: chapter,
+                          startsAt: "", endsAt: "", decisionDeadline: nil,
+                          resultPublishAt: publication, autoDecisionExecutedAt: executed)
+        }
+        let now = Date(timeIntervalSince1970: 3600)
+        let past = "1970-01-01T00:00:00Z"
+        let random = round("RANDOM_MATCHING", "a", "PLAN_DESIGN")
+        let third = round("THIRD", "a", "PLAN_DESIGN", publication: past)
+        #expect(random.canReviewAutoDecision(in: [third], at: now))
+        #expect(!random.canReviewAutoDecision(in: [
+            round("THIRD", "b", "PLAN_DESIGN", publication: past),
+            round("THIRD", "a", "PLAN_DEVELOPER", publication: past)
+        ], at: now))
+        #expect(!round("RANDOM_MATCHING", "a", "PLAN_DESIGN", executed: past)
+            .canReviewAutoDecision(in: [third], at: now))
+    }
+
     @Test("공개 명단의 회원 ID와 역할로만 합류를 확인한다")
     func publishedMembership() {
         func person(_ id: String) -> OperationsPerson {

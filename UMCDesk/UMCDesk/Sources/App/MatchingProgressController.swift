@@ -19,6 +19,7 @@ final class MatchingProgressController: NSObject {
     private var expanded: NSPanel?
     private var revision = UUID()
     var openApplications: (() -> Void)?
+    var openExplorer: (() -> Void)?
     private(set) var card: MatchingApplication?
     private(set) var round: MatchingRound?
     private(set) var lastChecked: Date?
@@ -68,7 +69,10 @@ final class MatchingProgressController: NSObject {
         }
     }
 
-    func refreshOnce() async { await refresh(ticket: revision) }
+    func refreshOnce() async {
+        guard isSignedIn else { return }
+        await refresh(ticket: revision)
+    }
 
     private func refresh(ticket: UUID) async {
         do {
@@ -145,7 +149,9 @@ final class MatchingProgressController: NSObject {
             styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false
         )
         panel.onEscape = { [weak self] in self?.closeExpanded() }
-        panel.contentView = NSHostingView(rootView: MatchingProgressPanel(controller: self))
+        panel.contentView = NSHostingView(
+            rootView: MatchingProgressPanel(controller: self).environment(\.colorScheme, .dark)
+        )
         configure(panel)
         expanded = panel
         panel.makeKeyAndOrderFront(nil)

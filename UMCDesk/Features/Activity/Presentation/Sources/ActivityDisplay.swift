@@ -17,6 +17,10 @@ struct ActivityTiming {
         schedule.opens.map { $0 <= now } == true
             && schedule.closes.map { now <= $0 } == true && schedule.endsAt >= now
     }
+    var canAttend: Bool { schedule.isParticipant && schedule.status == nil && open }
+    var canSubmitExcuse: Bool {
+        schedule.isParticipant && [nil, "LATE", "ABSENT"].contains(schedule.status)
+    }
     var phase: String {
         open
             ? ((schedule.onTime ?? now) >= now ? "지금 출석 가능" : "지각 출석 가능")
