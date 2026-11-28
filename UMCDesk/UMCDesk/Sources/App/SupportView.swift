@@ -774,13 +774,17 @@ private struct SupportAnswersView: View {
                             EmptyView()
                         } else if matches.isEmpty {
                             VStack(spacing: 16) {
-                                Text("‘" + state.search + "’에 대한 검색 결과가 없어요").inquiryFont(
-                                    28, weight: .bold)
-                                Text("다른 검색어로 찾아보거나 UMC PRODUCT에 문의해 주세요.").inquiryFont(15)
+                                Text(articles.isEmpty ? "아직 등록된 답변이 없어요" :
+                                    "‘" + state.search + "’에 대한 검색 결과가 없어요")
+                                    .inquiryFont(28, weight: .bold)
+                                Text(articles.isEmpty ? "궁금한 내용을 UMC PRODUCT에 문의해 주세요." :
+                                    "다른 검색어로 찾아보거나 UMC PRODUCT에 문의해 주세요.").inquiryFont(15)
                                 HStack(spacing: 12) {
-                                    Button("다시 검색") {
-                                        state.search = ""
-                                        state.choosingSearch = true
+                                    if !articles.isEmpty {
+                                        Button("다시 검색") {
+                                            state.search = ""
+                                            state.choosingSearch = true
+                                        }
                                     }
                                     if let compose {
                                         Button("문의하기") { compose(nil) }

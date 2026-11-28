@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import HomeDomain
 
 struct HomeGameRecordStore: Equatable {
     let defaults: UserDefaults
@@ -36,4 +37,11 @@ struct GameRecords: Codable, Equatable {
     var best: [String: Int] = [:]
     var totals: [String: Int] = [:]
     var recent: [String] = []
+
+    mutating func record(_ game: MiniGame, score: Int) {
+        let id = game.rawValue
+        best[id] = max(score, best[id, default: 0])
+        totals[id, default: 0] += score
+        recent = Array((["\(game.title) \(score)점"] + recent).prefix(3))
+    }
 }

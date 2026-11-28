@@ -11,8 +11,8 @@ import SwiftUI
 
 @MainActor
 public enum MatchingDesignPreview {
-    public static func makeUseCase() -> any MatchingUseCase {
-        DefaultMatchingUseCase(repository: MatchingPreviewRepository())
+    public static func makeUseCase(isEmpty: Bool = false) -> any MatchingUseCase {
+        DefaultMatchingUseCase(repository: MatchingPreviewRepository(isEmpty: isEmpty))
     }
 
     #if DEBUG
@@ -53,6 +53,20 @@ actor MatchingPreviewRepository: MatchingRepository {
     var nextProjectID = 4
     private var customRounds: [MatchingRound]?
 
+    let isEmpty: Bool
+
+    init(isEmpty: Bool = false) {
+        self.isEmpty = isEmpty
+        if isEmpty {
+            names = [:]
+            stages = [:]
+            descriptions = [:]
+            drafts = []
+            submitted = []
+            customRounds = []
+        }
+    }
+
     private var projects: [MatchingProject] {
         names.keys.sorted().map { id in
             let name = names[id] ?? ""
@@ -84,11 +98,13 @@ actor MatchingPreviewRepository: MatchingRepository {
 
     func projects(gisuId: String, keyword: String?, page: Int, part: String?, quotaStatus: String?,
                   schoolId: String?, chapterId: String?) async throws -> MatchingProjectPage {
-        .init(content: projects.filter { project in
+        let filtered = projects.filter { project in
             (keyword.map { project.name.contains($0) } ?? true)
                 && (quotaStatus == nil || project.partQuotaStatus == quotaStatus)
                 && (part == nil || project.partQuotas.contains { $0.part == part })
-        }, hasNext: false, totalElements: "3")
+        }
+        return .init(content: page == 0 ? filtered : [], hasNext: false,
+                     totalElements: String(filtered.count))
     }
 
     func project(id: String) async throws -> MatchingProject {
@@ -196,7 +212,8 @@ actor MatchingPreviewRepository: MatchingRepository {
     }
 
     func publishedTeam(projectId: String) async throws -> OperationsTeam? {
-        try await team(projectId: projectId)
+        guard names[projectId] != nil else { return nil }
+        return try await team(projectId: projectId)
     }
 
     private var unavailable: URLError { URLError(.resourceUnavailable) }

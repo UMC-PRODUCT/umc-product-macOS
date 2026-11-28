@@ -79,7 +79,8 @@ public final class SettingsViewModel {
     private(set) var releaseFailed = false
     @ObservationIgnored private var accountGeneration = 0
     @ObservationIgnored private var hasLoaded = false
-    var isDesignPreview = false
+    private(set) var previewProfile: SettingsProfile?
+    var isDesignPreview: Bool { previewProfile != nil }
     var previewShowsProfileMenu = false
 
     public init(
@@ -96,7 +97,7 @@ public final class SettingsViewModel {
         profile = value
         profileState = .loaded(value)
         hasLoaded = true
-        isDesignPreview = true
+        previewProfile = value
         systemStatus = .init(loginItem: .disabled, notifications: .authorized,
             location: .authorized)
         cacheBytes = 128_000_000

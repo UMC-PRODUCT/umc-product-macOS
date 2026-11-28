@@ -8,6 +8,7 @@
 import CommunityDomain
 import CoreNetwork
 import Foundation
+import HomePresentation
 import ProjectWorkspaceDomain
 
 enum DataPreviewAccount {
@@ -32,25 +33,43 @@ enum DataPreviewAccount {
         })
     }
 
-    static let recentWork = [
-        WorkspaceGitHubItem(id: "pr-28", title: "홈 화면 접근성 개선", summary: "레이블 및 키보드 탐색 검토",
-                            isPullRequest: true, completed: false),
-        WorkspaceGitHubItem(id: "issue-19", title: "온보딩 문구 확정", summary: "디자인 리뷰 반영",
-                            isPullRequest: false, completed: true),
-    ]
+    static func recentWork(repository: URL) -> [WorkspaceGitHubItem] {
+        switch repository.absoluteString {
+        case "https://github.com/umc-preview/moa":
+            [
+                .init(id: "pr-28", title: "취향 태그로 추천 상품 필터링",
+                      summary: "선택한 태그를 홈 추천 목록에 반영합니다.", isPullRequest: true, completed: false),
+                .init(id: "issue-19", title: "첫 방문자의 취향 선택 문구 확정",
+                      summary: "사용성 테스트에서 혼동한 태그 세 개를 바꿨어요.", isPullRequest: false, completed: true)
+            ]
+        case "https://github.com/umc-preview/sai":
+            [
+                .init(id: "pr-12", title: "공동 구매 마감 인원 표시",
+                      summary: "모집 카드에 남은 자리와 마감 시간을 함께 표시합니다.", isPullRequest: true, completed: true),
+                .init(id: "issue-16", title: "참여 취소 뒤 잔여 인원 갱신",
+                      summary: "마감 직전 취소한 자리로 다시 참여할 수 있는지 확인해요.", isPullRequest: false, completed: false)
+            ]
+        default: []
+        }
+    }
 
-    static func seedWorkspace(in defaults: UserDefaults) {
-        for (id, slug) in [("1", "moa"), ("3", "sai")] {
+    @MainActor static func seedWorkspace(in defaults: UserDefaults) {
+        HomeView.seedPreviewGameRecords(in: defaults, memberID: memberID)
+        for (id, slug, completed, next) in [
+            ("1", "moa", "취향 태그 선택 화면 인터뷰 정리", "추천 상품 카드의 가격 표시 확인"),
+            ("3", "sai", "공동 구매 참여 흐름 시연 녹화", "모집 마감 직전 참여 취소 테스트")
+        ] {
             var record = WorkspaceRecord()
-            record.addTodo("프로토타입 피드백 반영")
+            record.addTodo(completed)
             record.todos[0].completed = true
-            record.addTodo("다음 스프린트 회의 준비")
+            record.addTodo(next)
+            let repository = URL(string: "https://github.com/umc-preview/" + slug)!
             record.resources = [
-                WorkspaceResource.github.rawValue: "https://github.com/umc-preview/\(slug)",
+                WorkspaceResource.github.rawValue: repository.absoluteString,
                 WorkspaceResource.figma.rawValue: "https://www.figma.com/design/Preview\(id)"
             ]
             record.lastOpened = .now
-            record.githubItems = recentWork
+            record.githubItems = recentWork(repository: repository)
             record.githubUpdatedAt = .now
             defaults.set(try? JSONEncoder().encode(record),
                          forKey: WorkspaceRecord.key(accountID: memberID, projectID: id))

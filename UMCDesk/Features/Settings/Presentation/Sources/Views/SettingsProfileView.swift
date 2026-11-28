@@ -30,7 +30,7 @@ struct SettingsProfileView: View {
                         HStack(alignment: .top, spacing: UMCSpacing.value20) {
                             VStack(spacing: UMCSpacing.value20) {
                                 profileLinks(profile)
-                                SettingsUsageCard(isDesignPreview: viewModel.isDesignPreview)
+                                usageCard
                             }
                             .frame(minWidth: 340)
                             activities(profile).frame(minWidth: 340)
@@ -38,7 +38,7 @@ struct SettingsProfileView: View {
                         VStack(spacing: UMCSpacing.value20) {
                             profileLinks(profile)
                             activities(profile)
-                            SettingsUsageCard(isDesignPreview: viewModel.isDesignPreview)
+                            usageCard
                         }
                     }
                     HStack(spacing: UMCSpacing.value16) {
@@ -81,6 +81,18 @@ struct SettingsProfileView: View {
             default: return .ignored
             }
             return .handled
+        }
+    }
+
+    @ViewBuilder
+    private var usageCard: some View {
+        if viewModel.previewProfile?.activities.isEmpty == true {
+            SettingsCard(isSubtle: true) {
+                profileCardHeading(AppLocalization.string("앱 사용 기록"),
+                    description: AppLocalization.string("사용 기록 없음"))
+            }
+        } else {
+            SettingsUsageCard(isDesignPreview: viewModel.isDesignPreview)
         }
     }
 

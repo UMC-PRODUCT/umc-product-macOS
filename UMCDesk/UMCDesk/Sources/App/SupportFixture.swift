@@ -202,7 +202,13 @@ final class SupportFixture {
         drafts.first { $0.id == "notification" && $0.published == nil && !$0.archived }
     }
 
-    init(emptyInquiries: Bool = false) {
+    init(emptyInquiries: Bool = false, isEmpty: Bool = false) {
+        if isEmpty {
+            tickets = []
+            drafts = []
+            additionalPublished = []
+            return
+        }
         let examples = [
             SupportArticle(
                 id: "attendance", question: "출석 기록이 실제와 다르게 보여요",

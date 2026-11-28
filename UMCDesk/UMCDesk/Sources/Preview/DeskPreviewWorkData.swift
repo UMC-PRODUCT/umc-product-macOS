@@ -30,7 +30,10 @@ struct DeskPreviewWorkData {
         Member(id: "104", name: "박도윤", nickname: "도윤", part: "PLAN", school: "한빛대학교"),
         Member(id: "105", name: "최지우", nickname: "지니", part: "WEB", school: "가온대학교")
     ]
-    private static let projects = [(id: "1", name: "모아"), (id: "3", name: "사이")]
+    private let projects: [(id: String, name: String)]
+    private let includesSamples: Bool
+
+    private static let sampleProjects = [(id: "1", name: "모아"), (id: "3", name: "사이")]
     private let anchor = Date.now
     private var addedSchedules: [Row] = []
     private var statuses: [String: String] = [:]
@@ -41,6 +44,16 @@ struct DeskPreviewWorkData {
     private var points: [String: [Row]] = [:]
     private var nextID = 2000
 
+    init(isEmpty: Bool) {
+        includesSamples = !isEmpty
+        projects = isEmpty ? [] : Self.sampleProjects
+        if isEmpty {
+            names = [:]
+            mentors = [:]
+            attendees = [:]
+        }
+    }
+
     mutating func result(for request: URLRequest) -> Any? {
         guard let url = request.url else { return nil }
         let queryItems = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
@@ -48,6 +61,7 @@ struct DeskPreviewWorkData {
         let path = url.path
 
         if request.httpMethod == "POST", path == "/api/v1/authorization/resource-permissions/batch" {
+            guard includesSamples else { return ["results": [Row]()] }
             return ["results": [["resourceId": "801", "permissions": [
                 ["permissionType": "APPROVE", "hasPermission": true]
             ]]]]
@@ -65,16 +79,20 @@ struct DeskPreviewWorkData {
             return ["canCreateSchedule": true, "canCreateAttendanceRequiredSchedule": true,
                     "maxParticipantCount": "50"] as Row
         case "/api/v2/schedules/attendance":
+            guard includesSamples else { return [Row]() }
             return [["scheduleId": "801", "name": "웹 파트 코드 리뷰",
                      "participants": [
                         ["memberId": "105", "name": "최지우", "attendanceStatus": reviewedStatus],
                         ["memberId": "102", "name": "서하늘", "attendanceStatus": "PRESENT"]
                      ]] as Row]
         case "/api/v2/curriculums/progress/me":
-            let titles = ["컴포넌트 설계", "상태 관리", "서버 데이터 연결", "접근성 점검"]
-            return ["weeks": titles.enumerated().map { index, title -> Row in
+            let weeks = includesSamples ? [
+                ("컴포넌트 설계", "추천 상품 카드 나누기"), ("상태 관리", "검색 요청 취소하기"),
+                ("서버 데이터 연결", "페이지 단위로 목록 불러오기"), ("접근성 점검", "키보드만으로 주문하기")
+            ] : []
+            return ["weeks": weeks.enumerated().map { index, week -> Row in
                 ["weeklyCurriculumId": String(501 + index), "weekNo": String(index + 1),
-                 "title": title, "originalWorkbooks": [["title": title + " 실습 노트"]]]
+                 "title": week.0, "originalWorkbooks": [["title": week.1]]]
             }]
         case "/api/v1/study-groups/names":
             return ["studyGroups": names.keys.sorted().map { ["groupId": $0, "name": names[$0]!] }]
@@ -96,16 +114,17 @@ struct DeskPreviewWorkData {
         case "/api/v1/member/search" where query("size") == "30":
             let keyword = query("keyword") ?? ""
             let part = query("part")
-            let rows = Self.members.filter { member in
+            let candidates = includesSamples || query("gisuId") == nil ? Self.members : []
+            let rows = candidates.filter { member in
                 (part == nil || member.part == part) &&
                 (keyword.isEmpty || member.name.contains(keyword) || member.nickname.contains(keyword))
             }
             return ["page": ["content": rows.map(\.row), "hasNext": false] as Row]
         case "/api/v1/projects/me/managed" where query("size") == "1":
-            return ["content": [["id": Self.projects[0].id, "name": Self.projects[0].name]]]
+            return ["content": projects.prefix(1).map { ["id": $0.id, "name": $0.name] }]
         case "/api/v1/projects/me/applications":
             guard query("status") == nil || query("status") == "APPROVED" else { return [Row]() }
-            return Self.projects.map { project -> Row in
+            return projects.map { project -> Row in
                 ["projectId": project.id, "status": "APPROVED",
                  "project": ["name": project.name, "partQuotas": []] as Row,
                  "matchingRound": ["type": "PLAN_DEVELOPER", "phase": "RANDOM_MATCHING"]]
@@ -114,7 +133,7 @@ struct DeskPreviewWorkData {
             let ids = queryItems.filter { $0.name == "projectIds" }
                 .flatMap { ($0.value ?? "").components(separatedBy: ",") }
             var teams: [String: Row] = [:]
-            for project in Self.projects where ids.contains(project.id) {
+            for project in projects where ids.contains(project.id) {
                 teams[project.id] = ["projectId": project.id, "productOwner": Self.members[3].row,
                                      "coProductOwners": [], "partGroups": [
                                         ["part": "WEB", "members": [Self.members[0].row, Self.members[4].row]]
@@ -196,7 +215,7 @@ struct DeskPreviewWorkData {
             ] : [("804", "기획·개발 싱크업", 1, true, nil)]
         let lower = from.flatMap { try? Date.ISO8601FormatStyle().parse($0) }
         let upper = to.flatMap { try? Date.ISO8601FormatStyle().parse($0) }
-        let seeded = entries.compactMap { entry -> Row? in
+        let seeded = (includesSamples ? entries : []).compactMap { entry -> Row? in
             guard let date = calendar.date(byAdding: .day, value: entry.day, to: start)
             else { return nil }
             let end = date.addingTimeInterval(3600)

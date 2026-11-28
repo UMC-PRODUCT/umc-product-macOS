@@ -14,10 +14,12 @@ final class DataPreviewFixtures: @unchecked Sendable {
         keyOptions: .strongMemory, valueOptions: .weakMemory)
     let baseURL: URL
     private let lock = NSLock()
-    private var community = DeskPreviewCommunityData()
-    private var work = DeskPreviewWorkData()
+    private var community: DeskPreviewCommunityData
+    private var work: DeskPreviewWorkData
 
-    init() {
+    init(isEmpty: Bool = false) {
+        community = DeskPreviewCommunityData(isEmpty: isEmpty)
+        work = DeskPreviewWorkData(isEmpty: isEmpty)
         let host = UUID().uuidString.lowercased() + ".preview.invalid"
         baseURL = URL(string: "https://" + host)!
         Self.lock.withLock { Self.sessions.setObject(self, forKey: host as NSString) }
