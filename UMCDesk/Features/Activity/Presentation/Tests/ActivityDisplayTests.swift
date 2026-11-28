@@ -33,11 +33,14 @@ struct ActivityDisplayTests {
         #expect(exact.phase == "지금 출석 가능")
         #expect(exact.deadline == close)
         #expect(exact.minutes == 20)
-        #expect(exact.accessibilitySummary.hasPrefix("지각 마감"))
+        #expect(exact.remainingSummary?.hasPrefix("지각 마감") == true)
         #expect(
             ActivityTiming(schedule: row, now: onTime.addingTimeInterval(1)).phase == "지각 출석 가능")
         #expect(ActivityTiming(schedule: row, now: close).open)
         #expect(!ActivityTiming(schedule: row, now: close.addingTimeInterval(1)).open)
+        #expect(
+            ActivityTiming(schedule: row, now: close.addingTimeInterval(1)).remainingSummary == nil
+        )
     }
 
     @Test func missingOnTimePreservesFallbackWithoutInventingDeadline() {
@@ -49,6 +52,7 @@ struct ActivityDisplayTests {
         #expect(!missing.open)
         #expect(missing.deadline == nil)
         #expect(missing.minutes == 0)
+        #expect(missing.remainingSummary == nil)
     }
 
     @Test func columnsUseContentWidthAndExpandedText() {

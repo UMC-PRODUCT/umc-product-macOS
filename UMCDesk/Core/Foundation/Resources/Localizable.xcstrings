@@ -12308,6 +12308,23 @@
           }
         }
       }
+    },
+    "%@ %@, %lld분 남음": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ %@, %lld분 남음"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ %@, %lld minutes remaining"
+          }
+        }
+      }
     }
   },
   "version": "1.0"
