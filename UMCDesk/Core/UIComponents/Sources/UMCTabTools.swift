@@ -193,3 +193,13 @@ private struct ToolsTrigger: NSViewRepresentable {
         }
     }
 }
+
+/// A document-level modal can cover the shared rail as well as the selected workspace.
+@MainActor @Observable public final class UMCWorkspaceModalHost {
+    public var content: AnyView?
+    public init() {}
+}
+
+public extension EnvironmentValues {
+    @Entry var umcWorkspaceModalHost: UMCWorkspaceModalHost?
+}

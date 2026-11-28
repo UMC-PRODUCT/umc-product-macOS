@@ -51,6 +51,7 @@ final class DataPreviewSession {
     let documents: LiveEmailLoginRepository
     let conversations: DataPreviewConversation
     let support = SupportFixture(emptyInquiries: false)
+    let supportExitGate = SupportExitGate()
     var projectID: String?
     private(set) var matchingPage = MatchingDestination.explore
     private(set) var matchingNavigationID = UUID()
@@ -94,6 +95,12 @@ final class DataPreviewSession {
     }
 
     func select(_ destination: DataPreviewDestination) {
+        if self.destination == .support && destination != .support {
+            supportExitGate.request { [weak self] in self?.apply(destination) }
+        } else { apply(destination) }
+    }
+
+    private func apply(_ destination: DataPreviewDestination) {
         switch destination {
         case .matching: openMatching(.explore); return
         case .profile: SettingsDesignPreview.prepareViewModel(settings, page: .myPage)
@@ -153,7 +160,7 @@ struct DataPreviewWindow: View {
         let preferences = session.settings.preferences
         SettingsView(
             viewModel: session.settings, section: section, featureContent: content,
-            matchingSelected: session.destination == .matching,
+            matchingSelected: session.destination == .matching, supportSelected: session.destination == .support,
             onOpenMatching: { session.select(.matching) },
             onSelectSection: { session.select($0.map(DataPreviewDestination.feature) ?? .profile) }
         )
@@ -209,7 +216,7 @@ struct DataPreviewWindow: View {
             }).id(session.matchingNavigationID))
         case .progress: AnyView(MatchingProgressPanel(controller: session.progress, onClose: { session.select(.matching) })
             .frame(maxWidth: 520, maxHeight: 254).task { await session.progress.refreshOnce() })
-        case .support: AnyView(SupportView(fixture: session.support))
+        case .support: AnyView(SupportView(fixture: session.support, exitGate: session.supportExitGate).id(ObjectIdentifier(session.support)))
         case .profile, .settings: nil
         }
     }

@@ -178,3 +178,30 @@ List·Table·Lazy 컨테이너는 화면 요구와 데이터 규모에 맞게 �
 이 원칙을 적용하려고 `GeometryReader`나 측정값 State/PreferenceKey 환류를 도입하지 않는다.
 공지의 권한 회수 후 복구는 [#181](https://github.com/UMC-PRODUCT/umc-product-macOS/issues/181)에
 남아 있어 모든 상태가 완결된 모범 구현으로 취급하지 않는다.
+
+## macOS 시스템 Alert — 지원 철회와 미저장 변경 확인
+
+매칭의 지원 철회 Alert는 제목에 프로젝트명과 철회 동작을 넣고, 버튼에 ‘지원 철회’와 ‘취소’ 역할을 준다.
+이 패턴을 적용할 때는 제목에 **대상과 동작**을 쓰고, 본문 한 문장으로 선택 후 실제로 달라지는 점을 설명한다.
+버튼에는 결과를 예측할 수 있는 동작명을 쓴다. macOS 기본 서체·여백·외관을 유지하고 버튼 강조와 배치는
+시스템 역할에 맡긴다. [매칭 구현](../../UMCDesk/Features/Matching/Presentation/Sources/MatchingApplications.swift) · [Apple HIG — Alerts](https://developer.apple.com/design/human-interface-guidelines/alerts)
+
+문의 탭 안에서 이동하든 외부 탐색 레일로 나가든, 같은 미저장 상태에는 아래 문구와 동작을 함께 적용한다.
+표는 적용 기준이며 PR #193의 문의 구현과 실제 창에서의 일치 여부는 별도 검수 대상이다.
+[문의 화면과 레일 이탈 처리](../../UMCDesk/UMCDesk/Sources/App/SupportView.swift) · [FAQ 편집](../../UMCDesk/UMCDesk/Sources/App/SupportFAQPreview.swift)
+
+| 상태 | 제목 | 본문 | 계속하기 (`.cancel`) | 버리기 (`.destructive`) |
+| --- | --- | --- | --- | --- |
+| 미전송 문의 | 작성 중인 문의를 버릴까요? | 입력한 내용과 첨부는 저장되지 않아요. | 계속 작성 | 초안 버리기 |
+| FAQ 편집 | FAQ 변경사항을 버릴까요? | 마지막 저장 이후의 수정 내용이 사라져요. | 계속 편집 | 변경사항 버리기 |
+
+전송 결과가 불명확하면 ‘전송 결과 확인’은 이미 보낸 요청을 조회해야 한다. ‘초안 버리기’는 로컬 입력만
+폐기하며 서버 요청을 취소했다는 뜻으로 쓰지 않는다. 공지 작성 화면의 `confirmationDialog`에서도
+게시 결과 확인 중단과 별도 공지 작성을 구분한다. [공지 작성 구현](../../UMCDesk/Features/Notice/Presentation/Sources/NoticeComposer.swift)
+
+받는 팀은 여덟 팀의 이름과 설명을 비교하는 기존 선택 패널을 유지한다. 필수 입력과 검증 오류는
+해당 필드 곁에 표시한다. [받는 팀 선택 구현](../../UMCDesk/UMCDesk/Sources/App/SupportInquiryPreview.swift)
+
+**실제 창 검수** — 미저장 변경이 있을 때만 폐기를 확인하고, 계속하기와 Esc는 입력·첨부를 보존하며
+편집 위치로 포커스를 돌려주는지 확인한다. Return이나 한글 조합 확정으로 뜻하지 않게 폐기되지 않아야 한다.
+두 이탈 경로에서 실제 폐기 범위를 대조하고, VoiceOver로 제목·본문·버튼을 듣고 라이트·다크에서 읽기와 포커스 표시를 확인한다.

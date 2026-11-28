@@ -55,7 +55,7 @@ public enum UMCTypography: String, CaseIterable, Sendable {
         font(size: size, weight: weight)
     }
 
-    func font(
+    public func font(
         size: CGFloat, weight: Font.Weight, design: Font.Design? = nil, family: String? = nil
     ) -> Font {
         if let family { return .custom(family, size: size, relativeTo: textStyle).weight(weight) }
