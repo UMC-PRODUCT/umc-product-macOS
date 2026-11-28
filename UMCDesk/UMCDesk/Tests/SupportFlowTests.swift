@@ -5,6 +5,7 @@
 //  Created by euijjang97 on 11/23/26.
 //
 
+import Foundation
 import Testing
 
 @testable import UMCDesk
@@ -19,6 +20,133 @@ struct SupportFlowTests {
     }
 
     #if DEBUG
+    @MainActor @Test func contentColumnsAndFooterUseActualAvailableSize() {
+        for scale in [CGFloat(1), 1.5, 2] {
+            for (left, right, ratio) in [
+                (600.0, 300.0, 898.0 / 1258), (600, 300, 902.0 / 1258),
+                (680, 240, 960.0 / 1258), (252, 520, 330.0 / 1258),
+            ] {
+                let layout = SupportPanelLayout(
+                    scale: scale, firstMinimum: left, secondMinimum: right, fraction: ratio)
+                let threshold = (left + right) * scale + 24
+                #expect(layout.widths(for: threshold - 1) == nil)
+                for width in [threshold, threshold + 1, threshold + 360] {
+                    let columns = layout.widths(for: width)
+                    #expect((columns?.0 ?? 0) >= left * scale)
+                    #expect((columns?.1 ?? 0) >= right * scale)
+                    #expect(abs((columns?.0 ?? 0) + (columns?.1 ?? 0) + 24 - width) < 0.00001)
+                }
+            }
+            for delta in [-1.0, 0, 1] {
+                #expect(
+                    SupportPinnedFooter.fits(
+                        height: 160 * scale + 72 + delta, footer: 60, scale: scale) == (delta >= 0)
+                )
+                let dialog = min(SupportLayoutMetrics.teamWidth, 62 + 600 * scale + delta)
+                #expect(
+                    (dialog - 2 * SupportLayoutMetrics.teamInset
+                        >= SupportLayoutMetrics.teamGridMinimum(scale))
+                        == (scale == 1 && delta >= 0))
+                #expect(
+                    min(
+                        SupportLayoutMetrics.toolWidth, 422 + delta - 2 * SupportLayoutMetrics.edge
+                    ) == min(390, 390 + delta))
+                #expect(
+                    (900 * scale + delta >= SupportLayoutMetrics.fullTable(scale)) == (delta >= 0))
+                #expect(
+                    (640 * scale + delta >= SupportLayoutMetrics.mediumTable(scale))
+                        == (delta >= 0))
+            }
+        }
+        for (width, inset) in [
+            (911.0, 16.0), (912, 16), (913, 16.125), (976, 24), (1103, 39.875), (1104, 40),
+            (1105, 40), (1376, 40),
+        ] {
+            #expect(abs(SupportContentInsets.horizontal(for: width) - inset) < 0.00001)
+        }
+    }
+
+    @MainActor @Test func rejectedAndUncertainWritesNeverRepeatOnRead() async {
+        let transport = SupportPreviewTransport()
+        var applied = 0
+        let uncertain = UUID()
+        transport.nextWrite = .uncertain
+        let result = await transport.send(id: uncertain) { _ in
+            applied += 1
+            return true
+        }
+        #expect(result == .uncertain)
+        await transport.reload()
+        #expect(
+            await transport.send(id: uncertain) { _ in
+                applied += 1
+                return true
+            } == .uncertain)
+        let rejected = UUID()
+        transport.nextWrite = .rejected
+        #expect(
+            await transport.send(id: rejected) { _ in
+                applied += 1
+                return true
+            } == .failed)
+        #expect(applied == 0)
+        #expect(
+            await transport.send(id: rejected) { _ in
+                applied += 1
+                return true
+            } == .success)
+        #expect(
+            await transport.send(id: rejected) { _ in
+                applied += 1
+                return true
+            } == .success)
+        #expect(applied == 1)
+    }
+
+    @MainActor @Test func concurrentSendAndPermissionChangeAreBoundToOriginalIntent() async {
+        let transport = SupportPreviewTransport()
+        let id = UUID()
+        var writes = 0
+        let first = Task { @MainActor in
+            await transport.send(id: id, requiresOperator: true) { _ in
+                writes += 1
+                return true
+            }
+        }
+        while transport.receipts[id] == nil { await Task.yield() }
+        #expect(
+            await transport.send(id: id, requiresOperator: true) { _ in
+                writes += 1
+                return true
+            } == .sending)
+        transport.access = .denied
+        transport.access = .granted
+        #expect(await first.value == .failed)
+        #expect(writes == 0)
+    }
+
+    @MainActor @Test func partialSuccessPreservesReceiptAndRetainsLastRead() async {
+        let transport = SupportPreviewTransport()
+        var attachmentIncluded: Bool?
+        let id = UUID()
+        transport.nextWrite = .attachmentFailed
+        #expect(
+            await transport.send(id: id, hasAttachment: true) { include in
+                attachmentIncluded = include
+                return true
+            } == .attachmentFailed)
+        #expect(attachmentIncluded == false)
+        transport.nextReadFails = true
+        await transport.reload()
+        #expect(transport.read == .failed && transport.hasSnapshot)
+        await transport.reload()
+        #expect(transport.read == .ready && transport.receipts[id] == .attachmentFailed)
+        transport.simulateFailedRead()
+        #expect(!transport.hasSnapshot)
+        await transport.reload()
+        #expect(transport.hasSnapshot)
+    }
+
     @Test func ordinaryPreviewQueueAndSuggestedDraftUseSharedRecords() throws {
         let preview = SupportFixture()
         var selectedQueue = SupportQueue.all

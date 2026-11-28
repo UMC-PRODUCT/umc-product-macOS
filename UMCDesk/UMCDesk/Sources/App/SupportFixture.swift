@@ -45,7 +45,9 @@ struct SupportTicket: Identifiable {
     var subject: String
     var content: String
     var operatorTitle: String?
-    var team: SupportTeam { didSet { if oldValue != team { record("받는 팀 · " + team.rawValue) } } }
+    var teamDisplayName: String?
+    var visibleTeam: String { teamDisplayName ?? team.rawValue }
+    var team: SupportTeam { didSet { if oldValue != team { teamDisplayName = nil; record("받는 팀 · " + team.rawValue) } } }
     var category = "기타"
     var assignee = "미배정" { didSet { if oldValue != assignee { record("담당자 · " + assignee) } } }
     var labels: [String] = [] { didSet { if oldValue != labels { record("라벨 · " + label) } } }
@@ -155,6 +157,7 @@ enum SupportQueue: String, CaseIterable {
 
 @Observable
 final class SupportFixture {
+    let transport = SupportPreviewTransport()
     var tickets = [
         SupportTicket(
             subject: "출석 기록이 실제와 다르게 보여요",

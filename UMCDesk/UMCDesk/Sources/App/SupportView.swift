@@ -11,6 +11,7 @@ import SwiftUI
 import UMCFoundation
 
 struct SupportView: View {
+    @Environment(\.umcWorkspaceModalHost) private var modalHost
     @Environment(\.tabToolsDismissalRequest) private var dismissTools
     private var scene = SupportScene.home
     @State private var operatorTicket: UUID?
@@ -21,12 +22,17 @@ struct SupportView: View {
     }
     @State private var page = Page.answers
     @State private var composing = false
-    @State private var recipient = SupportRecipient()
+    @State private var recipient = SupportComposition()
     @State private var createdTicket: UUID?
 
     @State private var searchRequest = 0
     @State private var toolsOpen = false
-    @State private var reference: SupportArticle?
+    @State private var dirtyFAQ = false
+    @State private var pendingLeave: (() -> Void)?
+    @State private var receiptMessage = ""
+    @State private var searchState = SupportSearchState()
+    @Environment(\.umcBodyTextScale) private var scale
+    @FocusState private var toolsFocused: Bool
 
     @State private var fixture: SupportFixture?
 
@@ -44,11 +50,15 @@ struct SupportView: View {
         self.scene = scene
         _fixture = State(initialValue: fixture)
         let operations: [SupportScene] = [
-            .operations, .operatorDetail, .assignee, .labels, .operatorTools, .assigned,
+            .operations, .longOperations, .operatorDetail, .assignee, .labels, .operatorTools,
+            .assigned,
             .labelsApplied, .labelsCancelled, .labelsChanged, .mine, .unassigned, .unclassified,
         ]
         if operations.contains(scene) { _page = State(initialValue: .operations) }
-        if [.conversation, .waiting, .closed, .empty, .reopened, .conversationReference].contains(
+        if [
+            .conversation, .longConversation, .waiting, .closed, .empty, .reopened,
+            .conversationReference,
+        ].contains(
             scene)
         {
             _page = State(initialValue: .inquiries)
@@ -66,10 +76,20 @@ struct SupportView: View {
         if [.faqManagement, .faqDraft, .faqArchived, .faqEditing].contains(scene) {
             _page = State(initialValue: .faq)
         }
-        let recipient = SupportRecipient()
-        recipient.isOpen = scene == .team
+        let recipient = SupportComposition()
+        recipient.isOpen = scene == .team || scene == .longTeam
+        if scene == .longTeam {
+            recipient.teamNames[.brand] =
+                String(repeating: "운영 담당 ", count: 8).prefix(40).description
+        }
+        if [.compose, .team, .longTeam, .reference].contains(scene) {
+            recipient.subject = "출석 기록 표시 오류"
+            recipient.content = "앱에서 출석 기록이 실제와 다르게 표시돼요.\n새로고침해도 같아서 앱 버전과 오류 화면을 보내드립니다."
+            recipient.attachment = "오류 화면.png"
+            if scene == .reference { recipient.referenceID = fixture.publishedArticles.first?.id }
+        }
         _recipient = State(initialValue: recipient)
-        _composing = State(initialValue: [.compose, .team, .reference].contains(scene))
+        _composing = State(initialValue: [.compose, .team, .longTeam, .reference].contains(scene))
         _toolsOpen = State(initialValue: [.userTools, .operatorTools].contains(scene))
         if [
             .operatorDetail, .assignee, .labels, .assigned, .labelsChanged, .labelsApplied,
@@ -101,69 +121,125 @@ struct SupportView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack {
-                if fixture != nil {
+                if let fixture {
                     Menu("데이터 미리보기") {
                         Button("사용자 · 많이 묻는 질문") { navigate(.answers) }
-                        Button("운영 · 문의 관리") { navigate(.operations) }
+                        Button("운영 · 문의 관리") { navigate(.operations) }.disabled(
+                            fixture.transport.access != .granted)
+                        Divider()
+                        Picker(
+                            "예시 운영 권한",
+                            selection: Binding(
+                                get: { fixture.transport.access },
+                                set: { fixture.transport.access = $0 })
+                        ) {
+                            ForEach(SupportPreviewTransport.Access.allCases, id: \.self) {
+                                Text($0.rawValue)
+                            }
+                        }
+                        Picker(
+                            "다음 쓰기 결과",
+                            selection: Binding(
+                                get: { fixture.transport.nextWrite },
+                                set: { fixture.transport.nextWrite = $0 })
+                        ) {
+                            ForEach(SupportPreviewTransport.Outcome.allCases, id: \.self) {
+                                Text($0.rawValue)
+                            }
+                        }
+                        Button("새 조회 실패 재현") {
+                            fixture.transport.prepareInitialRead()
+                            fixture.transport.nextReadFails = true
+                            Task { await fixture.transport.reload() }
+                        }
+                        Button("기존 목록 갱신 실패 재현") {
+                            fixture.transport.nextReadFails = true
+                            Task { await fixture.transport.reload() }
+                        }
                     }.fixedSize()
                 }
                 Spacer()
                 Button(
                     page == .operations || page == .faq ? "문의 관리 도구" : "문의 도구",
                     systemImage: "slider.horizontal.3"
-                ) { toolsOpen.toggle() }
+                ) { toolsOpen.toggle() }.focused($toolsFocused)
 
             }.padding(.horizontal, 40).frame(height: 44)
             Divider()
-            VStack(alignment: .leading, spacing: 16) {
-                if composing, let fixture {
-                    SupportComposePreview(
-                        articles: articles, scene: scene, recipient: recipient,
-                        cancel: { composing = false },
-                        submit: { subject, content, team, category, reference, attachment in
-                            createdTicket = fixture.create(
-                                subject: subject, content: content, team: team, category: category,
-                                reference: reference, attachmentName: attachment)
-                            if createdTicket != nil { navigate(.inquiries) }
-                        }, reference: reference)
-                } else {
-                    switch page {
-                    case .faq:
-                        if let fixture {
-                            SupportFAQPreview(fixture: fixture, scene: scene) {
-                                navigate(.operations)
+            if let fixture {
+                if !receiptMessage.isEmpty { Text(receiptMessage).inquiryFont(14) }
+                if fixture.transport.access != .granted {
+                    Text(
+                        fixture.transport.access == .checking
+                            ? "운영 권한을 확인하고 있어요." : "운영 권한이 없어 사용자 고객센터를 표시해요."
+                    ).inquiryFont(13)
+                }
+                if fixture.transport.read != .ready {
+                    HStack {
+                        if fixture.transport.read == .failed {
+                            Text("문의를 불러오지 못했어요.")
+                            Button("다시 불러오기") { Task { await fixture.transport.reload() } }
+                        } else {
+                            ProgressView().controlSize(.small)
+                            Text(fixture.transport.hasSnapshot ? "문의를 갱신하는 중" : "문의를 불러오는 중")
+                        }
+                    }.padding(8)
+                }
+            }
+            SupportContentInsets {
+                VStack(alignment: .leading, spacing: 16) {
+                    if composing, let fixture {
+                        SupportComposePreview(
+                            articles: articles, draft: recipient,
+                            cancel: { leaveComposition { composing = false } },
+                            submit: { submitComposition(fixture) },
+                            reload: { Task { await fixture.transport.reload() } })
+                    } else if fixture?.transport.hasSnapshot == false {
+                        Spacer()
+                    } else {
+                        switch page {
+                        case .faq:
+                            if let fixture, fixture.transport.access == .granted {
+                                SupportFAQPreview(
+                                    fixture: fixture, scene: scene, onDirty: { dirtyFAQ = $0 }
+                                ) {
+                                    navigate(.operations)
+                                }
+                            }
+                        case .answers:
+                            SupportAnswersView(
+                                articles: articles, state: searchState, scene: scene,
+                                searchRequest: searchRequest,
+                                showInquiries: { page = .inquiries },
+                                compose: fixture == nil
+                                    ? nil
+                                    : { article in
+                                        beginCompose(article)
+                                    }
+                            )
+                        case .inquiries:
+                            inquiries
+                        case .operations:
+                            if let fixture, fixture.transport.access == .granted {
+                                SupportInquiryPreview(
+                                    fixture: fixture, isOperator: true,
+                                    initialTicket: operatorTicket,
+                                    scene: scene, selectTicket: { operatorTicket = $0 },
+                                    onFAQDirty: { dirtyFAQ = $0 }
+                                ) { page = .answers }
+                                .id(operatorEntry)
                             }
                         }
-                    case .answers:
-                        SupportAnswersView(
-                            articles: articles, scene: scene, searchRequest: searchRequest,
-                            showInquiries: { page = .inquiries },
-                            compose: fixture == nil
-                                ? nil
-                                : { article in
-                                    beginCompose(article)
-                                }
-                        ).id(searchRequest)
-                    case .inquiries:
-                        inquiries
-                    case .operations:
-                        if let fixture {
-                            SupportInquiryPreview(
-                                fixture: fixture, isOperator: true, initialTicket: operatorTicket,
-                                scene: scene, selectTicket: { operatorTicket = $0 }
-                            ) { page = .answers }
-                            .id(operatorEntry)
-                        }
                     }
-                }
-            }.padding(.leading, 40).padding(.trailing, 54).padding(.vertical, 24)
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                }.frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            }
         }
         .frame(
             minWidth: 560, maxWidth: .infinity, minHeight: 420, maxHeight: .infinity,
             alignment: .topLeading
         )
         .background(UMCColor.Custom.backgroundSurface)
+        .inquiryFont(14)
         .buttonStyle(SupportActionStyle())
         .tint(UMCColor.Semantic.textBrandDefault)
         .overlay(alignment: .topTrailing) {
@@ -171,19 +247,57 @@ struct SupportView: View {
                 ZStack(alignment: .topTrailing) {
                     Color.clear.contentShape(Rectangle()).onTapGesture { toolsOpen = false }
                         .accessibilityHidden(true)
-                    toolsPanel
-                        .background(
-                            UMCColor.Custom.backgroundSurfaceWhite, in: .rect(cornerRadius: 16)
-                        )
-                        .shadow(color: .black.opacity(0.13), radius: 12, y: 8)
-                        .padding(.trailing, 48).padding(.top, 63)
+                    ViewThatFits(in: .vertical) {
+                        toolsPanel
+                        ScrollView { toolsPanel }
+                    }
+                    .frame(maxWidth: SupportLayoutMetrics.toolWidth)
+                    .background(
+                        UMCColor.Custom.backgroundSurfaceWhite, in: .rect(cornerRadius: 16)
+                    )
+                    .shadow(color: .black.opacity(0.13), radius: 12, y: 8)
+                    .padding(.horizontal, SupportLayoutMetrics.edge).padding(.top, 48).padding(
+                        .bottom, 16)
                 }
             }
         }
+        .alert(
+            dirtyFAQ ? "FAQ 편집을 취소할까요?" : "작성 중인 문의를 취소할까요?",
+            isPresented: Binding(
+                get: { pendingLeave != nil }, set: { if !$0 { pendingLeave = nil } })
+        ) {
+            Button("계속 작성", role: .cancel) { pendingLeave = nil }
+            Button("작성 취소", role: .destructive) {
+                let action = pendingLeave
+                pendingLeave = nil
+                action?()
+            }
+        }
+        .onChange(of: fixture?.transport.access) {
+            guard fixture?.transport.access != .granted else { return }
+            operatorTicket = nil
+            operatorEntry = UUID()
+            toolsOpen = false
+            dirtyFAQ = false
+            pendingLeave = nil
+            if page == .operations || page == .faq {
+                page = .answers
+                composing = false
+            }
+        }
+        .onChange(of: toolsOpen) { if !toolsOpen { toolsFocused = true } }
         .onChange(of: dismissTools) { toolsOpen = false }
         .disabled(recipient.isOpen)
         .accessibilityHidden(recipient.isOpen)
-        .overlay { if recipient.isOpen { SupportTeamOptions(recipient: recipient) } }
+        .overlay {
+            if recipient.isOpen && modalHost == nil { SupportTeamOptions(recipient: recipient) }
+        }
+        .onChange(of: recipient.isOpen, initial: true) {
+            guard let modalHost else { return }
+            modalHost.content =
+                recipient.isOpen ? AnyView(SupportTeamOptions(recipient: recipient)) : nil
+        }
+        .onDisappear { if recipient.isOpen { modalHost?.content = nil } }
     }
 
     private var toolsPanel: some View {
@@ -222,8 +336,13 @@ struct SupportView: View {
                 Button("많이 묻는 질문 보기") { navigate(.answers) }
             } else {
                 Button {
-                    navigate(.answers)
-                    searchRequest += 1
+                    leaveComposition {
+                        composing = false
+                        page = .answers
+                        searchState = SupportSearchState()
+                        searchRequest += 1
+                        toolsOpen = false
+                    }
                 } label: {
                     HStack {
                         Text("도움말 검색")
@@ -249,19 +368,65 @@ struct SupportView: View {
                 Spacer()
                 Text("Esc")
             }.inquiryFont(11)
-        }.padding(20).frame(width: 390, height: operating ? 359 : 371, alignment: .topLeading)
+        }.padding(20).fixedSize(horizontal: false, vertical: true).frame(
+            maxWidth: .infinity, alignment: .topLeading)
     }
 
     private func beginCompose(_ article: SupportArticle?) {
-        recipient = SupportRecipient()
-        reference = article
+        if composing {
+            toolsOpen = false
+            return
+        }
+        recipient = SupportComposition()
+        recipient.referenceID = article?.id
+        recipient.category = article?.category ?? "출석·과제"
+        receiptMessage = ""
         composing = true
     }
 
-    private func navigate(_ next: Page) {
+    private func leaveComposition(_ action: @escaping () -> Void) {
         toolsOpen = false
-        composing = false
-        page = next
+        guard !recipient.submitting else { return }
+        if (composing && recipient.edited) || dirtyFAQ { pendingLeave = action } else { action() }
+    }
+
+    private func navigate(_ next: Page) {
+        leaveComposition {
+            if (page == .operations || page == .faq) && next != .operations && next != .faq {
+                operatorTicket = nil
+                operatorEntry = UUID()
+            }
+            dirtyFAQ = false
+            composing = false
+            page = next
+        }
+    }
+
+    private func submitComposition(_ fixture: SupportFixture) {
+        let draft = recipient
+        guard draft.valid, let team = draft.team, !draft.submitting else { return }
+        draft.submitting = true
+        Task { @MainActor in
+            var id: UUID?
+            let result = await fixture.transport.send(
+                id: draft.id, hasAttachment: draft.attachment != nil
+            ) { attach in
+                id = fixture.create(
+                    subject: draft.subject, content: draft.content, team: team,
+                    category: draft.category,
+                    reference: draft.referenceID.flatMap(fixture.publishedArticle(id:)),
+                    attachmentName: attach ? draft.attachment : nil)
+                return id != nil
+            }
+            draft.receipt = result
+            draft.submitting = false
+            guard result.acknowledged, recipient === draft, composing, let id else { return }
+            createdTicket = id
+            if result == .refreshFailed { receiptMessage = "접수했어요. 목록을 다시 불러와 주세요." }
+            if result == .attachmentFailed { receiptMessage = "문의는 접수했어요. 예시 파일 첨부는 실패했어요." }
+            composing = false
+            page = .inquiries
+        }
     }
 
     private var articles: [SupportArticle] {
@@ -291,22 +456,28 @@ struct SupportView: View {
     }
 }
 
+@Observable private final class SupportSearchState {
+    var initialized = false
+    var typingSearch = false
+    var choosingSearch = false
+    var category: String?
+    var weekly = false
+    var refreshed = false
+    var search = ""
+    var selectedID: String?
+    var detailID: String?
+}
+
 private struct SupportAnswersView: View {
     private enum Focus { case search, table, back }
     let articles: [SupportArticle]
+    @Bindable var state: SupportSearchState
+    @Environment(\.umcBodyTextScale) var scale
     var scene = SupportScene.home
     let searchRequest: Int
     let showInquiries: () -> Void
     let compose: ((SupportArticle?) -> Void)?
-    @State private var typingSearch = false
-    @State private var choosingSearch = false
-    @State private var category: String?
-    @State private var weekly = false
-    @State private var refreshed = false
-    @State private var search = ""
-    @State private var selectedID: String?
-    @State private var detailID: String?
-    private var detail: SupportArticle? { articles.first { $0.id == detailID } }
+    private var detail: SupportArticle? { articles.first { $0.id == state.detailID } }
     @FocusState private var focus: Focus?
 
     private var categories: [String] {
@@ -316,18 +487,18 @@ private struct SupportAnswersView: View {
     }
 
     private var showsRanking: Bool {
-        search.isEmpty && category == nil && articles.contains { $0.dayReaders != nil }
+        state.search.isEmpty && state.category == nil && articles.contains { $0.dayReaders != nil }
     }
 
     private func readers(_ article: SupportArticle) -> Int? {
-        if refreshed, article.id == "login" { return weekly ? 138 : 34 }
-        if refreshed, article.id == "attendance" { return weekly ? 128 : 30 }
-        return weekly ? article.weekReaders : article.dayReaders
+        if state.refreshed, article.id == "login" { return state.weekly ? 138 : 34 }
+        if state.refreshed, article.id == "attendance" { return state.weekly ? 128 : 30 }
+        return state.weekly ? article.weekReaders : article.dayReaders
     }
 
     private var matches: [SupportArticle] {
         let filtered = articles.filter {
-            $0.matches(search) && (category == nil || category == $0.category)
+            $0.matches(state.search) && (state.category == nil || state.category == $0.category)
         }
         guard showsRanking else { return filtered }
         return filtered.filter { readers($0) != nil }.sorted {
@@ -340,208 +511,231 @@ private struct SupportAnswersView: View {
             if let detail {
                 SupportAnswerDetail(
                     article: detail, initiallyResolved: scene == .resolved,
-                    back: { detailID = nil },
+                    back: { state.detailID = nil },
                     inquire: compose.map { action in { action(detail) } })
             } else {
-                if !choosingSearch && search.isEmpty {
-                    HStack(alignment: .center) {
-                        VStack(alignment: .leading, spacing: UMCSpacing.value4) {
-                            Text("문의").inquiryFont(28, weight: .bold).accessibilityAddTraits(
-                                .isHeader)
-                            Group {
-                                Text("서비스 이용 중 궁금한 점은 답변을 찾거나 UMC PRODUCT에 문의해 주세요.")
-                                    .foregroundStyle(UMCColor.Semantic.textNeutralStrong800)
-                            }
-                        }
-                        Spacer()
-                        if let compose {
-                            Button("문의하기") { compose(nil) }
-                                .buttonStyle(SupportActionStyle(prominent: true))
-                        }
-                    }
-                    HStack(spacing: 8) {
-                        Button {
-                            choosingSearch = false
-                            search = ""
-                        } label: {
-                            Text("많이 묻는 질문").frame(width: 128, height: 48)
-                        }.buttonStyle(SupportActionStyle(selected: true))
-                        Button(action: showInquiries) { Text("내 문의").frame(width: 72, height: 48) }
-                    }
-                } else {
-                    HStack {
-                        VStack(alignment: .leading) {
-                            Text("FAQ 검색").inquiryFont(28, weight: .bold)
-                            Text(search.isEmpty ? "서비스 이용 중 궁금한 내용을 찾아보세요." : "검색어 · " + search)
-                                .inquiryFont(14)
-                        }
-                        Spacer()
-                        Button("많이 묻는 질문") {
-                            search = ""
-                            choosingSearch = false
-                        }
-                    }
-                }
-                if !choosingSearch || typingSearch {
-                    HStack(spacing: 12) {
-                        HStack(spacing: 8) {
-                            Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
-                            TextField(AppLocalization.string("궁금한 내용을 검색하세요"), text: $search)
-                                .textFieldStyle(.plain)
-                                .accessibilityIdentifier("support.search")
-                                .focused($focus, equals: .search)
-                                .onChange(of: focus) {
-                                    if focus == .search && search.isEmpty && !typingSearch {
-                                        typingSearch = true
-                                        choosingSearch = true
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 16) {
+                        if !state.choosingSearch && state.search.isEmpty {
+                            HStack(alignment: .center) {
+                                VStack(alignment: .leading, spacing: UMCSpacing.value4) {
+                                    Text("문의").inquiryFont(28, weight: .bold)
+                                        .accessibilityAddTraits(
+                                            .isHeader)
+                                    Group {
+                                        Text("서비스 이용 중 궁금한 점은 답변을 찾거나 UMC PRODUCT에 문의해 주세요.")
+                                            .foregroundStyle(
+                                                UMCColor.Semantic.textNeutralStrong800)
                                     }
                                 }
-                                .onSubmit {
-                                    if search.isEmpty {
-                                        choosingSearch = true
+                                Spacer()
+                                if let compose {
+                                    Button("문의하기") { compose(nil) }
+                                        .buttonStyle(SupportActionStyle(prominent: true))
+                                }
+                            }
+                            HStack(spacing: 8) {
+                                Button {
+                                    state.choosingSearch = false
+                                    state.search = ""
+                                } label: {
+                                    Text("많이 묻는 질문").frame(minWidth: 128, minHeight: 48)
+                                }.buttonStyle(SupportActionStyle(selected: true))
+                                Button(action: showInquiries) {
+                                    Text("내 문의").frame(minWidth: 72, minHeight: 48)
+                                }
+                            }
+                        } else {
+                            HStack {
+                                VStack(alignment: .leading) {
+                                    Text("FAQ 검색").inquiryFont(28, weight: .bold)
+                                    Text(
+                                        state.search.isEmpty
+                                            ? "서비스 이용 중 궁금한 내용을 찾아보세요." : "검색어 · " + state.search
+                                    )
+                                    .inquiryFont(14)
+                                }
+                                Spacer()
+                                Button("많이 묻는 질문") {
+                                    state.search = ""
+                                    state.choosingSearch = false
+                                }
+                            }
+                        }
+                        Group {
+                            HStack(spacing: 12) {
+                                HStack(spacing: 8) {
+                                    Image(systemName: "magnifyingglass").foregroundStyle(
+                                        .secondary)
+                                    SupportInputField(
+                                        "FAQ 제목·분류·답변 검색", identifier: "support.search",
+                                        text: $state.search,
+                                        focusRequest: searchRequest,
+                                        onFocus: {
+                                            state.typingSearch = true
+                                            state.choosingSearch = true
+                                        },
+                                        submit: {
+                                            if state.search.isEmpty {
+                                                state.choosingSearch = true
+                                            } else {
+                                                focusResults()
+                                            }
+                                        },
+                                        moveDown: { focusResults() }
+                                    )
+                                    .focused($focus, equals: .search)
+                                    .frame(minHeight: 28 * scale)
+                                    .onChange(of: state.search) { state.selectedID = nil }
+                                }.padding(.horizontal, 12).frame(height: 40)
+                                    .background(
+                                        UMCColor.Custom.backgroundSurfaceGreyWeak,
+                                        in: .rect(cornerRadius: 12))
+                                Button("검색") {
+                                    if state.search.isEmpty {
+                                        state.choosingSearch = true
+                                        focus = .search
                                     } else {
                                         focusResults()
                                     }
                                 }
-                                .onKeyPress(.downArrow) {
-                                    guard !matches.isEmpty else { return .ignored }
-                                    focusResults()
-                                    return .handled
-                                }
-                                .onChange(of: searchRequest, initial: true) {
-                                    if searchRequest > 0 { focus = .search }
-                                }
-                                .onChange(of: search) { selectedID = nil }
-                        }.padding(.horizontal, 12).frame(height: 40)
-                            .background(
-                                UMCColor.Custom.backgroundSurfaceGreyWeak,
-                                in: .rect(cornerRadius: 12))
-                        Button("검색") {
-                            if search.isEmpty {
-                                choosingSearch = true
-                                focus = .search
-                            } else {
-                                focusResults()
-                            }
+                            }.padding(.horizontal, 16).frame(minHeight: 52)
+                                .background(
+                                    UMCColor.Custom.backgroundSurfaceWhite,
+                                    in: .rect(cornerRadius: 12))
                         }
-                    }.padding(.horizontal, 16).frame(minHeight: 52)
-                        .background(
-                            UMCColor.Custom.backgroundSurfaceWhite, in: .rect(cornerRadius: 12))
-                }
-                if choosingSearch && search.isEmpty {
-                    Spacer()
-                    Text("어떤 내용을 찾으시나요?").inquiryFont(28, weight: .bold)
-                        .frame(maxWidth: .infinity)
-                    Text("예시 검색어를 선택해 FAQ를 찾아보세요.").frame(maxWidth: .infinity)
-                    HStack {
-                        Button {
-                            typingSearch = false
-                            search = "출석·과제"
-                        } label: {
-                            Text("출석·과제").frame(width: 144, height: 48)
-                        }
-                        .buttonStyle(.plain)
-                        .foregroundStyle(UMCColor.Semantic.textNeutralDefault)
-                        .background(UMCColor.Primitives.teal500, in: .rect(cornerRadius: 8))
-                        .overlay {
-                            RoundedRectangle(cornerRadius: 8).strokeBorder(
-                                UMCColor.Semantic.borderNeutralWeaker100, lineWidth: 2)
-                        }
-                        .environment(\.colorScheme, .light)
-                        Button {
-                            typingSearch = false
-                            search = "영수증"
-                        } label: {
-                            Text("영수증").frame(width: 144, height: 48)
-                        }
-                        .buttonStyle(.plain)
-                        .foregroundStyle(UMCColor.Semantic.textInverse)
-                        .background(
-                            Color(red: 96 / 255, green: 98 / 255, blue: 98 / 255),
-                            in: .rect(cornerRadius: 8))
-                    }.frame(maxWidth: .infinity)
-                    Button("직접 입력") {
-                        typingSearch = true
-                        focus = .search
-                    }
-                    .frame(maxWidth: .infinity)
-                    Spacer()
-                }
-                if let category {
-                    Button {
-                        self.category = nil
-                    } label: {
-                        Label(category, systemImage: "xmark.circle")
-                    }
-                    .accessibilityHint(AppLocalization.string("카테고리 필터 해제"))
-                }
-                if !search.isEmpty && !matches.isEmpty {
-                    HStack {
-                        Text("검색 결과 \(matches.count)건")
-                            .inquiryFont(16)
-                        Spacer()
-                        Button("다시 검색") {
-                            choosingSearch = true
-                            search = ""
-                            focus = .search
-                        }
-                    }
-                }
-                if choosingSearch && search.isEmpty {
-                    EmptyView()
-                } else if matches.isEmpty {
-                    VStack(spacing: 16) {
-                        Text("‘" + search + "’에 대한 검색 결과가 없어요").inquiryFont(28, weight: .bold)
-                        Text("다른 검색어로 찾아보거나 UMC PRODUCT에 문의해 주세요.").inquiryFont(15)
-                        HStack(spacing: 12) {
-                            Button("다시 검색") {
-                                search = ""
-                                choosingSearch = true
-                            }
-                            if let compose {
-                                Button("문의하기") { compose(nil) }
-                                    .buttonStyle(SupportActionStyle(prominent: true))
-                            }
-                        }
-                    }.frame(maxWidth: .infinity, maxHeight: .infinity).supportCard()
-                } else {
-                    HStack(alignment: .top, spacing: UMCSpacing.value24) {
-                        results
-                        if search.isEmpty {
-                            helpPanel
-                                .containerRelativeFrame(.horizontal) { width, _ in
-                                    min(360, width * 0.28)
-                                }
-                        }
-                    }
-                    if showsRanking { Text("같은 사람의 반복 접수는 한 번만 집계해요.").inquiryFont(13) }
-                    if showsRanking && !refreshed {
-                        HStack {
-                            Text("새 순위가 있어요. 읽던 목록은 그대로 유지했어요.")
+                        if state.choosingSearch && state.search.isEmpty {
                             Spacer()
-                            Button("새 순위 보기") { refreshed = true }
-                        }.padding(12)
+                            Text("어떤 내용을 찾으시나요?").inquiryFont(28, weight: .bold)
+                                .frame(maxWidth: .infinity)
+                            Text("예시 검색어를 선택해 FAQ를 찾아보세요.").frame(maxWidth: .infinity)
+                            HStack {
+                                Button {
+                                    state.typingSearch = false
+                                    state.search = "출석·과제"
+                                } label: {
+                                    Text("출석·과제").inquiryFont(13, weight: .medium).padding(
+                                        .horizontal, 8
+                                    ).frame(minWidth: 144, minHeight: 48)
+                                }
+                                .buttonStyle(.plain)
+                                .foregroundStyle(UMCColor.Primitives.black)
+                                .background(
+                                    UMCColor.Primitives.teal500, in: .rect(cornerRadius: 8)
+                                )
+                                .overlay {
+                                    RoundedRectangle(cornerRadius: 8).strokeBorder(
+                                        UMCColor.Semantic.borderNeutralWeaker100, lineWidth: 2)
+                                }
+                                .environment(\.colorScheme, .light)
+                                Button {
+                                    state.typingSearch = false
+                                    state.search = "영수증"
+                                } label: {
+                                    Text("영수증").inquiryFont(13, weight: .medium).padding(
+                                        .horizontal, 8
+                                    ).frame(minWidth: 144, minHeight: 48)
+                                }
+                                .buttonStyle(.plain)
+                                .foregroundStyle(UMCColor.Custom.backgroundTextWhite)
+                                .background(
+                                    Color(
+                                        red: 0.3762000203, green: 0.38379999995, blue: 0.3832932711
+                                    ),
+                                    in: .rect(cornerRadius: 8))
+                            }.frame(maxWidth: .infinity)
+                            Button("직접 입력") {
+                                state.typingSearch = true
+                                focus = .search
+                            }
+                            .frame(maxWidth: .infinity)
+                            Spacer()
+                        }
+                        if let category = state.category {
+                            Button {
+                                state.category = nil
+                            } label: {
+                                Label(category, systemImage: "xmark.circle")
+                            }
+                            .accessibilityHint(AppLocalization.string("카테고리 필터 해제"))
+                        }
+                        if !state.search.isEmpty && !matches.isEmpty {
+                            HStack {
+                                Text("검색 결과 \(matches.count)건")
+                                    .inquiryFont(16)
+                                Spacer()
+                                Button("다시 검색") {
+                                    state.choosingSearch = true
+                                    state.search = ""
+                                    focus = .search
+                                }
+                            }
+                        }
+                        if state.choosingSearch && state.search.isEmpty {
+                            EmptyView()
+                        } else if matches.isEmpty {
+                            VStack(spacing: 16) {
+                                Text("‘" + state.search + "’에 대한 검색 결과가 없어요").inquiryFont(
+                                    28, weight: .bold)
+                                Text("다른 검색어로 찾아보거나 UMC PRODUCT에 문의해 주세요.").inquiryFont(15)
+                                HStack(spacing: 12) {
+                                    Button("다시 검색") {
+                                        state.search = ""
+                                        state.choosingSearch = true
+                                    }
+                                    if let compose {
+                                        Button("문의하기") { compose(nil) }
+                                            .buttonStyle(SupportActionStyle(prominent: true))
+                                    }
+                                }
+                            }.frame(maxWidth: .infinity, maxHeight: .infinity).supportCard()
+                        } else {
+                            SupportPanelLayout(scale: scale) {
+                                results
+                                if state.search.isEmpty {
+                                    helpPanel
+                                }
+                            }
+                            if showsRanking { Text("같은 사람의 반복 접수는 한 번만 집계해요.").inquiryFont(13) }
+                            if showsRanking && !state.refreshed {
+                                HStack {
+                                    Text("새 순위가 있어요. 읽던 목록은 그대로 유지했어요.")
+                                    Spacer()
+                                    Button("새 순위 보기") { state.refreshed = true }
+                                }.padding(12)
+                            }
+                        }
                     }
                 }
             }
         }.onChange(of: articles) {
-            if detailID != nil && detail == nil {
-                detailID = nil
-                selectedID = nil
+            if state.detailID != nil && detail == nil {
+                state.detailID = nil
+                state.selectedID = nil
+            }
+        }.onChange(of: searchRequest) {
+            if searchRequest > 0 {
+                state.choosingSearch = true
+                state.typingSearch = true
+                focus = .search
             }
         }.onAppear {
-            if [.detail, .resolved].contains(scene) { detailID = articles.first?.id }
+            guard !state.initialized else { return }
+            state.initialized = true
+            if [.detail, .resolved, .longFAQ].contains(scene) {
+                state.detailID = articles.first?.id
+            }
             if scene == .results {
-                choosingSearch = true
-                search = "출석·과제"
+                state.choosingSearch = true
+                state.search = "출석·과제"
             }
             if scene == .noResults {
-                choosingSearch = true
-                search = "영수증"
+                state.choosingSearch = true
+                state.search = "영수증"
             }
-            if [.refreshed, .weeklyRefreshed].contains(scene) { refreshed = true }
-            if [.weekly, .weeklyRefreshed].contains(scene) { weekly = true }
-            if scene == .search || searchRequest > 0 { choosingSearch = true }
+            if [.refreshed, .weeklyRefreshed].contains(scene) { state.refreshed = true }
+            if [.weekly, .weeklyRefreshed].contains(scene) { state.weekly = true }
+            if scene == .search || searchRequest > 0 { state.choosingSearch = true }
         }
     }
 
@@ -579,31 +773,34 @@ private struct SupportAnswersView: View {
     private var results: some View {
         VStack(alignment: .leading, spacing: UMCSpacing.value8) {
             if showsRanking {
-                HStack {
+                VStack(alignment: .leading, spacing: 8) {
                     Text("실시간 인기 문의").inquiryFont(22, weight: .bold)
                         .accessibilityAddTraits(.isHeader)
                     Spacer()
                     HStack(spacing: 8) {
                         ForEach([false, true], id: \.self) { week in
                             Button {
-                                weekly = week
+                                state.weekly = week
                             } label: {
-                                Text((week == weekly ? "✓ " : "") + (week ? "최근 7일" : "최근 24시간"))
-                                    .frame(minHeight: 48)
+                                Text(
+                                    (week == state.weekly ? "✓ " : "")
+                                        + (week ? "최근 7일" : "최근 24시간")
+                                )
+                                .frame(minHeight: 48)
                             }
-                            .accessibilityAddTraits(week == weekly ? .isSelected : [])
+                            .accessibilityAddTraits(week == state.weekly ? .isSelected : [])
                         }
                     }
                 }
             }
             if showsRanking {
                 HStack {
-                    Text(weekly ? "최근 7일" : "최근 24시간")
+                    Text(state.weekly ? "최근 7일" : "최근 24시간")
                     Spacer()
-                    Text(refreshed ? "마지막 갱신 14:33" : "마지막 갱신 14:32")
+                    Text(state.refreshed ? "마지막 갱신 14:33" : "마지막 갱신 14:32")
                 }.inquiryFont(13)
             }
-            List(selection: $selectedID) {
+            List(selection: $state.selectedID) {
                 ForEach(Array(matches.enumerated()), id: \.element.id) { index, article in
                     Button {
                         open(article)
@@ -621,22 +818,26 @@ private struct SupportAnswersView: View {
                             VStack(alignment: .leading, spacing: 4) {
                                 Text(article.question).inquiryFont(17, weight: .medium)
                                 Text(article.category).inquiryFont(13)
+                                if !state.search.isEmpty {
+                                    Text(article.answer).inquiryFont(14).lineLimit(2)
+                                }
 
                             }
                             Spacer()
-                            if !search.isEmpty { Text("답변 보기") }
+                            if !state.search.isEmpty { Text("답변 보기") }
                             if showsRanking, let count = readers(article) { Text("\(count)명 문의") }
                         }.padding(.vertical, 12).contentShape(Rectangle())
                     }
                     .buttonStyle(.plain).tag(article.id)
                 }
             }
+            .frame(height: CGFloat(max(1, matches.count)) * (showsRanking ? 80 : 110) * scale)
             .listStyle(.plain)
             .environment(\.defaultMinListRowHeight, showsRanking ? 76 : 56)
             .accessibilityIdentifier("support.faq.table")
             .focused($focus, equals: .table)
             .task {
-                guard selectedID != nil else { return }
+                guard state.selectedID != nil else { return }
                 // A returning table receives its AppKit responder after insertion.
                 await Task.yield()
                 guard !Task.isCancelled else { return }
@@ -647,7 +848,7 @@ private struct SupportAnswersView: View {
                 if let article = matches.first(where: { ids.contains($0.id) }) { open(article) }
             }
             .onKeyPress(.return) {
-                guard let article = matches.first(where: { $0.id == selectedID }) else {
+                guard let article = matches.first(where: { $0.id == state.selectedID }) else {
                     return .ignored
                 }
                 open(article)
@@ -658,13 +859,13 @@ private struct SupportAnswersView: View {
 
     private func focusResults() {
         guard let first = matches.first else { return }
-        selectedID = first.id
+        state.selectedID = first.id
         focus = .table
     }
 
     private func open(_ article: SupportArticle) {
-        selectedID = article.id
-        detailID = article.id
+        state.selectedID = article.id
+        state.detailID = article.id
     }
 }
 
@@ -681,8 +882,10 @@ struct SupportControlFill: ViewModifier {
 
 struct SupportAnswerDetail: View {
     let article: SupportArticle
+    @Environment(\.umcBodyTextScale) var scale
     var initiallyResolved = false
     let back: () -> Void
+    var fromComposition = false
     let inquire: (() -> Void)?
     @State private var resolved = false
     @FocusState private var backFocused: Bool
@@ -697,48 +900,55 @@ struct SupportAnswerDetail: View {
             Button("목록으로", action: back).keyboardShortcut(.cancelAction)
                 .focused($backFocused)
         }
-        HStack(alignment: .top, spacing: 24) {
-            VStack(alignment: .leading, spacing: 16) {
-                if inquire != nil {
-                    Text("검증된 답변").inquiryFont(13, weight: .medium)
-                        .padding(6).background(UMCColor.Semantic.surfaceBrandWeak, in: .capsule)
-                }
-                Text(article.question).inquiryFont(28, weight: .bold).accessibilityAddTraits(
-                    .isHeader)
-                Text(article.category + (inquire == nil ? "" : " · UMC 서비스")).inquiryFont(13)
-                Divider()
-                ScrollView {
-                    Text(article.answer).inquiryFont(16).textSelection(.enabled)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }
-                if let inquire {
-                    HStack(spacing: 12) {
-                        Spacer()
-                        Button("해결됐어요") { resolved = true }.disabled(resolved)
-                        Button("담당자에게 문의하기", action: inquire)
-                            .buttonStyle(SupportActionStyle(prominent: true))
+        ScrollView {
+            SupportPanelLayout(scale: scale, fraction: 902 / 1258) {
+                VStack(alignment: .leading, spacing: 16) {
+                    if inquire != nil {
+                        Text("검증된 답변").inquiryFont(13, weight: .medium)
+                            .padding(6).background(
+                                UMCColor.Semantic.surfaceBrandWeak, in: .capsule)
                     }
-                    if resolved {
-                        Text("✓ 해결 응답을 기록했어요. 문의가 새로 등록되지는 않아요.")
-                            .inquiryFont(13).foregroundStyle(UMCColor.Semantic.textBrandDefault)
+                    Text(article.question).inquiryFont(28, weight: .bold).accessibilityAddTraits(
+                        .isHeader)
+                    Text(article.category + (inquire == nil ? "" : " · UMC 서비스")).inquiryFont(13)
+                    Divider()
+                    SupportSelectableText(article.answer).inquiryFont(16)
+                        .fixedSize(horizontal: false, vertical: true).frame(
+                            maxWidth: 720 * scale, alignment: .leading)
+                    if let inquire {
+                        SupportActionRow {
+                            Button("해결됐어요") {
+                                resolved = true
+                                AccessibilityNotification.Announcement("해결 응답을 기록했어요.").post()
+                            }.disabled(resolved)
+                            Button(fromComposition ? "참고 답변으로 추가" : "담당자에게 문의하기", action: inquire)
+                                .buttonStyle(SupportActionStyle(prominent: true))
+                        }
+                        if resolved {
+                            Text("✓ 해결 응답을 기록했어요. 문의가 새로 등록되지는 않아요.")
+                                .inquiryFont(13).foregroundStyle(
+                                    UMCColor.Semantic.textBrandDefault)
+                        }
                     }
-                }
-            }.supportCard()
-            VStack(alignment: .leading, spacing: 24) {
-                Text("답변 정보").inquiryFont(18, weight: .bold)
-                Text("적용 대상\n" + article.audience)
-                if inquire != nil {
-                    Text("검증한 조직\nUMC PRODUCT")
-                    Text("수정일\n2026.09.30")
-                }
-                Divider()
-                Text("관련 안내\n" + (article.id == "attendance" ? "출석 화면 오류 안내" : article.category))
-                Spacer()
-                if article.id == "attendance" {
-                    Text("UMC PRODUCT가 앱의 표시·동기화 오류를 확인해 드려요. 출석 인정이나 학사 판단은 이 문의에서 처리하지 않아요.")
-                        .inquiryFont(13)
-                }
-            }.frame(maxWidth: .infinity, alignment: .leading).supportCard().frame(width: 356)
+                }.supportCard()
+                VStack(alignment: .leading, spacing: 24) {
+                    Text("답변 정보").inquiryFont(18, weight: .bold)
+                    Text("적용 대상\n" + article.audience)
+                    if inquire != nil {
+                        Text("검증한 조직\nUMC PRODUCT")
+                        Text("수정일\n2026.09.30")
+                    }
+                    Divider()
+                    Text(
+                        "관련 안내\n" + (article.id == "attendance" ? "출석 화면 오류 안내" : article.category)
+                    )
+                    Spacer()
+                    if article.id == "attendance" {
+                        Text("UMC PRODUCT가 앱의 표시·동기화 오류를 확인해 드려요. 출석 인정이나 학사 판단은 이 문의에서 처리하지 않아요.")
+                            .inquiryFont(13)
+                    }
+                }.frame(maxWidth: .infinity, alignment: .leading).supportCard()
+            }
         }
         .onAppear {
             resolved = initiallyResolved
@@ -750,11 +960,12 @@ struct SupportAnswerDetail: View {
 struct SupportActionStyle: ButtonStyle {
     var prominent = false
     var selected = false
+    @Environment(\.colorSchemeContrast) private var contrast
     @Environment(\.isEnabled) private var enabled
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .inquiryFont(13, weight: .medium).tracking(prominent ? -0.13 : -0.26)
+            .inquiryFont(13, weight: .medium).tracking(0)
             .padding(.horizontal, 16)
             .frame(minWidth: prominent ? 144 : nil, minHeight: prominent ? 40 : 36)
             .foregroundStyle(
@@ -772,7 +983,10 @@ struct SupportActionStyle: ButtonStyle {
             .overlay {
                 RoundedRectangle(cornerRadius: 8)
                     .strokeBorder(
-                        UMCColor.Semantic.borderNeutralWeak200, lineWidth: prominent ? 0 : 1)
+                        contrast == .increased
+                            ? UMCColor.Semantic.textNeutralMedium600
+                            : UMCColor.Semantic.borderNeutralWeak200,
+                        lineWidth: contrast == .increased ? 2 : (prominent ? 0 : 1))
             }
             .opacity(enabled ? (configuration.isPressed ? 0.75 : 1) : 0.5)
     }

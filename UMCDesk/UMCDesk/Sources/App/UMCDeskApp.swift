@@ -94,7 +94,7 @@ struct UMCDeskApp: App {
 
         Window(AppLocalization.string("고객센터"), id: DeskWindow.support) {
             Group {
-                if let dataPreview { SupportView(fixture: dataPreview.support) }
+                if let dataPreview { SupportView(fixture: dataPreview.support).id(ObjectIdentifier(dataPreview.support)) }
                 else { SupportView() }
             }
                 .environment(\.locale, AppLocalization.shared.language.locale)

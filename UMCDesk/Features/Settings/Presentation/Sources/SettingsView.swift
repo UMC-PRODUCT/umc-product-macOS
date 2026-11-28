@@ -99,7 +99,17 @@ public struct SettingsView: View {
 
     // MARK: - Body
 
+    @State private var workspaceModal = UMCWorkspaceModalHost()
+
     public var body: some View {
+        workspace
+            .environment(\.umcWorkspaceModalHost, workspaceModal)
+            .disabled(workspaceModal.content != nil)
+            .accessibilityHidden(workspaceModal.content != nil)
+            .overlay { if let content = workspaceModal.content { content } }
+    }
+
+    private var workspace: some View {
         HStack(spacing: UMCSpacing.value4) {
             appRail
                 .frame(width: Constants.railWidth)
