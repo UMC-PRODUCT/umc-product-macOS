@@ -31,3 +31,4 @@ PR이 다음 요구 사항을 충족하는지 확인해주세요!!!
     -  해당 링크 : [깃 모지 컨벤션](https://tngusmiso.tistory.com/57)
 - [ ] 유지-보수를 위해 주석처리를 잘 작성하였는가?
     - 해당 링크 : [Xcode 주석 정리](https://yoojin99.github.io/app/Swift-Documentation/)
+- [ ] 공지 탭을 개선한 경우 [공지 탭 구현 명세](https://github.com/UMC-PRODUCT/umc-product-macOS/blob/develop/docs/specs/공지_공지%20탭_구현명세.md)에 변경 내용을 함께 반영했습니다. (공지 탭과 무관하면 해당 없음)
