@@ -155,6 +155,7 @@ make doctor     # 환경 진단
 | Network Router (Moya) | `docs/Codex/network-router.md` | API 엔드포인트/DTO 추가 |
 | Response DTO 디코딩 | `docs/Codex/response-dto-decoding.md` | Response DTO 작성/수정 |
 | 디자인 시스템 & 성능 | `docs/Codex/design-system.md` | UI/토큰/Glass/렌더링 최적화 |
+| 활동 탭 | [활동 탭 결정 이력](docs/specs/활동_활동%20탭%20결정%20이력_설계.md) | 활동 작업을 시작할 때 먼저 읽고, 동작·권한 정책·시안이 바뀌면 같은 PR에서 결정 이유와 근거를 갱신한다. |
 | 홈 아케이드 | [첫 부두 구역 설계 원본](docs/Codex/dock-action-game.md) | 부두 한 판의 규칙, Mac 입력·성능 검수, 세 게임의 공통 완료 기준 |
 | 코딩 스타일 & 네이밍 | `docs/Codex/coding-style.md` | 네이밍 판단이 필요할 때 |
 | Git Workflow | `docs/Codex/git-workflow.md` | 브랜치/커밋/PR/이슈(템플릿·Type·Priority)/배포 |
