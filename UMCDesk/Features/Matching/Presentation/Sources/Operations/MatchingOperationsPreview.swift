@@ -10,7 +10,8 @@ import MatchingDomain
 
 extension MatchingPreviewRepository {
     private var previewPeople: [OperationsPerson] {
-        [
+        if isEmpty { return [] }
+        return [
             .init(memberId: "11", nickname: "김유엠", name: nil, schoolName: "한빛대", part: "MOBILE_PRODUCT_ENGINEER"),
             .init(memberId: "12", nickname: "정모바", name: nil, schoolName: "한빛대", part: "MOBILE_PRODUCT_ENGINEER"),
             .init(memberId: "13", nickname: "최개발", name: nil, schoolName: "새솔대", part: "WEB_PRODUCT_ENGINEER"),
@@ -20,7 +21,10 @@ extension MatchingPreviewRepository {
     }
 
     private var previewOwner: OperationsPerson {
-        .init(memberId: "1", nickname: "김모아", name: nil, schoolName: "한빛대", part: "PLAN")
+        if isEmpty {
+            return .init(memberId: "101", nickname: "유엠", name: "김유엠", schoolName: "한빛대학교", part: "PLAN")
+        }
+        return .init(memberId: "1", nickname: "김모아", name: nil, schoolName: "한빛대", part: "PLAN")
     }
 
     func managedProjects(gisuId: String, keyword: String?, page: Int) async throws
@@ -46,6 +50,7 @@ extension MatchingPreviewRepository {
 
     func pmCandidates(gisuId: String, keyword: String?, page: Int) async throws
         -> (people: [OperationsPerson], hasNext: Bool) {
+        if isEmpty { return ([], false) }
         let rows = [previewOwner].filter { ($0.display.contains(keyword ?? "") || (keyword ?? "").isEmpty) }
         return (rows, false)
     }
@@ -66,6 +71,7 @@ extension MatchingPreviewRepository {
 
     func editableForm(projectId: String) async throws -> EditableMatchingForm {
         if let form = forms[projectId] { return form }
+        if isEmpty { return .init(title: "", description: nil, sections: []) }
         let question = EditableQuestion(questionId: "21", type: "LONG_TEXT", title: "지원 동기",
                                         description: "지원한 이유를 알려주세요.", isRequired: true,
                                         orderNo: "0", options: [])
@@ -75,6 +81,7 @@ extension MatchingPreviewRepository {
     }
 
     func applicants(projectId: String) async throws -> [ApplicantRow] {
+        guard !isEmpty else { return [] }
         let statuses = ["SUBMITTED", "APPROVED", "APPROVED", "REJECTED", "SUBMITTED"]
         return zip(previewPeople, statuses).map { person, status in
             ApplicantRow(applicationId: person.memberId, applicant: person, status: decisions[projectId]?[person.memberId] ?? status,
@@ -85,6 +92,7 @@ extension MatchingPreviewRepository {
 
     func team(projectId: String) async throws -> OperationsTeam {
         if let team = teams[projectId] { return team }
+        if isEmpty { return .init(productOwner: previewOwner, coProductOwners: [], partGroups: []) }
         return .init(productOwner: previewOwner, coProductOwners: [], partGroups: [
             .init(part: "MOBILE_PRODUCT_ENGINEER", members: [previewPeople[1]]),
             .init(part: "WEB_PRODUCT_ENGINEER", members: [previewPeople[2],
@@ -98,6 +106,7 @@ extension MatchingPreviewRepository {
     }
 
     func overview(chapterId: String, adjustment: Bool) async throws -> [OverviewProject] {
+        guard !isEmpty else { return [] }
         let mobile = adjustment ? [previewPeople[0], previewPeople[1]] : [previewPeople[1]]
         return [.init(projectId: "1", projectName: "모아", currentMemberCount: String(mobile.count + 1),
                       quota: "4", partQuotaStatus: "RECRUITING", productOwner: previewOwner, coProductOwners: [],
@@ -108,7 +117,10 @@ extension MatchingPreviewRepository {
     }
 
     func publicStatistics(chapterId: String) async throws -> PublicMatchingStatistics {
-        .init(roundMatchingStatistics: [.init(phase: "FIRST", matchedMemberCount: "2", availableMemberCount: "5")],
+        if isEmpty {
+            return .init(roundMatchingStatistics: [], schoolMatchingStatistics: [], projectMatchingStatistics: [])
+        }
+        return .init(roundMatchingStatistics: [.init(phase: "FIRST", matchedMemberCount: "2", availableMemberCount: "5")],
               schoolMatchingStatistics: [.init(schoolId: "1", schoolName: "한빛대", matchedMemberCount: "1", totalMemberCount: "3"),
                                          .init(schoolId: "2", schoolName: "새솔대", matchedMemberCount: "1", totalMemberCount: "2")],
               projectMatchingStatistics: [.init(projectId: "1", projectName: "모아", matchedMemberCount: "2", quota: "4",
@@ -118,7 +130,8 @@ extension MatchingPreviewRepository {
     }
 
     func applicationStatistics(projectId: String) async throws -> OperationsStatistics {
-        .init(schoolApplicationStatistics: [.init(schoolId: "1", schoolName: "한빛대", totalMemberCount: "3",
+        if isEmpty { return .init(schoolApplicationStatistics: [], projectRoundStatistics: []) }
+        return .init(schoolApplicationStatistics: [.init(schoolId: "1", schoolName: "한빛대", totalMemberCount: "3",
                                                  rounds: [.init(phase: "FIRST", applicantCount: "3")])],
               projectRoundStatistics: [.init(projectId: "1", projectName: "모아",
                                             rounds: [.init(phase: "FIRST", applicantCount: "5")])])

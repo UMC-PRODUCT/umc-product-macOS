@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import ProjectWorkspaceDomain
 import Testing
 @testable import UMCDesk
 
@@ -63,12 +64,73 @@ struct DataPreviewTests {
         #expect(session.support.tickets.contains { !$0.belongsToCurrentUser })
     }
 
+    @Test func emptyWorkspaceLoadsFeatureListsAndCanCreateContent() async throws {
+        let session = DataPreviewSession(isEmpty: true)
+        let account = session.account
+        #expect(try await account.home.profile().id == account.memberID)
+        #expect(try await account.home.schedule() == nil)
+        #expect(try await account.home.notice() == nil)
+        #expect(try await account.home.project() == nil)
+        let notices = try await account.notices.notices(
+            gisu: "10", tab: "CHALLENGER", keyword: "", part: nil, page: 0)
+        #expect(notices.content.isEmpty)
+        #expect(try await account.activity.schedules().isEmpty)
+        #expect(try await account.activity.groups().isEmpty)
+        #expect(try await account.activity.study().isEmpty)
+        #expect(try await account.activity.reviews().isEmpty)
+        #expect(try await account.activity.directory(keyword: "", part: nil, page: 0).members.isEmpty)
+        #expect(try await account.projects().isEmpty)
+        let board = account.posts
+        #expect(try await board.posts(scope: .all, category: nil, keyword: "", page: "0").values.isEmpty)
+        let threads = account.threads
+        #expect(try await threads.threads(query: "", filter: "all", offset: nil).values.isEmpty)
+
+        let post = try await board.save(id: nil, title: "첫 글", content: "안녕하세요",
+                                        category: .free, meeting: nil)
+        let posts = try await board.posts(scope: .all, category: nil, keyword: "", page: "0")
+        #expect(posts.values.map(\.id) == [post.id])
+        let room = try await threads.create(title: "첫 스터디", description: "일정 공유",
+                                            category: "STUDY", icon: "📚")
+        let rooms = try await threads.threads(query: "", filter: "all", offset: nil)
+        #expect(rooms.values.map(\.id) == [room.id])
+        #expect(try await session.conversations.history(thread: room.id, before: nil).values.isEmpty)
+    }
+
+    @Test func sampleProjectsAndThreadsHaveTheirOwnHistory() async throws {
+        let session = DataPreviewSession()
+        var tasks = Set<String>()
+        var recentChanges = Set<String>()
+        for project in try await session.account.projects() {
+            let key = WorkspaceRecord.key(accountID: session.account.memberID, projectID: project.id)
+            let data = try #require(session.defaults.data(forKey: key))
+            let record = try JSONDecoder().decode(WorkspaceRecord.self, from: data)
+            let repo = try #require(record.link(for: .github))
+            #expect(record.githubItems == DataPreviewAccount.recentWork(repository: repo))
+            tasks.insert(try #require(record.todos.first?.title))
+            recentChanges.insert(try #require(record.githubItems?.first?.title))
+        }
+        #expect(tasks.count == 2)
+        #expect(recentChanges.count == 2)
+        let rooms = try await session.account.threads.threads(query: "", filter: "all", offset: nil)
+        var messages = Set<String>()
+        for room in rooms.values {
+            let history = try await session.conversations.history(thread: room.id, before: nil)
+            #expect(Set(history.values.compactMap(\.authorID)).count >= 2)
+            messages.insert(try #require(history.values.first?.text))
+        }
+        #expect(messages.count == rooms.values.count)
+    }
+
     @Test func editsAreVisibleOnlyInTheCurrentWorkspace() async throws {
         let session = DataPreviewSession()
         let board = session.account.posts
         let created = try await board.save(id: nil, title: "이번 주 회고", content: "리뷰를 마쳤어요.",
                                            category: .free, meeting: nil)
-        #expect(try await board.post(id: created.id).title == "이번 주 회고")
+        let detail = try await board.post(id: created.id)
+        #expect(detail.title == "이번 주 회고")
+        #expect(detail.likeCount == "0")
+        let writtenAt = try Date.ISO8601FormatStyle().parse(try #require(detail.date))
+        #expect(abs(writtenAt.timeIntervalSinceNow) < 60)
         #expect(try await board.perform(.like, id: created.id) == true)
         #expect(try await board.post(id: created.id).liked)
         _ = try await board.perform(.comment("수고했어요", parentID: nil), id: created.id)

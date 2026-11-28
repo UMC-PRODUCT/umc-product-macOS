@@ -387,11 +387,18 @@ public struct HomeView: View {
         .background(UMCColor.Custom.backgroundSurfaceGreyWeaker, in: .rect(cornerRadius: 12))
     }
 
+    public static func seedPreviewGameRecords(in defaults: UserDefaults, memberID: String) {
+        var records = GameRecords()
+        let rounds: [(MiniGame, Int)] = [
+            (.jump, 200), (.tower, 350), (.bricks, 450),
+            (.jump, 400), (.bricks, 750), (.tower, 500)
+        ]
+        for (game, score) in rounds { records.record(game, score: score) }
+        HomeGameRecordStore(defaults: defaults, memberID: memberID).save(records)
+    }
+
     private func save(_ game: MiniGame, score: Int) {
-        let id = game.rawValue
-        records.best[id] = max(score, records.best[id, default: 0])
-        records.totals[id, default: 0] += score
-        records.recent = Array((["\(game.title) \(score)점"] + records.recent).prefix(3))
+        records.record(game, score: score)
         recordStore.save(records)
     }
 }

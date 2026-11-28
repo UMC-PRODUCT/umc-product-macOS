@@ -39,8 +39,15 @@ import Testing
     store(first, other).save(otherSample)
     store(second, member).save(otherSample)
 
+    HomeView.seedPreviewGameRecords(in: first, memberID: member)
+    let arcade = store(first, member).load()
+    #expect(arcade.best == ["jump": 400, "bricks": 750, "tower": 500])
+    #expect(arcade.totals == ["jump": 600, "bricks": 1200, "tower": 850])
+    #expect(arcade.recent == ["타이밍 탑 쌓기 500점", "벽돌 깨기 750점", "블록 점프 400점"])
+    #expect(store(first, other).load() == otherSample)
+
     let reopened = try #require(UserDefaults(suiteName: firstPort))
-    #expect(store(reopened, member).load() == sample)
+    #expect(store(reopened, member).load() == arcade)
     #expect(store(reopened, other).load() == otherSample)
     #expect(store(second, member).load() == otherSample)
     #expect(store(second, other).load() == GameRecords())

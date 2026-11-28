@@ -10,6 +10,15 @@ import Foundation
 struct DeskPreviewCommunityData {
     private typealias Row = [String: Any]
 
+    init(isEmpty: Bool) {
+        if isEmpty {
+            notices = []
+            posts = []
+            comments = [:]
+            rooms = []
+        }
+    }
+
     mutating func result(for request: URLRequest) -> Any? {
         guard let url = request.url,
               let components = URLComponents(url: url, resolvingAgainstBaseURL: false)
@@ -46,15 +55,32 @@ struct DeskPreviewCommunityData {
         }
     }
 
+    private static let timeline = Date.now
+    private static func timestamp(hoursAgo: Int?) -> String {
+        let date = hoursAgo.map { timeline.addingTimeInterval(-Double($0) * 3600) } ?? .now
+        return date.ISO8601Format()
+    }
+
     private var nextID = 1000
     private var roomMemberIDs: [String: [String]] = [:]
     private var roomRoles: [String: [String: String]] = [:]
     private var blocked: Set<String> = []
-    private var comments: [String: [Row]] = ["31": [
-        ["commentId": "71", "challengerName": "김유엠", "challengerNickname": "유엠",
-         "content": "저희는 리뷰할 때 먼저 변경 목적을 한 줄로 적어요.",
-         "isAuthor": true, "createdAt": "2026-11-24T07:30:00Z"]
-    ]]
+    private static var sampleComments: [String: [Row]] {
+        ["31": [
+            ["commentId": "71", "challengerName": "김유엠", "challengerNickname": "유엠",
+             "content": "저희는 리뷰할 때 먼저 변경 목적을 한 줄로 적어요.",
+             "isAuthor": true, "createdAt": timestamp(hoursAgo: 1)]
+        ], "32": [
+            ["commentId": "72", "challengerName": "서하늘", "challengerNickname": "하늘",
+             "content": "모아의 취향 선택 화면이 한눈에 들어왔어요. 다음 시연도 기대할게요.",
+             "isAuthor": false, "createdAt": timestamp(hoursAgo: 3)]
+        ], "35": [
+            ["commentId": "73", "challengerName": "윤지우", "challengerNickname": "지우",
+             "content": "노트북 가져갈게요. 창가 자리에서 만나요!",
+             "isAuthor": false, "createdAt": timestamp(hoursAgo: 12)]
+        ]]
+    }
+    private var comments = sampleComments
 
     private mutating func mutate(_ path: [String], method: String, body: Row) -> Any? {
         nextID += 1
@@ -231,22 +257,28 @@ struct DeskPreviewCommunityData {
     private var notices: [Row] = {
         [
             notice("21", "데모데이 중간 발표 자료 제출 안내",
-                   "금요일 오후 6시까지 팀별 발표 자료를 제출해 주세요. 발표는 5분, 질의응답은 3분입니다."),
+                   "금요일 오후 6시까지 팀별 발표 자료를 제출해 주세요. 발표는 5분, 질의응답은 3분입니다.",
+                   views: 28, hoursAgo: 3),
             notice("22", "파트별 스터디 회고를 모아요",
-                   "이번 달 가장 도움이 된 활동과 다음 달에 도전하고 싶은 주제를 남겨 주세요."),
+                   "이번 달 워크북 중 다시 풀어 보고 싶은 문제를 한 개 골라 주세요. 파트별 스터디방에 이유를 남겨 주시면 다음 회차에 반영할게요.",
+                   author: 0, views: 14, hoursAgo: 19),
             notice("23", "운영진 정기 회의 안건 접수",
-                   "수요일까지 논의가 필요한 안건을 운영 회의 문서에 추가해 주세요.", tab: "CENTRAL_MEMBER"),
-            notice("24", "교내 행사 장소 확인", "행사 장소와 입장 시간을 확인해 주세요.", tab: "SCHOOL_CORE"),
+                   "수요일까지 논의가 필요한 안건을 운영 회의 문서에 추가해 주세요.", tab: "CENTRAL_MEMBER", views: 11, hoursAgo: 6),
+            notice("24", "교내 행사 장소 확인", "리허설 장소는 학생회관 2층 세미나실입니다. 오후 4시 30분부터 입장할 수 있어요.",
+                   tab: "SCHOOL_CORE", author: 3, views: 9, hoursAgo: 8),
             notice("25", "파트별 출석 현황 점검", "이번 주 스터디 출석 기록을 확인해 주세요.",
-                   tab: "SCHOOL_PART_LEADER")
+                   tab: "SCHOOL_PART_LEADER", author: 0, views: 6, hoursAgo: 12)
         ]
     }()
 
     private static func notice(_ id: String, _ title: String, _ body: String,
-                               tab: String = "CHALLENGER") -> Row {
-        var row: Row = ["id": id, "title": title, "content": body, "createdAt": "2026-11-24T09:00:00Z",
-         "mustRead": id == "21", "viewCount": "28", "authorMemberId": "102",
-         "author": ["nickname": "하늘", "organizationName": "중앙 운영진"],
+                               tab: String = "CHALLENGER", author: Int = 1,
+                               views: Int = 0, hoursAgo: Int? = nil) -> Row {
+        let person = people[author]
+        var row: Row = ["id": id, "title": title, "content": body,
+         "createdAt": timestamp(hoursAgo: hoursAgo),
+         "mustRead": id == "21", "viewCount": String(views), "authorMemberId": person["memberId"]!,
+         "author": ["nickname": person["nickname"]!, "organizationName": "한빛대학교"],
          "targetInfo": ["targetGisuId": "10", "targetNoticeTab": tab, "targetParts": []],
          "hasImages": false, "hasLinks": false, "hasVote": false, "images": [], "links": []]
         if id == "21" {
@@ -296,27 +328,30 @@ struct DeskPreviewCommunityData {
     private var posts: [Row] = {
         [
             post("31", "QUESTION", "스터디 코드 리뷰는 어떻게 진행하시나요?",
-                 "이번 주부터 짝을 지어 리뷰할 예정이에요. 팀에서 쓰는 리뷰 방식이 궁금합니다.", author: 2),
-            post("32", "FREE", "첫 팀 프로젝트 회고", "서로의 작업을 직접 시연하니 피드백이 구체적이었어요.", author: 0),
+                 "이번 주부터 짝을 지어 리뷰할 예정이에요. 팀에서 쓰는 리뷰 방식이 궁금합니다.", author: 2, likes: 4, scraps: 2, hoursAgo: 2),
+            post("32", "FREE", "첫 팀 프로젝트 회고", "서로의 작업을 직접 시연하니 피드백이 구체적이었어요.", author: 0, likes: 8, scraps: 1, hoursAgo: 6),
             post("33", "INFORMATION", "발표 전 점검할 항목을 공유해요",
-                 "시연 계정과 네트워크 연결을 미리 확인하고, 예비 녹화본을 준비해 보세요.", author: 1),
-            post("34", "HABIT", "하루 한 번 커밋 기록", "작은 단위로 테스트를 추가한 기록을 남겼어요.", author: 2),
-            post("35", "LIGHTNING", "금요일에 함께 모각코해요", "학생회관 2층에서 각자 작업하다 만나요.", author: 3)
+                 "시연 계정과 네트워크 연결을 미리 확인하고, 예비 녹화본을 준비해 보세요.", author: 1, likes: 12, scraps: 6, hoursAgo: 9),
+            post("34", "HABIT", "하루 한 번 커밋 기록", "작은 단위로 테스트를 추가한 기록을 남겼어요.", author: 2, hoursAgo: 15),
+            post("35", "LIGHTNING", "학생회관에서 함께 모각코해요", "학생회관 2층에서 각자 작업하다 만나요.", author: 3, likes: 3, hoursAgo: 20)
         ]
     }()
 
     private static func post(_ id: String, _ category: String, _ title: String,
-                             _ body: String, author: Int) -> Row {
+                             _ body: String, author: Int, likes: Int = 0, scraps: Int = 0,
+                             hoursAgo: Int? = nil) -> Row {
+        let createdAt = timestamp(hoursAgo: hoursAgo)
         let person = Self.people[author]
         var row: Row = [
             "postId": id, "category": category, "title": title, "content": body,
             "authorMemberId": person["memberId"]!, "authorName": person["name"]!,
-            "authorNickname": person["nickname"]!, "createdAt": "2026-11-24T06:30:00Z",
-            "writeTime": "2026-11-24T06:30:00Z", "likeCount": "4", "isLiked": id == "33",
-            "scrapCount": "2", "isScrapped": id == "33", "commentCount": id == "31" ? "1" : "0"
+            "authorNickname": person["nickname"]!, "createdAt": createdAt,
+            "writeTime": createdAt, "likeCount": String(likes), "isLiked": id == "33",
+            "scrapCount": String(scraps), "isScrapped": id == "33",
+            "commentCount": String(sampleComments[id]?.count ?? 0)
         ]
         if category == "LIGHTNING" {
-            row["lightningInfo"] = ["meetAt": "2026-11-27T09:00:00Z", "location": "학생회관 2층",
+            row["lightningInfo"] = ["meetAt": Self.timeline.addingTimeInterval(86400 * 2).ISO8601Format(), "location": "학생회관 2층",
                                     "maxParticipants": "6", "openChatUrl": "https://preview.invalid/meet"]
         }
         return row
@@ -325,12 +360,14 @@ struct DeskPreviewCommunityData {
     private func postResult(_ path: [String], _ query: [String: String]) -> Any? {
         let scope = path.first ?? ""
         if path.count <= 1 && ["", "my", "commented", "scrapped", "search"].contains(scope) {
-            let rows = posts.filter {
-                (scope != "my" || $0["authorMemberId"] as? String == "101")
-                    && (scope != "scrapped" || $0["isScrapped"] as? Bool == true)
-                    && (scope != "commented" || $0["postId"] as? String == "31")
-                    && (query["category"] == nil || $0["category"] as? String == query["category"])
-                    && Self.matches(query["keyword"], in: $0, fields: ["title", "content"])
+            let rows = posts.filter { row in
+                (scope != "my" || row["authorMemberId"] as? String == "101")
+                    && (scope != "scrapped" || row["isScrapped"] as? Bool == true)
+                    && (scope != "commented" || (comments[row["postId"] as? String ?? ""] ?? []).contains {
+                        $0["isAuthor"] as? Bool == true
+                    })
+                    && (query["category"] == nil || row["category"] as? String == query["category"])
+                    && Self.matches(query["keyword"], in: row, fields: ["title", "content"])
             }
             let page = query["page"] ?? "0"
             return ["content": page == "0" ? rows : [], "page": page, "hasNext": false]
@@ -380,18 +417,35 @@ struct DeskPreviewCommunityData {
         switch Array(path.dropFirst()) {
         case []: return room
         case ["messages"]:
-            let text: [String]
+            let conversation: [(author: Int, minutesAgo: Int, text: String)]
             switch id {
-            case "41": text = ["워크북 실습을 마쳤어요. 오늘 저녁에 리뷰할까요?", "좋아요! 저녁 7시에 만나요."]
-            case "42": text = ["목요일 오후 5시에 발표 리허설을 진행할게요."]
-            case "44": text = ["스터디 기록은 활동 탭에서 확인할 수 있어요."]
-            default: text = []
+            case "41": conversation = [
+                (2, 95, "워크북에서 검색 결과가 늦게 도착하는 예제를 풀어 봤어요. 같이 리뷰할까요?"),
+                (0, 87, "좋아요. 저는 이전 요청을 취소하는 부분을 맡을게요."),
+                (1, 72, "저녁 7시로 잡았어요. 리뷰 전에 서로 PR 링크를 남겨 주세요.")
+            ]
+            case "42": conversation = [
+                (1, 160, "모아 팀 리허설은 목요일 5시예요. 취향 선택부터 추천 상품까지 보여 주세요."),
+                (0, 142, "시연 계정에 추천 상품을 넣어 뒀어요. 발표 자료에도 화면을 붙일게요."),
+                (2, 115, "사이 팀은 바로 다음 순서로 공동 구매 참여를 시연할게요.")
+            ]
+            case "43": conversation = [
+                (0, 220, "스터디 끝나고 학생회관에서 같이 저녁 먹을 분 계세요?"),
+                (1, 213, "저도 갈게요. 1층 안내판 앞에서 봐요!")
+            ]
+            case "44": conversation = [
+                (2, 45, "이번 주 워크북 제목은 어디서 다시 확인하나요?"),
+                (0, 39, "활동 탭에서 스터디를 열면 주차별 워크북 제목이 보여요."),
+                (2, 34, "찾았어요! 상태 관리 과제부터 확인해 볼게요.")
+            ]
+            default: conversation = []
             }
-            let rows: [Row] = text.enumerated().map { index, content in
-                let sender = Self.people[index == 0 ? 1 : 0]
-                return ["messageId": id + String(index), "content": content,
+            let rows: [Row] = conversation.enumerated().map { index, line in
+                let sender = Self.people[line.author]
+                return ["messageId": id + String(index), "content": line.text,
                         "senderId": sender["memberId"]!, "senderName": sender["nickname"]!,
-                        "createdAt": "2026-11-24T08:0" + String(index) + ":00Z",
+                        "createdAt": Self.timeline.addingTimeInterval(
+                            -Double(line.minutesAgo) * 60).ISO8601Format(),
                         "isSenderBlocked": false, "files": [], "reactions": index == 0 ? [
                             ["emoji": "👍", "count": "2", "reactedByMe": false] as Row
                         ] : []]
@@ -408,7 +462,7 @@ struct DeskPreviewCommunityData {
                     var row = person
                     row["generation"] = "10"
                     if !inviting {
-                        let owner = id == "41" ? "101" : "102"
+                        let owner = room["myRole"] as? String == "OWNER" ? "101" : "102"
                         row["role"] = roomRoles[id]?[person["memberId"] ?? ""]
                             ?? (person["memberId"] == owner ? "OWNER" : "MEMBER")
                         row["state"] = "ACTIVE"

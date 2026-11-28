@@ -14,8 +14,10 @@ public enum SettingsDesignPreview {
         PreviewSettingsSystemActions()
     }
 
-    public static func workspace(preferences: SettingsPreferences) -> SettingsViewModel {
-        let profile = makeProfile(isEmpty: false, showsAllRoles: true)
+    public static func workspace(
+        preferences: SettingsPreferences, isEmpty: Bool = false
+    ) -> SettingsViewModel {
+        let profile = makeProfile(isEmpty: isEmpty, showsAllRoles: true)
         let model = SettingsViewModel(useCase: PreviewSettingsUseCase(profile: profile),
             preferences: preferences, systemActions: PreviewSettingsSystemActions())
         model.seedDesignProfile(profile)
@@ -84,8 +86,8 @@ public enum SettingsDesignPreview {
         guard model.isDesignPreview, !model.isAccountBusy, !model.isClearingCache else { return }
         model.dismissDialog()
         model.toast = nil
-        if model.profile == nil {
-            model.seedDesignProfile(makeProfile(isEmpty: false, showsAllRoles: true))
+        if model.profile == nil, let previewProfile = model.previewProfile {
+            model.seedDesignProfile(previewProfile)
         }
         model.navigate(to: page)
     }

@@ -54,6 +54,7 @@ struct UMCDeskApp: App {
         Window("UMC Desk", id: "main") {
             if let dataPreview {
                 DataPreviewWindow(session: dataPreview)
+                    .id(ObjectIdentifier(dataPreview))
             } else {
                 AppRootView(dependencies: dependencies)
                     .environment(\.settingsPublishedDocument, publishedDocument)
@@ -78,7 +79,7 @@ struct UMCDeskApp: App {
         .windowToolbarStyle(.unifiedCompact(showsTitle: false))
         .commands {
             AppSettingsCommands(dependencies: dependencies, preview: dataPreview)
-            DataPreviewCommands(active: dataPreview != nil, end: previewMode.end, select: previewMode.select)
+            DataPreviewCommands(mode: previewMode)
             #if DEBUG || UMC_PRERELEASE
             AuthPreviewCommands(session: authPreview)
             #endif
@@ -94,7 +95,7 @@ struct UMCDeskApp: App {
 
         Window(AppLocalization.string("고객센터"), id: DeskWindow.support) {
             Group {
-                if let dataPreview { SupportView(fixture: dataPreview.support).id(ObjectIdentifier(dataPreview.support)) }
+                if dataPreview != nil { previewInMainWindow }
                 else { SupportView() }
             }
                 .environment(\.locale, AppLocalization.shared.language.locale)

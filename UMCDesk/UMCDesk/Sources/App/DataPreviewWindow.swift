@@ -45,12 +45,13 @@ enum DataPreviewDestination: Hashable {
 @MainActor
 @Observable
 final class DataPreviewSession {
-    private let fixtures = DataPreviewFixtures()
-    let matching = MatchingDesignPreview.makeUseCase()
+    let isEmpty: Bool
+    private let fixtures: DataPreviewFixtures
+    let matching: any MatchingUseCase
     let progress: MatchingProgressController
     let documents: LiveEmailLoginRepository
     let conversations: DataPreviewConversation
-    let support = SupportFixture(emptyInquiries: false)
+    let support: SupportFixture
     let supportExitGate = SupportExitGate()
     var projectID: String?
     private(set) var matchingPage = MatchingDestination.explore
@@ -65,7 +66,11 @@ final class DataPreviewSession {
     private let suite = "com.umc.product.macos.data-preview." + UUID().uuidString
     let journalDirectory = URL.temporaryDirectory.appending(path: UUID().uuidString)
 
-    init() {
+    init(isEmpty: Bool = false) {
+        self.isEmpty = isEmpty
+        fixtures = DataPreviewFixtures(isEmpty: isEmpty)
+        matching = MatchingDesignPreview.makeUseCase(isEmpty: isEmpty)
+        support = SupportFixture(isEmpty: isEmpty)
         let defaults = UserDefaults(suiteName: suite)!
         self.defaults = defaults
         account = DataPreviewAccount.make(defaults: defaults, journalDirectory: journalDirectory,
@@ -74,9 +79,9 @@ final class DataPreviewSession {
             adapter: MoyaNetworkAdapter(networkClient: account.client), environment: account.environment)
         conversations = DataPreviewConversation(repository: account.conversations)
         progress = MatchingProgressController(repository: matching)
-        DataPreviewAccount.seedWorkspace(in: defaults)
+        if !isEmpty { DataPreviewAccount.seedWorkspace(in: defaults) }
         let preferences = SettingsPreferences(defaults: defaults, updatesAppLanguage: false)
-        settings = SettingsDesignPreview.workspace(preferences: preferences)
+        settings = SettingsDesignPreview.workspace(preferences: preferences, isEmpty: isEmpty)
         progress.setAccount(account.memberID)
         progress.openApplications = { [weak self] in
             self?.openMatching(.applications)
@@ -89,20 +94,27 @@ final class DataPreviewSession {
     }
 
     func openMatching(_ page: MatchingDestination) {
+        leavingSupport { [weak self] in self?.applyMatching(page) }
+    }
+
+    private func applyMatching(_ page: MatchingDestination) {
         matchingPage = page
         matchingNavigationID = UUID()
         destination = .matching
     }
 
+    func leavingSupport(_ action: @escaping () -> Void) {
+        if destination == .support { supportExitGate.request(action) } else { action() }
+    }
+
     func select(_ destination: DataPreviewDestination) {
-        if self.destination == .support && destination != .support {
-            supportExitGate.request { [weak self] in self?.apply(destination) }
-        } else { apply(destination) }
+        if self.destination == .support && destination == .support { return }
+        leavingSupport { [weak self] in self?.apply(destination) }
     }
 
     private func apply(_ destination: DataPreviewDestination) {
         switch destination {
-        case .matching: openMatching(.explore); return
+        case .matching: applyMatching(.explore); return
         case .profile: SettingsDesignPreview.prepareViewModel(settings, page: .myPage)
         case .settings: SettingsDesignPreview.prepareViewModel(settings, page: .general)
         default: break
@@ -116,37 +128,69 @@ final class DataPreviewSession {
 final class DataPreviewMode {
     private(set) var session: DataPreviewSession?
 
-    func select(_ destination: DataPreviewDestination) {
-        let workspace = session ?? DataPreviewSession()
-        workspace.settings.onLogout = { [weak self] in self?.end() }
-        workspace.select(destination)
-        session = workspace
+    func select(_ destination: DataPreviewDestination, isEmpty: Bool? = nil) {
+        if let session, isEmpty == nil || (isEmpty == false && !session.isEmpty) {
+            session.select(destination)
+            return
+        }
+        startSession(at: destination, isEmpty: isEmpty ?? false)
     }
 
-    func end() { session = nil }
+    func selectAll(isEmpty: Bool) {
+        startSession(at: session?.destination ?? .feature(.home), isEmpty: isEmpty)
+    }
+
+    private func startSession(at destination: DataPreviewDestination, isEmpty: Bool) {
+        let start = { [weak self] in
+            guard let self else { return }
+            let workspace = DataPreviewSession(isEmpty: isEmpty)
+            workspace.settings.onLogout = { [weak self, weak workspace] in
+                if self?.session === workspace { self?.end() }
+            }
+            workspace.select(destination)
+            self.session = workspace
+        }
+        if let session { session.leavingSupport(start) } else { start() }
+    }
+
+    func end() {
+        session?.leavingSupport { [weak self] in self?.session = nil }
+    }
 }
 
 struct DataPreviewCommands: Commands {
     @Environment(\.openWindow) private var openWindow
-    let active: Bool
-    let end: () -> Void
-    let select: (DataPreviewDestination) -> Void
+    let mode: DataPreviewMode
 
     var body: some Commands {
         CommandGroup(after: .toolbar) {
             Menu("데이터 미리보기") {
+                previewButton("전체 데이터 있음") { mode.selectAll(isEmpty: false) }
+                previewButton("전체 빈 화면") { mode.selectAll(isEmpty: true) }
+                Divider()
                 ForEach(DataPreviewDestination.all, id: \.self) { destination in
-                    Button(destination.title) {
-                        select(destination)
-                        openWindow(id: "main")
-                        NSApplication.shared.activate()
+                    if destination == .settings {
+                        previewButton(destination.title) { mode.select(destination) }
+                    } else {
+                        Menu(destination.title) {
+                            previewButton("데이터 있음") { mode.select(destination, isEmpty: false) }
+                            previewButton("빈 상태") { mode.select(destination, isEmpty: true) }
+                        }
                     }
                 }
-                if active {
+                if mode.session != nil {
                     Divider()
-                    Button("미리보기 종료", action: end)
+                    Button("미리보기 종료", action: mode.end)
                 }
             }
+        }
+    }
+
+    private func previewButton(_ title: String, action: @escaping () -> Void) -> some View {
+        Button(title) {
+            action()
+            openWindow(id: "main")
+            NSApplication.shared.activate()
         }
     }
 }
@@ -216,7 +260,9 @@ struct DataPreviewWindow: View {
             }).id(session.matchingNavigationID))
         case .progress: AnyView(MatchingProgressPanel(controller: session.progress, onClose: { session.select(.matching) })
             .frame(maxWidth: 520, maxHeight: 254).task { await session.progress.refreshOnce() })
-        case .support: AnyView(SupportView(fixture: session.support, exitGate: session.supportExitGate).id(ObjectIdentifier(session.support)))
+        case .support:
+            AnyView(SupportView(fixture: session.support, scene: session.isEmpty ? .empty : .home,
+                                exitGate: session.supportExitGate))
         case .profile, .settings: nil
         }
     }
@@ -245,7 +291,9 @@ struct DataPreviewWindow: View {
         case .projects:
             ProjectWorkspaceView(accountID: account.memberID, initialProjectID: session.projectID,
                                  loadProjects: account.projects,
-                                 loadGitHub: { _ in DataPreviewAccount.recentWork },
+                                 loadGitHub: { url in
+                                     session.isEmpty ? [] : DataPreviewAccount.recentWork(repository: url)
+                                 },
                                  openMatching: { session.select(.matching) })
         }
     }
