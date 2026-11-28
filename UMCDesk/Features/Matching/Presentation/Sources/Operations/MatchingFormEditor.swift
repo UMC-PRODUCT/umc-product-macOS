@@ -6,6 +6,7 @@
 //
 
 import CoreDesignSystem
+import CoreUIComponents
 import MatchingDomain
 import SwiftUI
 
@@ -48,7 +49,9 @@ struct MatchingFormEditor: View {
                 }.matchingPanel().frame(maxWidth: 230)
                 VStack(alignment: .leading, spacing: UMCSpacing.value12) {
                     TextField("폼 제목", text: optionalText($draft.title))
+                        .umcInputField()
                     TextField("폼 설명", text: optionalText($draft.description), axis: .vertical)
+                        .textFieldStyle(.roundedBorder)
                     if draft.sections.indices.contains(selection) {
                         Divider()
                         sectionEditor($draft.sections[selection])
@@ -69,7 +72,7 @@ struct MatchingFormEditor: View {
                                             .form(draft, confirmDeletion: false))
                         }.disabled(!valid)
                     }
-                }.disabled(!canEdit).textFieldStyle(.roundedBorder).matchingPanel()
+                }.disabled(!canEdit).matchingPanel()
             }
         }
     }
@@ -89,7 +92,9 @@ struct MatchingFormEditor: View {
     private func sectionEditor(_ section: Binding<EditableSection>) -> some View {
         VStack(alignment: .leading, spacing: UMCSpacing.value12) {
             TextField("섹션 제목", text: section.title)
+                .umcInputField()
             TextField("섹션 설명", text: optionalText(section.description))
+                .umcInputField()
             Picker("노출 대상", selection: section.type) {
                 Text("공통").tag("COMMON")
                 Text("파트").tag("PART")
@@ -131,7 +136,9 @@ private struct QuestionEditor: View {
         VStack(alignment: .leading, spacing: UMCSpacing.value8) {
             Divider()
             TextField("문항 제목", text: $question.title)
+                .umcInputField()
             TextField("문항 설명", text: optionalText($question.description))
+                .umcInputField()
             Picker("답변 유형", selection: $question.type) {
                 Text("단답형").tag("SHORT_TEXT")
                 Text("장문형").tag("LONG_TEXT")
@@ -150,6 +157,7 @@ private struct QuestionEditor: View {
                 ForEach(question.options.indices, id: \.self) { index in
                     HStack {
                         TextField("선택지", text: $question.options[index].content)
+                            .umcInputField()
                         Toggle("기타", isOn: $question.options[index].isOther)
                         Button("위로") { question.options.swapAt(index, index - 1) }.disabled(index == 0)
                         Button("삭제") { question.options.remove(at: index) }

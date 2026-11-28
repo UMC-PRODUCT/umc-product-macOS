@@ -40,6 +40,10 @@ final class NoticeBoardModel {
         self.repository = repository
     }
 
+    func hasFilters(pinnedOnly: Bool) -> Bool {
+        !keyword.isEmpty || tab != "CHALLENGER" || part != nil || pinnedOnly
+    }
+
     /// Uses the submitted keyword, never the text field's in-progress IME composition.
     func filterSummary(pinnedOnly: Bool) -> String {
         var labels = [noticeTabs.first { $0.value == tab }?.label ?? tab]
@@ -86,6 +90,8 @@ final class NoticeBoardModel {
             if page == 0 { entries.removeAll() }
             var known = Set(entries.map(\.id))
             entries += response.content.filter { known.insert($0.id).inserted }
+            entries = entries.map { (entry: $0, date: $0.postedAt) }
+                .sorted { $0.date > $1.date }.map(\.entry)
             nextPage = response.hasNext ? page + 1 : nil
         } catch {
             guard requestID == token, !Task.isCancelled else { return }
@@ -112,6 +118,12 @@ public struct NoticeBoardView: View {
     @State private var pinnedExpanded = true
     @State private var readingLayout = NoticeReadingLayout()
     @State private var pinnedOnly = false
+    @State private var period = NoticePeriod.all
+    @State private var start = Date.now
+    @State private var end = Date.now
+    @State private var scope: String?
+    @State private var generationName: String?
+    @Environment(\.calendar) private var calendar
 
     public init(repository: any NoticeRepository) {
         _model = State(initialValue: NoticeBoardModel(repository: repository))
@@ -146,8 +158,13 @@ public struct NoticeBoardView: View {
             }
         }
         .background(UMCColor.Custom.backgroundDefault)
-        .umcTabTools("공지 도구", description: "공지를 검색하고 대상과 파트를 선택하세요.",
-                     findShortcut: true) { _ in tools }
+        .umcTabTools(AppLocalization.string("공지 도구"), width: .wide, findShortcut: true) { dismiss in tools(dismiss: dismiss) }
+        .task(id: model.gisu) {
+            generationName = nil
+            guard !model.gisu.isEmpty else { return }
+            let organization = try? await model.repository.organization(gisu: model.gisu)
+            if !Task.isCancelled { generationName = organization?.generation }
+        }
         .task(id: model.tab) { await model.load() }
         .task {
             let monitor = NWPathMonitor()
@@ -207,67 +224,143 @@ public struct NoticeBoardView: View {
                 }
             }
             Spacer()
-            if model.canCompose {
-                Button("공지 작성", systemImage: "square.and.pencil") {
-                    Task {
-                        guard !checkingWriter else { return }
-                        checkingWriter = true
-                        defer { checkingWriter = false }
-                        do {
-                            model.canCompose = try await model.repository.canCompose(
-                                gisu: model.gisu)
-                            composing = model.canCompose
-                        } catch {
-                            model.canCompose = false
-                            model.error = error
-                        }
-                    }
-                }.disabled(checkingWriter)
-            }
-
         }
         .padding(.horizontal, UMCSpacing.value20)
         .padding(.vertical, UMCSpacing.value12)
     }
 
-    private var tools: some View {
-        VStack(alignment: .leading, spacing: UMCSpacing.value16) {
-            HStack {
-                Spacer()
-                Button("초기화", action: resetFilters)
+    private var hasFilters: Bool {
+        model.hasFilters(pinnedOnly: pinnedOnly) || period != .all || scope != nil
+    }
+
+    @ViewBuilder
+    private func tools(dismiss: @escaping () -> Void) -> some View {
+        Text(AppLocalization.string("목록 보기와 게시 대상 설정"))
+            .font(.caption).foregroundStyle(.secondary)
+        NoticeSearchField(search: $search, submit: searchNotices)
+        UMCToolGroupHeading(AppLocalization.string("빠른 보기"))
+        Picker(AppLocalization.string("빠른 보기"), selection: $pinnedOnly) {
+            Text(AppLocalization.string("전체")).tag(false)
+            Text(AppLocalization.string("고정")).tag(true)
+        }
+        .pickerStyle(.segmented)
+        .labelsHidden()
+        Divider()
+        filterRow("게시 기간") {
+            Picker(AppLocalization.string("게시 기간"), selection: $period) {
+                ForEach(NoticePeriod.allCases, id: \.self) { Text(AppLocalization.string(.init($0.rawValue))).tag($0) }
             }
-            NoticeSearchField(search: $search, submit: searchNotices)
-            Picker("빠른 보기", selection: $pinnedOnly) {
-                Text("전체").tag(false)
-                Text("고정").tag(true)
-            }.pickerStyle(.segmented)
-            Picker("공지 대상", selection: $model.tab) {
-                ForEach(noticeTabs, id: \.value) { tab in Text(tab.label).tag(tab.value) }
+        }
+        if period == .day || period == .range {
+            DatePicker(AppLocalization.string("시작일"), selection: $start, displayedComponents: .date)
+                .onChange(of: start) { if start > end { end = start } }
+        }
+        if period == .range {
+            DatePicker(AppLocalization.string("종료일"), selection: $end, in: calendar.startOfDay(for: start)...,
+                       displayedComponents: .date)
+        }
+        Divider()
+        UMCToolGroupHeading(AppLocalization.string("공지 대상"))
+        if let generationName {
+            LabeledContent(AppLocalization.string("기수"), value: AppLocalization.string("\(generationName)기"))
+        }
+        filterRow("공지 구분") {
+            Picker(AppLocalization.string("공지 구분"), selection: $model.tab) {
+                ForEach(noticeTabs, id: \.value) { tab in Text(AppLocalization.string(.init(tab.label))).tag(tab.value) }
             }
-            if model.tab == "CHALLENGER" {
-                Picker("파트", selection: $model.part) {
-                    Text("전체 파트").tag(String?.none)
+        }
+        filterRow("범위") {
+            Picker(AppLocalization.string("범위"), selection: $scope) {
+                Text(AppLocalization.string("전체 범위")).tag(String?.none)
+                ForEach(["전체", "지부", "학교"], id: \.self) { Text(AppLocalization.string(.init($0))).tag(Optional($0)) }
+            }
+        }
+        if model.tab == "CHALLENGER" {
+            filterRow("파트") {
+                Picker(AppLocalization.string("파트"), selection: $model.part) {
+                    Text(AppLocalization.string("전체 파트")).tag(String?.none)
                     ForEach(noticeParts, id: \.value) { item in
-                        Text(item.label).tag(Optional(item.value))
+                        Text(AppLocalization.string(.init(item.label))).tag(Optional(item.value))
                     }
                 }
             }
-            Button("새로고침", systemImage: "arrow.clockwise") { Task { await model.load() } }
         }
+        Divider()
+        Text(AppLocalization.string("최신순으로 표시")).font(.caption).foregroundStyle(.secondary)
+        if model.nextPage != nil {
+            Text(AppLocalization.string("현재 불러온 공지에 적용됩니다. 더 보기를 눌러 이전 공지도 확인하세요."))
+                .font(.caption).foregroundStyle(.secondary)
+        }
+        if hasFilters || !search.isEmpty {
+            Button(AppLocalization.string("필터 초기화"), systemImage: "arrow.counterclockwise", action: resetFilters)
+        }
+        if model.canCompose {
+            Button(AppLocalization.string("공지 작성"), systemImage: "square.and.pencil") {
+                dismiss()
+                Task {
+                    guard !checkingWriter else { return }
+                    checkingWriter = true
+                    defer { checkingWriter = false }
+                    do {
+                        model.canCompose = try await model.repository.canCompose(gisu: model.gisu)
+                        composing = model.canCompose
+                    } catch {
+                        model.canCompose = false
+                        model.error = error
+                    }
+                }
+            }
+            .buttonStyle(UMCToolPrimaryButtonStyle())
+            .disabled(checkingWriter)
+        }
+        Button(AppLocalization.string("새로고침"), systemImage: "arrow.clockwise") { Task { await model.load() } }
+            .disabled(model.isLoading)
+    }
+
+    private func filterRow<Content: View>(
+        _ title: String.LocalizationValue, @ViewBuilder picker: () -> Content
+    ) -> some View {
+        HStack {
+            Text(AppLocalization.string(title)).accessibilityHidden(true)
+            Spacer(minLength: UMCSpacing.value8)
+            picker()
+                .labelsHidden()
+                .accessibilityLabel(Text(AppLocalization.string(title)))
+                .pickerStyle(.menu)
+                .buttonStyle(.borderless)
+                .tint(.primary)
+                .fixedSize()
+        }
+        .umcTypography(.subheadlineRegular)
+        .padding(.horizontal, UMCSpacing.value8)
+        .frame(maxWidth: .infinity, minHeight: 28)
     }
 
     private var noticeList: some View {
         VStack(alignment: .leading, spacing: UMCSpacing.value12) {
             NoticeSearchField(search: $search, submit: searchNotices)
-            Text(model.filterSummary(pinnedOnly: pinnedOnly))
+            let summary = [model.filterSummary(pinnedOnly: pinnedOnly),
+                           period == .all ? nil : AppLocalization.string(.init(period.rawValue)),
+                           scope.map { AppLocalization.string(.init($0)) }]
+                .compactMap { $0 }.joined(separator: " · ")
+            Text(summary)
                 .umcTypography(.calloutRegular)
                 .foregroundStyle(UMCColor.Semantic.textNeutralMedium600)
                 .lineLimit(2)
-                .help(model.filterSummary(pinnedOnly: pinnedOnly))
-                .accessibilityLabel(model.filterSummary(pinnedOnly: pinnedOnly))
+                .help(summary)
+                .accessibilityLabel(summary)
+            if model.nextPage != nil, period != .all || scope != nil || pinnedOnly {
+                Text(AppLocalization.string("현재 불러온 공지에 적용됩니다. 더 보기를 눌러 이전 공지도 확인하세요."))
+                    .font(.caption).foregroundStyle(.secondary)
+            }
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: UMCSpacing.value8) {
-                    let pinned = model.entries.filter(\.mustRead)
+                    let entries = model.entries.filter { entry in
+                        (scope == nil || entry.targetInfo != nil && entry.scopeLabel == scope)
+                            && period.includes(entry.createdAt, start: start, end: end,
+                                               calendar: calendar)
+                    }
+                    let pinned = entries.filter(\.mustRead)
                     if !pinned.isEmpty {
                         DisclosureGroup(isExpanded: $pinnedExpanded) {
                             VStack(spacing: UMCSpacing.value8) {
@@ -279,7 +372,7 @@ public struct NoticeBoardView: View {
                         }
                     }
                     if !pinnedOnly {
-                        let recent = model.entries.filter { !$0.mustRead }
+                        let recent = entries.filter { !$0.mustRead }
                         if !recent.isEmpty { Text("최근 공지").umcTypography(.headlineBold) }
                         ForEach(recent, content: card)
                     }
@@ -315,13 +408,13 @@ public struct NoticeBoardView: View {
                         .frame(maxWidth: .infinity)
                     } else {
                         let empty = NoticeEmptyState(
-                            entries: model.entries, loading: model.isLoading, hasError: false,
-                            keyword: model.keyword, pinnedOnly: pinnedOnly,
+                            entries: entries, loading: model.isLoading, hasError: false,
+                            keyword: period != .all || scope != nil ? summary : model.keyword, pinnedOnly: pinnedOnly,
                             hasNext: model.nextPage != nil)
                         if empty != .none {
                             VStack(alignment: .leading, spacing: UMCSpacing.value12) {
                                 Text(empty.message).umcTypography(.headlineRegular)
-                                if empty == .search { Button("초기화", action: resetFilters) }
+                                if hasFilters { Button("필터 초기화", action: resetFilters) }
                             }
                             .foregroundStyle(UMCColor.Semantic.textNeutralMedium600)
                             .padding(UMCSpacing.value24)
@@ -346,6 +439,8 @@ public struct NoticeBoardView: View {
         model.tab = "CHALLENGER"
         model.part = nil
         pinnedOnly = false
+        period = .all
+        scope = nil
         searchNotices()
     }
 
@@ -380,12 +475,18 @@ let noticeParts = [
 ]
 
 extension NoticeEntry {
-    var audienceLabel: String {
-        let scope =
+    var postedAt: Date {
+        (try? Date.ISO8601FormatStyle().parse(createdAt)) ?? .distantPast
+    }
+
+    var scopeLabel: String {
             targetInfo?.targetSchoolId != nil
             ? "학교" : (targetInfo?.targetChapterId != nil ? "지부" : "전체")
+    }
+
+    var audienceLabel: String {
         let tab = noticeTabs.first { $0.value == targetInfo?.targetNoticeTab }?.label
-        return [scope, tab].compactMap { $0 }.joined(separator: " · ")
+        return [scopeLabel, tab].compactMap { $0 }.joined(separator: " · ")
     }
 
     var metadata: String {

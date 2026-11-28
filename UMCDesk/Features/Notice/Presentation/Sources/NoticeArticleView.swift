@@ -575,6 +575,7 @@ private struct NoticeEditView: View {
             Form {
                 Section("공지 내용") {
                     TextField("제목", text: $title)
+                        .umcInputField()
                     TextField("본문", text: $content, axis: .vertical).lineLimit(3...10)
                     Toggle("필독 공지로 고정", isOn: $pinned)
                 }

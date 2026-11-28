@@ -12,10 +12,9 @@ import UMCFoundation
 
 struct SupportView: View {
     @Environment(\.umcWorkspaceModalHost) private var modalHost
-    @Environment(\.tabToolsDismissalRequest) private var dismissTools
     private var scene = SupportScene.home
     @State private var operatorTicket: UUID?
-    @State private var operatorEntry = UUID()
+    @State private var inquiryEntry = UUID()
     private enum Page {
         case answers, inquiries
         case operations, faq
@@ -31,9 +30,6 @@ struct SupportView: View {
     @State private var exitGate = SupportExitGate()
     @State private var receiptMessage = ""
     @State private var searchState = SupportSearchState()
-    @Environment(\.umcBodyTextScale) private var scale
-    @FocusState private var toolsFocused: Bool
-    @FocusState private var firstToolFocused: Bool
 
     @State private var fixture: SupportFixture?
 
@@ -142,8 +138,8 @@ struct SupportView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            HStack {
-                if let fixture {
+            if let fixture {
+                HStack {
                     Menu("데이터 미리보기") {
                         Button("사용자 · 많이 묻는 질문") { navigate(.answers) }
                         Button("운영 · 문의 관리") { navigate(.operations) }.disabled(
@@ -179,15 +175,12 @@ struct SupportView: View {
                             Task { await fixture.transport.reload() }
                         }
                     }.fixedSize()
+                    Spacer()
                 }
-                Spacer()
-                Button(
-                    page == .operations || page == .faq ? "문의 관리 도구" : "문의 도구",
-                    systemImage: "slider.horizontal.3"
-                ) { toolsOpen.toggle() }.focused($toolsFocused)
-
-            }.padding(.horizontal, 40).frame(height: 44)
-            Divider()
+                .padding(.horizontal, 40)
+                .frame(height: 44)
+                Divider()
+            }
             if let fixture {
                 if fixture.transport.state(SupportPreviewTransport.createKey) == .uncertain
                     && (!composing
@@ -263,7 +256,7 @@ struct SupportView: View {
                                     scene: scene, selectTicket: { operatorTicket = $0 },
                                     onFAQDirty: { dirtyFAQ = $0 }
                                 ) { page = .answers }
-                                .id(operatorEntry)
+                                .id(inquiryEntry)
                             }
                         }
                     }
@@ -279,23 +272,12 @@ struct SupportView: View {
         .environment(\.supportExitDecision, exitGate)
         .buttonStyle(SupportActionStyle())
         .tint(UMCColor.Semantic.textBrandDefault)
-        .overlay(alignment: .topTrailing) {
-            if toolsOpen {
-                ZStack(alignment: .topTrailing) {
-                    Color.clear.contentShape(Rectangle()).onTapGesture { toolsOpen = false }
-                        .accessibilityHidden(true)
-                    SupportToolsPlacement {
-                        ViewThatFits(in: .vertical) {
-                            toolsPanel
-                            ScrollView { toolsPanel }
-                        }
-                        .background(
-                            UMCColor.Custom.backgroundSurfaceWhite, in: .rect(cornerRadius: 16)
-                        )
-                        .shadow(color: .black.opacity(0.13), radius: 12, y: 8)
-                    }
-                }
-            }
+        .umcTabTools(
+            AppLocalization.string(operating ? "문의 관리 도구" : "문의 도구"),
+            width: .wide, findShortcut: !operating && !recipient.submitting,
+            isPresented: $toolsOpen
+        ) { _ in
+            toolsPanel
         }
         .modifier(
             SupportDiscardAlert(
@@ -319,7 +301,7 @@ struct SupportView: View {
         .onChange(of: fixture?.transport.access) {
             guard fixture?.transport.access != .granted else { return }
             operatorTicket = nil
-            operatorEntry = UUID()
+            inquiryEntry = UUID()
             toolsOpen = false
             dirtyFAQ = false
             exitGate.stay()
@@ -328,8 +310,6 @@ struct SupportView: View {
                 composing = false
             }
         }
-        .onChange(of: toolsOpen) { if !toolsOpen { toolsFocused = true } }
-        .onChange(of: dismissTools) { toolsOpen = false }
         .disabled(recipient.isOpen)
         .accessibilityHidden(recipient.isOpen)
         .overlay {
@@ -348,80 +328,93 @@ struct SupportView: View {
         }
     }
 
-    private var toolsPanel: some View {
-        let operating = page == .operations || page == .faq
-        return VStack(alignment: .leading, spacing: 14) {
-            HStack {
-                Text(operating ? "문의 관리 도구" : "문의 도구").inquiryFont(16, weight: .bold)
-                Spacer()
-                Button {
-                    toolsOpen = false
-                } label: {
-                    Image(systemName: "xmark")
-                }
-                .buttonStyle(.plain).accessibilityLabel("닫기").keyboardShortcut(.cancelAction)
-                .focused($firstToolFocused).task {
-                    await Task.yield()
-                    firstToolFocused = true
-                }
-            }
-            Text(operating ? "UMC PRODUCT 구성원만 사용할 수 있는 관리 도구예요." : "답을 찾아보고 내 문의를 이어가세요.")
+    private var operating: Bool { page == .operations || page == .faq }
+
+    @ViewBuilder private var toolsPanel: some View {
+        if operating, let fixture, fixture.transport.access == .granted {
+            Text(AppLocalization.string("UMC PRODUCT 구성원만 사용할 수 있는 관리 도구예요."))
                 .inquiryFont(12)
-            if operating, fixture != nil {
-                Button {
-                    navigate(.faq)
-                } label: {
-                    Text("FAQ 작성 · 관리").frame(maxWidth: .infinity)
-                }
-                .buttonStyle(SupportActionStyle(prominent: true))
-                Text("UMC PRODUCT 전용").inquiryFont(12)
-                Button("문의 관리 목록") {
+                .foregroundStyle(.secondary)
+            Button(AppLocalization.string("FAQ 작성 · 관리")) { navigate(.faq) }
+                .buttonStyle(UMCToolPrimaryButtonStyle())
+            Divider()
+            UMCToolGroupHeading(AppLocalization.string("UMC PRODUCT 전용"))
+            Button(AppLocalization.string("문의 관리 목록"), systemImage: "tray.2") {
+                leaveComposition {
+                    guard fixture.transport.access == .granted else { return }
                     operatorTicket = nil
-                    operatorEntry = UUID()
-                    navigate(.operations)
+                    inquiryEntry = UUID()
+                    dirtyFAQ = false
+                    page = .operations
                 }
-                Button("선택한 문의 확인") {
-                    operatorTicket = operatorTicket ?? fixture?.tickets.first?.id
-                    operatorEntry = UUID()
-                    navigate(.operations)
-                }
-                Button("많이 묻는 질문 보기") { navigate(.answers) }
-            } else {
-                Button {
-                    leaveComposition {
-                        composing = false
-                        page = .answers
-                        searchState = SupportSearchState()
-                        searchRequest += 1
-                        toolsOpen = false
-                    }
-                } label: {
-                    HStack {
-                        Text("도움말 검색")
-                        Spacer()
-                        Text("⌘F")
-                    }
-                }
-                if fixture != nil {
-                    Button {
-                        toolsOpen = false
-                        beginCompose(nil)
-                    } label: {
-                        Text("새 문의 작성").frame(maxWidth: .infinity)
-                    }.buttonStyle(SupportActionStyle(prominent: true))
-                }
-                Text("도움말과 내 문의").inquiryFont(12)
-                Button("많이 묻는 질문") { navigate(.answers) }
-                Button("내 문의 현황") { navigate(.inquiries) }
             }
-            Spacer(minLength: 0)
-            HStack {
-                Text("상단 도구 버튼으로 다시 열 수 있어요")
-                Spacer()
-                Text("Esc")
-            }.inquiryFont(11)
-        }.padding(20).fixedSize(horizontal: false, vertical: true).frame(
-            maxWidth: .infinity, alignment: .topLeading)
+            if let ticket = operatorTicket, fixture.tickets.contains(where: { $0.id == ticket }) {
+                Button(AppLocalization.string("선택한 문의 확인"), systemImage: "bubble.left") {
+                    leaveComposition {
+                        guard fixture.transport.access == .granted,
+                              fixture.tickets.contains(where: { $0.id == ticket }) else { return }
+                        operatorTicket = ticket
+                        inquiryEntry = UUID()
+                        dirtyFAQ = false
+                        page = .operations
+                    }
+                }
+            }
+            Button(AppLocalization.string("많이 묻는 질문 보기"), systemImage: "questionmark.circle") {
+                openAnswers()
+            }
+        } else {
+            Text(AppLocalization.string("답을 찾아보고 내 문의를 이어가세요."))
+                .inquiryFont(12)
+                .foregroundStyle(.secondary)
+            @Bindable var search = searchState
+            UMCSearchField(AppLocalization.string("도움말 검색"), text: $search.search)
+                .onSubmit { openAnswers(searching: true) }
+                .disabled(recipient.submitting)
+            if let fixture, !composing, !fixture.transport.blocked(SupportPreviewTransport.createKey) {
+                Button(AppLocalization.string("새 문의 작성")) {
+                    toolsOpen = false
+                    beginCompose(nil)
+                }
+                .buttonStyle(UMCToolPrimaryButtonStyle())
+            }
+            Divider()
+            UMCToolGroupHeading(AppLocalization.string("도움말과 내 문의"))
+            Button(AppLocalization.string("많이 묻는 질문"), systemImage: "questionmark.circle") {
+                openAnswers()
+            }
+            .disabled(recipient.submitting)
+            if fixture?.transport.hasSnapshot == true {
+                Button(AppLocalization.string("내 문의 현황"), systemImage: "tray") {
+                    leaveComposition {
+                        createdTicket = nil
+                        inquiryEntry = UUID()
+                        composing = false
+                        page = .inquiries
+                    }
+                }
+                .disabled(recipient.submitting)
+            } else if fixture == nil {
+                Button(AppLocalization.string("문의 접수 안내"), systemImage: "info.circle") {
+                    navigate(.inquiries)
+                }
+            }
+        }
+    }
+
+    private func openAnswers(searching: Bool = false) {
+        leaveComposition {
+            let query = searching ? searchState.search : ""
+            searchState = SupportSearchState()
+            searchState.search = query
+            searchState.initialized = true
+            searchState.choosingSearch = searching
+            searchRequest = searching ? searchRequest + 1 : 0
+            operatorTicket = nil
+            dirtyFAQ = false
+            composing = false
+            page = .answers
+        }
     }
 
     private func beginCompose(_ article: SupportArticle?) {
@@ -450,9 +443,12 @@ struct SupportView: View {
 
     private func navigate(_ next: Page) {
         leaveComposition {
+            if next == .operations || next == .faq {
+                guard fixture?.transport.access == .granted else { return }
+            }
             if (page == .operations || page == .faq) && next != .operations && next != .faq {
                 operatorTicket = nil
-                operatorEntry = UUID()
+                inquiryEntry = UUID()
             }
             dirtyFAQ = false
             composing = false
@@ -538,6 +534,7 @@ struct SupportView: View {
             SupportInquiryPreview(
                 fixture: fixture, initialTicket: createdTicket, beginCompose: { beginCompose(nil) }
             ) { page = .answers }
+            .id(inquiryEntry)
             .onAppear { createdTicket = nil }
         } else {
             serviceStatus
@@ -663,33 +660,25 @@ private struct SupportAnswersView: View {
                         }
                         Group {
                             HStack(spacing: 12) {
-                                HStack(spacing: 8) {
-                                    Image(systemName: "magnifyingglass").foregroundStyle(
-                                        .secondary)
-                                    SupportInputField(
-                                        "FAQ 제목·분류·답변 검색", identifier: "support.search",
-                                        text: $state.search,
-                                        focusRequest: searchRequest,
-                                        onFocus: {
-                                            state.typingSearch = true
+                                SupportInputField(
+                                    "FAQ 제목·분류·답변 검색", identifier: "support.search",
+                                    text: $state.search, isSearch: true,
+                                    focusRequest: searchRequest,
+                                    onFocus: {
+                                        state.typingSearch = true
+                                        state.choosingSearch = true
+                                    },
+                                    submit: {
+                                        if state.search.isEmpty {
                                             state.choosingSearch = true
-                                        },
-                                        submit: {
-                                            if state.search.isEmpty {
-                                                state.choosingSearch = true
-                                            } else {
-                                                focusResults()
-                                            }
-                                        },
-                                        moveDown: { focusResults() }
-                                    )
-                                    .focused($focus, equals: .search)
-                                    .frame(minHeight: 28 * scale)
-                                    .onChange(of: state.search) { state.selectedID = nil }
-                                }.padding(.horizontal, 12).frame(height: 40)
-                                    .background(
-                                        UMCColor.Custom.backgroundSurfaceGreyWeak,
-                                        in: .rect(cornerRadius: 12))
+                                        } else {
+                                            focusResults()
+                                        }
+                                    },
+                                    moveDown: { focusResults() }
+                                )
+                                .focused($focus, equals: .search)
+                                .onChange(of: state.search) { state.selectedID = nil }
                                 Button("검색") {
                                     if state.search.isEmpty {
                                         state.choosingSearch = true

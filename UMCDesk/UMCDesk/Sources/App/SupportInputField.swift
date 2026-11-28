@@ -6,6 +6,7 @@
 
 import AppKit
 import CoreDesignSystem
+import CoreUIComponents
 import SwiftUI
 
 /// The active field editor consumes composition commands before inquiry navigation or submission.
@@ -13,6 +14,7 @@ struct SupportInputField: View {
     let label: String
     let identifier: String
     @Binding var text: String
+    let isSearch: Bool
     var focusRequest = 0
     var onFocus: () -> Void = {}
     let submit: () -> Void
@@ -20,10 +22,12 @@ struct SupportInputField: View {
     var escape: (() -> Void)?
 
     init(
-        _ label: String, identifier: String, text: Binding<String>, focusRequest: Int = 0,
+        _ label: String, identifier: String, text: Binding<String>, isSearch: Bool = false,
+        focusRequest: Int = 0,
         onFocus: @escaping () -> Void = {}, submit: @escaping () -> Void,
         moveDown: (() -> Void)? = nil, escape: (() -> Void)? = nil
     ) {
+        self.isSearch = isSearch
         self.label = label
         self.identifier = identifier
         _text = text
@@ -35,36 +39,60 @@ struct SupportInputField: View {
     }
 
     @State private var composing = false
+    @State private var isFocused = false
+    @State private var clearRequest = 0
 
     var body: some View {
-        SupportNativeInputField(input: self, composing: $composing)
-            .overlay(alignment: .leading) {
-                if text.isEmpty && !composing {
-                    Text(label)
-                        .inquiryFont(14)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .allowsHitTesting(false)
-                        .accessibilityHidden(true)
-                }
+        if isSearch {
+            UMCSearchField(text: $text, isFocused: isFocused, onClear: {
+                composing = false
+                text = ""
+                clearRequest += 1
+            }) { editor }
+        } else {
+            editor.umcInputField(isFocused: isFocused)
+        }
+    }
+
+    private var editor: some View {
+        SupportNativeInputField(
+            input: self, composing: $composing, isFocused: $isFocused, clearRequest: clearRequest
+        )
+        .overlay(alignment: .leading) {
+            if text.isEmpty && !composing {
+                Text(label)
+                    .inquiryFont(14)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
             }
+        }
     }
 }
 
 private struct SupportNativeInputField: NSViewRepresentable {
     let input: SupportInputField
     @Binding var composing: Bool
+    @Binding var isFocused: Bool
+    let clearRequest: Int
     @Environment(\.umcBodyTextScale) private var scale
     @Environment(\.umcFontFamily) private var family
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
     func makeNSView(context: Context) -> NSTextField {
         let field = SupportTextControl()
-        field.didFocus = { [weak coordinator = context.coordinator] in
-            Task { @MainActor in coordinator?.parent.input.onFocus() }
+        field.didFocus = { [weak coordinator = context.coordinator, weak field] in
+            Task { @MainActor in
+                guard let field, let editor = field.currentEditor(),
+                      field.window?.firstResponder === editor else { return }
+                coordinator?.parent.isFocused = true
+                coordinator?.parent.input.onFocus()
+            }
         }
         context.coordinator.observeComposition(in: field)
+        field.focusRingType = .none
         field.isBordered = false
         field.drawsBackground = false
         field.usesSingleLineMode = true
@@ -81,7 +109,16 @@ private struct SupportNativeInputField: NSViewRepresentable {
         field.font =
             NSFont(name: family ?? "Pretendard-Regular", size: 14 * scale)
             ?? .systemFont(ofSize: 14 * scale)
-        if context.coordinator.focusRequest != input.focusRequest {
+        let clearing = context.coordinator.clearRequest != clearRequest
+        if clearing {
+            context.coordinator.clearRequest = clearRequest
+            if let editor = field.currentEditor() as? NSTextView {
+                editor.inputContext?.discardMarkedText()
+                editor.string = ""
+            }
+            field.stringValue = ""
+        }
+        if clearing || context.coordinator.focusRequest != input.focusRequest {
             context.coordinator.focusRequest = input.focusRequest
             Task { @MainActor [weak field] in
                 await Task.yield()
@@ -108,6 +145,7 @@ private struct SupportNativeInputField: NSViewRepresentable {
     @MainActor final class Coordinator: NSObject, NSTextFieldDelegate {
         var parent: SupportNativeInputField
         var focusRequest = 0
+        var clearRequest = 0
         var monitor: Any?
         private var markedEvent: TimeInterval?
         func observeComposition(in field: NSTextField) {
@@ -122,7 +160,10 @@ private struct SupportNativeInputField: NSViewRepresentable {
             }
         }
         init(_ parent: SupportNativeInputField) { self.parent = parent }
-        func controlTextDidBeginEditing(_ notification: Notification) { parent.input.onFocus() }
+        func controlTextDidBeginEditing(_ notification: Notification) {
+            parent.isFocused = true
+            parent.input.onFocus()
+        }
         func controlTextDidChange(_ notification: Notification) {
             guard let field = notification.object as? NSTextField else { return }
             let marked = (field.currentEditor() as? NSTextView)?.hasMarkedText() == true
@@ -130,7 +171,10 @@ private struct SupportNativeInputField: NSViewRepresentable {
             guard !marked else { return }
             parent.input.text = field.stringValue
         }
-        func controlTextDidEndEditing(_ notification: Notification) { parent.composing = false }
+        func controlTextDidEndEditing(_ notification: Notification) {
+            parent.isFocused = false
+            parent.composing = false
+        }
         func control(_ control: NSControl, textView: NSTextView, doCommandBy selector: Selector)
             -> Bool
         {

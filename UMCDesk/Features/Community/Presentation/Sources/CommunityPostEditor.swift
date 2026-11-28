@@ -7,6 +7,7 @@
 
 import CommunityDomain
 import CoreDesignSystem
+import CoreUIComponents
 import SwiftUI
 
 struct CommunityPostEditor: View {
@@ -58,12 +59,16 @@ struct CommunityPostEditor: View {
                     ) { Text($0.label).tag($0) }
                 }
                 TextField("제목", text: $title)
+                    .umcInputField()
                 TextField("본문", text: $content, axis: .vertical).lineLimit(3...10)
                 if category == .lightning {
                     DatePicker("모임 일시", selection: $meetAt)
                     TextField("모임 장소", text: $location)
+                        .umcInputField()
                     TextField("최대 인원", text: $capacity)
+                        .umcInputField()
                     TextField("오픈 채팅 주소", text: $link)
+                        .umcInputField()
                 }
             }
             .disabled(awaitingConfirmation)

@@ -7,6 +7,7 @@
 
 import CommunityDomain
 import CoreDesignSystem
+import CoreUIComponents
 import SwiftUI
 
 public enum ThreadManagementDestination: Hashable, Identifiable {
@@ -163,7 +164,7 @@ public struct ThreadManagementView: View {
             Text("스레드의 제목과 소개를 수정하세요.").foregroundStyle(.secondary)
             LabeledContent("제목") { Text("\(title.unicodeScalars.count) / 80") }
             TextField("제목", text: $title)
-                .managementInput(minHeight: 48)
+                .umcInputField()
             LabeledContent("소개") { Text("\(introduction.unicodeScalars.count) / 500") }
             TextField("소개", text: $introduction, axis: .vertical)
                 .lineLimit(3...6).managementInput(minHeight: 90)

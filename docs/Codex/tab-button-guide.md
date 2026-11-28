@@ -8,7 +8,7 @@
 
 | 화면·조건 | 위치와 순서 | 동작과 예외 |
 | --- | --- | --- |
-| 목록 | 제목과 목록 액션, 검색이 주 작업이면 바로 아래 검색 필드 | 공통 도구는 제목 막대 우측 `umcTabTools` 패널을 사용한다. ⌘F는 탭별 계약을 따른다. 스레드는 검색 포커스, 공지는 패널 토글이다. |
+| 목록 | 제목과 목록 액션, 검색이 주 작업이면 바로 아래 검색 필드 | 공통 도구는 제목 막대 우측 `umcTabTools` 패널을 사용한다. ⌘F는 탭별 계약을 따른다. 스레드는 검색 포커스, 공지는 패널 검색 입력이다. |
 | 필터 하나 | 목록 제목 오른쪽에 현재 선택이 보이는 Picker 또는 메뉴 | 도구가 필터 하나뿐이면 중첩 메뉴를 생략한다. 선택지가 하나뿐이라 바꿀 값도 없으면 현재 범위를 텍스트로 표시한다. |
 | 메뉴 안의 단일 선택 그룹 | 선택한 행에는 macOS 메뉴 체크 하나, 나머지 행에는 레이블만 표시한다. | 각 Picker의 선택 값을 독립적으로 유지한다. 앱의 체크박스 스타일이 메뉴 행에 상속되면 필터 메뉴에서 시스템 스타일을 사용한다. |
 | 항목을 선택한 상세 | 제목·보조 정보 → 여백 → **별도 창에서 열기** → **더보기(…)** | 창을 여는 동작은 한 번에 실행한다. 더보기에는 공유·관리 등 해당 항목의 보조 동작을 담는다. 삭제는 마지막에 두고 확인을 거친다. |
@@ -19,7 +19,7 @@
 
 ## 스레드에서 확인한 구현
 
-- **목록**에는 ‘스레드’ 제목과 검색 필드가 있고, ‘스레드 도구’는 창 제목 막대 우측 공통 패널에 있다. 바로 아래 검색 필드에서 한글 조합을 마친 뒤 Return이나 ↓를 누르면 첫 결과를 선택한다. 패널에는 검색, 스레드 만들기, 분류·참여 상태 필터 메뉴, 전체 스레드가 있다. 패널의 검색 동작은 패널을 닫고 기존 필드로 포커스를 보낸다. ⌘F 직접 검색 포커스도 이 탭에서는 유지된다. [목록·도구·작성 시트](../../UMCDesk/Features/Community/Presentation/Sources/CommunityPresentation.swift) · [검색 필드](../../UMCDesk/Features/Community/Presentation/Sources/ThreadSearchField.swift)
+- **목록**에는 ‘스레드’ 제목과 검색 필드가 있고, ‘스레드 도구’는 창 제목 막대 우측 공통 패널에 있다. 바로 아래 검색 필드에서 한글 조합을 마친 뒤 Return이나 ↓를 누르면 첫 결과를 선택한다. 패널에는 검색, 스레드 만들기, 분류·참여 상태 필터 메뉴, 전체 스레드가 있다. 패널 안에서도 같은 검색어를 편집한다. ⌘F 직접 검색 포커스도 이 탭에서는 유지된다. [목록·도구·작성 시트](../../UMCDesk/Features/Community/Presentation/Sources/CommunityPresentation.swift) · [검색 필드](../../UMCDesk/Features/Community/Presentation/Sources/ThreadSearchField.swift)
 - **상세**에서는 계정과 스레드 ID로 별도 창을 열고, 분리된 창에서는 열기 버튼을 숨긴다. ‘대화 옵션’은 접근 종료·오류·강퇴 상태를 걸러 낸다. 공유는 상세 정보가 있을 때, 초대·편집·삭제는 활성 참여자 중 소유자·관리자에게 표시한다. [창과 상세 헤더](../../UMCDesk/Features/Community/Presentation/Sources/ThreadWindowContent.swift)
 - **새 스레드**에서는 ‘취소’ 다음 ‘만들기’가 기본 동작이다. 이름·설명·아이콘 검증에 실패하면 ‘만들기’를 비활성화하고, 저장 중에는 폼 입력과 임의 닫기를 막는다. [ThreadComposer](../../UMCDesk/Features/Community/Presentation/Sources/CommunityPresentation.swift)
 
@@ -27,7 +27,7 @@
 
 | 화면 | 현재 구현 | 공통 기준을 적용할 때 |
 | --- | --- | --- |
-| 공지 목록 | 전체/분할 상단 검색과 제목 막대 ‘공지 도구’ 패널이 같은 입력·제출 함수를 쓴다. 조건은 제출된 keyword를 표시하며 ⌘F는 패널 토글이다. [공지 목록](../../UMCDesk/Features/Notice/Presentation/Sources/NoticePresentation.swift) | 다른 탭에 공지의 제출 검색이나 단축키를 강제하지 않는다. 긴 조건 요약은 결과 공간을 잠식하지 않도록 제한하고 전체 값은 AX·도움말로 제공한다. |
+| 공지 목록 | 전체/분할 상단 검색과 제목 막대 ‘공지 도구’ 패널이 같은 입력·제출 함수를 쓴다. 조건은 제출된 keyword를 표시하며 ⌘F는 패널을 열고 검색 입력으로 이동한다. [공지 목록](../../UMCDesk/Features/Notice/Presentation/Sources/NoticePresentation.swift) | 다른 탭에 공지의 제출 검색이나 단축키를 강제하지 않는다. 긴 조건 요약은 결과 공간을 잠식하지 않도록 제한하고 전체 값은 AX·도움말로 제공한다. |
 | 공지 상세·작성 | CHECK 읽음 현황은 보조 버튼, EDIT/DELETE는 더보기이며 삭제가 마지막이다. 새 목록 선택은 분할로 시작하고 전체 읽기는 같은 창의 모드다. 작성은 현재 복구 단계에 맞는 주 동작 하나를 강조한다. [공지 상세](../../UMCDesk/Features/Notice/Presentation/Sources/NoticeArticleView.swift) · [공지 작성](../../UMCDesk/Features/Notice/Presentation/Sources/NoticeComposer.swift) | 별도 창을 지원할 때만 열기 버튼을 추가한다. capability·재검증·삭제 확인·결과 미확정 및 입력 잠금을 유지한다. 읽음 현황과 리마인드는 새 권한 추정 없이 기존 계약을 따른다. |
 | 커뮤니티 목록 | 제목 오른쪽에 ‘새 글’, 바로 아래에 ‘제목·본문 검색’이 있다. 검색어가 없을 때 범위와 조건부 카테고리 Picker가 보인다. [게시글 목록](../../UMCDesk/Features/Community/Presentation/Sources/CommunityPostBoardView.swift) | 목록 도구에 새 글과 적용 가능한 필터를 모은다. 검색 중에는 현재의 ‘전체 게시글 검색 결과’ 안내를 유지하여 숨긴 필터가 결과를 제한한다는 인상을 주지 않는다. |
 | 커뮤니티 상세·작성 | 본인 글의 ‘게시글 관리’ 메뉴가 수정·삭제를 제공한다. 작성 폼의 기본 동작은 ‘저장’ 또는 ‘등록 결과 확인’이다. [게시글 상세](../../UMCDesk/Features/Community/Presentation/Sources/CommunityPostDetailView.swift) · [게시글 편집기](../../UMCDesk/Features/Community/Presentation/Sources/CommunityPostEditor.swift) | 본인 글 관리 메뉴를 상세 우측 더보기로 사용한다. 댓글별 메뉴는 해당 댓글에 둔다. 별도 창을 지원하면 관리 메뉴 왼쪽에 열기를 둔다. 신규 글에 ‘게시’를 쓸 경우 편집은 ‘저장’, 결과 미확정은 ‘등록 결과 확인’으로 구별한다. |
@@ -36,7 +36,7 @@
 
 | 요소 | 저장소 근거 | 다른 탭에 적용할 기준 |
 | --- | --- | --- |
-| 목록 도구·검색 | 스레드의 공통 도구는 제목 막대 버튼과 `UMCTabTools` 패널이다. 패널 내부 분류·참여 상태 선택은 별도 메뉴다. 목록 안쪽 여백은 16pt, 세로 요소 간격은 12pt, 검색 높이는 28pt다. [목록 레이아웃](../../UMCDesk/Features/Community/Presentation/Sources/CommunityPresentation.swift) | 목록 도구는 보조 강조를 쓴다. 목록 여백·세로 간격은 같은 용도의 UMCSpacing 토큰부터 적용한다. [간격 토큰](../../UMCDesk/Core/DesignSystem/Sources/UMCSpacing.swift) |
+| 목록 도구·검색 | 스레드의 공통 도구는 제목 막대 버튼과 `UMCTabTools` 패널이다. 패널 내부 분류·참여 상태 선택은 별도 메뉴다. 목록 안쪽 여백은 16pt, 세로 요소 간격은 12pt, 검색 높이와 포커스는 [입력 가이드](text-fields.md)를 따른다. [목록 레이아웃](../../UMCDesk/Features/Community/Presentation/Sources/CommunityPresentation.swift) | 목록 도구는 보조 강조를 쓴다. 목록 여백·세로 간격은 같은 용도의 UMCSpacing 토큰부터 적용한다. [간격 토큰](../../UMCDesk/Core/DesignSystem/Sources/UMCSpacing.swift) |
 | 상세 아이콘 그룹 | 스레드는 14pt 심벌을 28×28pt 조작 영역에 놓는다. 두 버튼 사이 2pt, 캡슐 안쪽 2pt, 헤더 여백은 가로 20pt·세로 12pt다. [상세 헤더 스타일](../../UMCDesk/Features/Community/Presentation/Sources/ThreadWindowContent.swift) | 한 그룹 안에서 열기와 메뉴의 조작 영역·포커스를 분리한다. 창 폭이 줄면 제목부터 줄이고 버튼 크기와 순서를 보존한다. 이 수치는 스레드의 실측 대상이며 전역 토큰을 새로 정의하지 않는다. |
 | Liquid Glass | 스레드는 그룹 배경에 regular Glass를 한 번 적용한다. 투명도 줄이기 또는 대비 증가 설정에서는 불투명 표면과 테두리를 사용한다. [헤더 캡슐](../../UMCDesk/Features/Community/Presentation/Sources/ThreadWindowContent.swift) · [디자인 시스템](design-system.md) | 같은 역할의 상세 그룹에 적용할 때 대비와 대체 표면을 함께 검수한다. 목록 도구·검색·폼 버튼까지 일괄 적용할 필요는 없다. |
 | 주 버튼 | 스레드 만들기와 공지 게시에는 시스템 기본 동작 단축키가 있다. 디자인 규약은 시스템 Glass 버튼 스타일도 선택지로 둔다. [공지 작성](../../UMCDesk/Features/Notice/Presentation/Sources/NoticeComposer.swift) · [디자인 시스템](design-system.md) | 작성 완료 동작 한 개만 텍스트와 시스템 기본 강조로 구별한다. 열기·더보기·취소는 보조 강조를 유지한다. |
@@ -45,7 +45,7 @@
 
 같은 콘텐츠 열에서 오른쪽을 훑으면 각 행의 동작을 찾을 수 있도록 **버튼의 오른쪽 외곽**을 맞춘다. 부모 컨테이너가 수평 여백을 한 번 적용하고, 각 행에서는 제목과 버튼 사이에 가변 여백을 둔다. 버튼은 레이블에 맞는 고유 폭을 유지한다.
 
-홈의 새로고침, 일정 보기, 공지 보기, 프로젝트 보기, 게임 선택이 한 예다. 강조 카드의 배경만 콘텐츠 여백까지 넓히면 카드 안팎의 버튼이 같은 위치에서 끝난다. 일정명이 여러 줄이면 버튼은 섹션 제목 줄에 둔다. 일정이 비어 대체 섹션의 순서가 바뀌어도 같은 정렬을 적용한다. [홈 구현](../../UMCDesk/Features/Home/Presentation/Sources/HomePresentation.swift)
+홈의 새로고침, 일정 보기, 공지 보기, 프로젝트 보기이 한 예다. 강조 카드의 배경만 콘텐츠 여백까지 넓히면 카드 안팎의 버튼이 같은 위치에서 끝난다. 일정명이 여러 줄이면 버튼은 섹션 제목 줄에 둔다. 일정이 비어 대체 섹션의 순서가 바뀌어도 같은 정렬을 적용한다. [홈 구현](../../UMCDesk/Features/Home/Presentation/Sources/HomePresentation.swift)
 
 1040×760pt와 1440×960pt에서 일정 있음·없음과 긴 제목을 각각 열어 본다. 접근성 프레임의 오른쪽 끝(`maxX = x + width`)을 비교하거나 캡처에 수직 가이드를 겹쳐 버튼 외곽을 확인한다. 버튼 너비가 달라도 끝점이 일치하고 제목과 버튼 사이 여백이 유지되어야 한다.
 
@@ -55,7 +55,7 @@
 
 - [ ] 메인 창을 최소 1040×720pt로 줄이고 분할선을 움직인다. 스레드 목록 최소 폭 220pt와 긴 한글 제목에서도 검색과 우측 버튼이 겹치거나 잘리지 않는다. 제목이 줄더라도 전체 제목을 접근성 이름으로 확인할 수 있다. [앱 창 설정](../../UMCDesk/UMCDesk/Sources/App/UMCDeskApp.swift) · [목록 폭](../../UMCDesk/Features/Community/Presentation/Sources/CommunityPresentation.swift)
 - [ ] 제목 막대의 스레드 도구 패널에서 ‘분류 · 참여 상태 필터’ 메뉴를 열면 ‘모든 분류’와 ‘모든 참여 상태’에만 체크가 하나씩 보인다. 방향키와 Return으로 ‘프로젝트’를 고르고 다시 열어 참여 상태가 유지되는지 확인한다. 이어서 ‘미참여’를 고르고 다시 열면 두 선택 행만 체크되고 나머지 행에는 사각 아이콘이 없다. VoiceOver에서 그룹별 선택 상태를 구분할 수 있다.
-- [ ] 키보드 탐색을 켜고 Tab·Shift-Tab으로 목록 도구 → 검색 → 결과, 상세 열기 → 더보기를 양방향으로 이동한다. 스레드의 ⌘F 검색 포커스와 공지의 ⌘F 패널 토글을 각각 확인한다. 한글 조합 중 Return으로 검색·항목 선택이 조기에 실행되지 않아야 한다. 메뉴를 Esc로 닫으면 메뉴 버튼으로 돌아온다.
+- [ ] 키보드 탐색을 켜고 Tab·Shift-Tab으로 목록 도구 → 검색 → 결과, 상세 열기 → 더보기를 양방향으로 이동한다. 스레드의 ⌘F 검색 포커스와 공지의 ⌘F 패널 검색 포커스을 각각 확인한다. 한글 조합 중 Return으로 검색·항목 선택이 조기에 실행되지 않아야 한다. 메뉴를 Esc로 닫으면 메뉴 버튼으로 돌아온다.
 - [ ] VoiceOver로 아이콘을 각각 탐색한다. ‘별도 창에서 열기’ 버튼과 ‘대화 옵션’ 메뉴의 이름·역할이 한 번씩 들린다. 포인터를 올리면 같은 동작을 설명하는 툴팁이 뜨고 키보드 포커스도 눈으로 구분된다.
 - [ ] 키보드로 별도 창을 열고 닫거나 원래 창으로 돌아온다. 열기를 호출한 버튼에 포커스가 돌아오며, 그사이 항목이 삭제됐다면 목록 또는 검색으로 이동한다. 복귀 처리의 저장소 예시는 [창 열기 공용 버튼](../../UMCDesk/Core/UIComponents/Sources/UMCWindowOpeningButton.swift)에서 확인한다.
 - [ ] 빈 선택·검색 결과 없음·권한 회수·별도 창에서 남은 버튼을 각각 확인한다. 빈 메뉴나 중복 열기가 없고, 투명도 줄이기·대비 증가에서도 경계와 포커스를 알아볼 수 있다.

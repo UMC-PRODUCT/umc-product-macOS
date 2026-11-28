@@ -52,16 +52,49 @@ enum NoticeEmptyState: Equatable {
     }
 }
 
+enum NoticePeriod: String, CaseIterable {
+    case all = "전체 기간"
+    case week = "최근 7일"
+    case month = "최근 30일"
+    case day = "특정 날짜"
+    case range = "기간 지정"
+
+    func includes(_ timestamp: String, start: Date, end: Date,
+                  now: Date = .now, calendar: Calendar = .current) -> Bool {
+        guard self != .all else { return true }
+        guard let date = try? Date.ISO8601FormatStyle().parse(timestamp) else { return false }
+        let day = calendar.startOfDay(for: date)
+        let today = calendar.startOfDay(for: now)
+        switch self {
+        case .all: return true
+        case .week, .month:
+            guard let earliest = calendar.date(byAdding: .day, value: self == .week ? -6 : -29,
+                                               to: today) else { return false }
+            return day >= earliest && day <= today
+        case .day: return day == calendar.startOfDay(for: start)
+        case .range: return day >= calendar.startOfDay(for: start)
+            && day <= calendar.startOfDay(for: end)
+        }
+    }
+}
+
 struct NoticeSearchField: View {
     @Binding var search: String
     let submit: () -> Void
 
     var body: some View {
         HStack(spacing: UMCSpacing.value8) {
-            TextField("제목, 내용 검색", text: $search)
-                .textFieldStyle(.roundedBorder)
-                .onSubmit(submit)
-            Button("검색", action: submit)
+            UMCSearchField(
+                AppLocalization.string("제목, 내용 검색"), text: $search,
+                accessibilityLabel: AppLocalization.string("공지 검색"),
+                accessibilityHint: AppLocalization.string("Return 키를 눌러 검색합니다")
+            )
+            .onSubmit(submit)
+            .help(AppLocalization.string("Return 키를 눌러 검색합니다"))
+            Button(AppLocalization.string("검색 실행"), systemImage: "return", action: submit)
+                .labelStyle(.iconOnly)
+                .buttonStyle(.borderless)
+                .help(AppLocalization.string("검색 실행"))
         }
     }
 }

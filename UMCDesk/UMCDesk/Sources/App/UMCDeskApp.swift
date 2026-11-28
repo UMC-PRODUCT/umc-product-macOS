@@ -243,6 +243,11 @@ private struct AppRootView: View {
         .task { await dependencies.restoreSession() }
         .onAppear {
             configureLoginAction()
+            dependencies.matchingProgress.openExplorer = {
+                dependencies.openMatching(.explore)
+                openWindow(id: "main")
+                NSApplication.shared.activate()
+            }
             dependencies.matchingProgress.openApplications = {
                 dependencies.openMatching(.applications)
                 openWindow(id: "main")
@@ -335,8 +340,7 @@ private struct AppRootView: View {
     private func feature(_ section: DeskSection, account: FeatureAccount) -> some View {
         switch section {
         case .home:
-            HomeView(repository: account.home, memberID: account.memberID,
-                     defaults: dependencies.featureDefaults) { destination in
+            HomeView(repository: account.home) { destination in
                 switch destination {
                 case .activity: dependencies.selectSection(.activity)
                 case .notice: dependencies.selectSection(.notice)
@@ -358,6 +362,10 @@ private struct AppRootView: View {
                                  initialProjectID: dependencies.navigation.workspaceProjectID,
                                  loadProjects: account.projects,
                                  loadGitHub: WorkspaceGitHubClient.recentWork(repository:),
+                                 teamContent: { id in
+                                     AnyView(PublishedMatchingTeamSheet(repository: dependencies.matchingUseCase,
+                                         projectId: id, memberId: account.memberID))
+                                 },
                                  openMatching: { dependencies.openMatching() })
         }
     }

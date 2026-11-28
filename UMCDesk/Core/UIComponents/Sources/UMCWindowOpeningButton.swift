@@ -163,7 +163,7 @@ private struct WindowButton: NSViewRepresentable {
         }
 
         override func keyDown(with event: NSEvent) {
-            if event.charactersIgnoringModifiers == "\r",
+            if [" ", "\r"].contains(event.charactersIgnoringModifiers ?? ""),
                event.modifierFlags.intersection([.command, .control, .option, .shift]).isEmpty {
                 if !event.isARepeat { performClick(nil) }
             } else {

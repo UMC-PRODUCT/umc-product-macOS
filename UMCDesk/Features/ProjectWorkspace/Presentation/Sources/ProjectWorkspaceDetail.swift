@@ -17,15 +17,24 @@ private enum WorkFilter: String, CaseIterable, Identifiable {
     case done = "완료"
 
     var id: Self { self }
+
+    var toolTitle: String {
+        switch self {
+        case .mine: "내 작업"
+        case .all: "전체 작업"
+        case .done: "완료한 작업"
+        }
+    }
 }
 
 enum WorkspaceSheet: Identifiable {
-    case addTodo, connections, todo(UUID), github(WorkspaceGitHubItem)
+    case addTodo, connections, team, todo(UUID), github(WorkspaceGitHubItem)
 
     var id: String {
         switch self {
         case .addTodo: "add"
         case .connections: "connections"
+        case .team: "team"
         case .todo(let id): id.uuidString
         case .github(let item): "github-" + item.id
         }
@@ -35,7 +44,7 @@ enum WorkspaceSheet: Identifiable {
 struct ProjectWorkspaceDetail: View {
     let project: WorkspaceProject
     let loadGitHub: WorkspaceGitHubLoader?
-    let openMatching: (() -> Void)?
+    let teamContent: ((String) -> AnyView)?
     let membershipFailed: Bool
     let refreshMembership: () -> Void
     let close: () -> Void
@@ -49,12 +58,12 @@ struct ProjectWorkspaceDetail: View {
 
     init(project: WorkspaceProject, accountID: String, sheet: Binding<WorkspaceSheet?>,
          loadGitHub: WorkspaceGitHubLoader?,
-         openMatching: (() -> Void)?, membershipFailed: Bool, refreshMembership: @escaping () -> Void,
+         teamContent: ((String) -> AnyView)?, membershipFailed: Bool, refreshMembership: @escaping () -> Void,
          close: @escaping () -> Void) {
         _sheet = sheet
         self.project = project
         self.loadGitHub = loadGitHub
-        self.openMatching = openMatching
+        self.teamContent = teamContent
         self.membershipFailed = membershipFailed
         self.refreshMembership = refreshMembership
         self.close = close
@@ -107,39 +116,50 @@ struct ProjectWorkspaceDetail: View {
                 }
             }
         }
-        .umcTabTools("프로젝트 도구", description: "\(project.name) · 작업과 연결 자료를 한곳에서.") { dismiss in
-            Button("한 줄 할 일 추가", systemImage: "plus") {
-                dismiss()
-                sheet = .addTodo
-            }
-            .buttonStyle(.borderedProminent)
-            Divider()
-            Text("작업 보기").foregroundStyle(.secondary)
-            ForEach(WorkFilter.allCases) { choice in
-                Button(choice.rawValue) {
+        .umcTabTools("프로젝트 도구") { dismiss in
+            if record != nil {
+                Button("한 줄 할 일 추가", systemImage: "plus") {
                     dismiss()
-                    filter = choice
+                    sheet = .addTodo
+                }.buttonStyle(UMCToolPrimaryButtonStyle())
+                Divider()
+                UMCToolGroupHeading("작업 보기")
+                ForEach(WorkFilter.allCases) { choice in
+                    Button {
+                        filter = choice
+                    } label: {
+                        HStack {
+                            Text(choice.toolTitle)
+                            Spacer()
+                            if filter == choice { Image(systemName: "checkmark") }
+                        }
+                    }
+                    .accessibilityAddTraits(filter == choice ? .isSelected : [])
                 }
-            }
-            Divider()
-            Button("GitHub · Figma 연결 관리") {
-                dismiss()
-                sheet = .connections
-            }
-            if let openMatching {
-                Button("매칭 팀 구성 보기") {
+                Divider()
+                UMCToolGroupHeading("연결과 팀")
+                Button("GitHub · Figma 연결 관리", systemImage: "link") {
                     dismiss()
-                    openMatching()
+                    sheet = .connections
                 }
+                if teamContent != nil, !membershipFailed {
+                    Button("매칭 팀 구성 보기", systemImage: "person.2") {
+                        dismiss()
+                        sheet = .team
+                    }
+                }
+                Divider()
             }
-            Divider()
-            Button("참여 상태 새로고침") {
+            Button("참여 상태 새로고침", systemImage: "arrow.clockwise") {
                 dismiss()
                 refreshMembership()
             }
-            Button("개인 기록 삭제", role: .destructive) {
-                dismiss()
-                showsDeleteConfirmation = true
+            if !data.isEmpty {
+                Divider()
+                Button("개인 기록 삭제", systemImage: "trash", role: .destructive) {
+                    dismiss()
+                    showsDeleteConfirmation = true
+                }
             }
         }
         .onAppear { _ = change { $0.lastOpened = Date() } }
@@ -290,9 +310,9 @@ struct ProjectWorkspaceDetail: View {
                         .umcTypography(.bodyRegular).foregroundStyle(.secondary)
                 }
             }
-            if let openMatching {
+            if teamContent != nil, !membershipFailed {
                 Divider()
-                Button("매칭 팀 구성 보기", systemImage: "person.2", action: openMatching)
+                Button("매칭 팀 구성 보기", systemImage: "person.2") { sheet = .team }
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -304,6 +324,12 @@ struct ProjectWorkspaceDetail: View {
         _ destination: WorkspaceSheet, record: WorkspaceRecord
     ) -> some View {
         switch destination {
+        case .team:
+            if !membershipFailed {
+                teamContent?(project.id)
+            } else {
+                Button("닫기") { sheet = nil }
+            }
         case .addTodo:
             WorkspaceTodoForm { input in
                 if change({ $0.addTodo(input) }) { filter = .mine; sheet = nil }

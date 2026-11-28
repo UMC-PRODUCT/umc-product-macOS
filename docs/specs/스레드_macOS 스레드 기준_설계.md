@@ -5,6 +5,10 @@
 - 디자인 기준일: 2026-11-22. UMC Mac OS 하이파이 12개 그룹의 결정 사항을 기록했다. [Figma 섹션](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/UMC-Mac-OS?node-id=911-19226) · [Light](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/UMC-Mac-OS?node-id=1113-23307) · [Dark](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/UMC-Mac-OS?node-id=1113-23308)
 - 구현 확인일: 2026-11-28. macOS 개발 브랜치와 서버 기본 브랜치의 소스를 대조했다. 실제 배포 버전과 화면 검수는 별도다. [macOS 기준 커밋](https://github.com/UMC-PRODUCT/umc-product-macOS/commit/1d69052160f97137b9e221dcd24bc06b6e7def57) · [서버 기준 커밋](https://github.com/UMC-PRODUCT/umc-product-server/commit/ea582a17c74cabfd6f7daeddd8336ae85369d8f2)
 
+## 2026-11-28 작업 반영
+
+스레드 도구 안에서도 목록과 같은 검색어를 편집한다. 한글 조합 중 Return은 편집기가 처리하고, 확정 뒤 Return·아래 방향키는 결과 선택에 사용한다. [탭별 패널 가이드](../Codex/tool-panels.md)
+
 ## 화면별 기준
 
 | 화면 | 디자인 결정 | macOS 구현과 남은 차이 |

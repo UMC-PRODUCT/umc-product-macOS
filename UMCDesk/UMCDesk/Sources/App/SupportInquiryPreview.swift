@@ -186,6 +186,7 @@ struct SupportInquiryPreview: View {
 
                     }
                 }.onAppear {
+                    if isOperator { selectTicket(nil) }
                     if let highlightedID {
                         reader.scrollTo(highlightedID)
                         focusedTicket = highlightedID

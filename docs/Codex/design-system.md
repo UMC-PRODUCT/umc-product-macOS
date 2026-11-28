@@ -1,7 +1,7 @@
 # 디자인 시스템 + 성능 최적화
 
 > 기준 Figma는 [UMC Mac OS](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/UMC-Mac-OS)다.
-> 이 문서의 구현 값은 2026-10-13 저장소 기준이며 최신 Figma Variables를 다시 읽었다는 뜻은 아니다.
+> 별도 확정일이 없는 구현 값은 2026-10-13 저장소 기준이며 최신 Figma Variables를 다시 읽었다는 뜻은 아니다.
 > 규약은 [AGENTS.md](../../AGENTS.md), API 참고 자료는 [Apple 인덱스](apple-frameworks/INDEX.md)를 따른다.
 
 - 작성자: 제옹(euijjang97)
@@ -28,6 +28,31 @@ Figma 동기화 작업에서는 `UMC Color`의 Light·Dark 값뿐 아니라 노�
 모드 상속을 확인한다. Primitive도 모드마다 바뀔 수 있으므로 고정 색상의 외부 브랜드에 바로
 쓰지 않는다. 인증 `Login/Left Panel`은 화면이 Dark여도 Light를 유지한다. 실제 AuthView도
 브랜드 패널에 `.environment(\.colorScheme, .light)`를 적용한다.
+
+## 우측 상단 도구 버튼과 패널
+
+2026-11-28 확정. 실데이터 화면, 데이터 미리보기의 같은 탭, 매칭 현황 별도 창에 적용한다.
+
+- **열기 버튼**은 활성 작업면 오른쪽 위에 둔다. 클릭 영역은 32×28pt, 아이콘은
+  `slider.horizontal.3` 16pt Medium이다. 아이콘과 상태 배경은 제목 막대의
+  `NSColor.labelColor`를 따른다. 밝은 본문에 어두운 제목 막대를 쓰는 조합도 동일하다.
+- **상태 배경**은 지름 최대 28pt인 원 하나다. 기본은 투명하고 활성 창의 호버는 10%,
+  열림은 16%, 누름은 22% 불투명도로 그린다. 상태가 겹치면 누름, 열림, 호버 순으로 적용한다.
+  활성 창에서 키보드 포커스를 받으면 2pt `NSColor.keyboardFocusIndicatorColor` 링을 그린다.
+- **패널**은 버튼 아래 활성 작업면의 우측 상단에 상단·우측 여백 16pt로 정렬한다.
+  Light와 Dark 모두 불투명한 표면에 모서리 16pt, 테두리 1pt를 적용한다. 기본 폭은 최대
+  300pt, 넓은 폭은 최대 390pt다. 탭별 검색·주 행동·필터·명령의 순서, 그룹 배치,
+  선택·빈 상태와 권한에 따른 노출 조건은 [탭별 상세 설계](<../specs/도구패널_탭별 기능과 우측 상단 배치_설계.md>)를 따른다.
+
+**변경 기준**은 사용자가 해당 버튼 또는 패널의 변경을 직접 지시하는 경우다. 공통 리디자인,
+디자인 시스템 동기화, 코드 리팩터링 중에도 위 기준과 탭별 배치를 유지한다. 직접 지시가
+있으면 지정된 범위에서 앱 구현·Figma 원본·프로젝트 규정을 함께 갱신한다.
+
+[Figma 버튼 컴포넌트](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1212-60529) ·
+[Figma 적용 예시](https://www.figma.com/design/kM8a1siXgusAVRRgyUZ15U/?node-id=1212-23953) ·
+[공통 Swift 구현](../../UMCDesk/Core/UIComponents/Sources/UMCTabTools.swift)
+
+[탭별 패널 사용 가이드](tool-panels.md) · [검색·폼 텍스트 필드 가이드](text-fields.md)
 
 ## Typography
 

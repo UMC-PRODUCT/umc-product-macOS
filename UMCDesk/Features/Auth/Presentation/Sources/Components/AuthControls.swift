@@ -7,6 +7,7 @@
 
 import UMCFoundation
 import CoreDesignSystem
+import CoreUIComponents
 import SwiftUI
 
 enum AuthButtonKind {
@@ -130,6 +131,7 @@ struct AuthTextField: View {
                     }
                 }
                 .textFieldStyle(.plain)
+                .focusEffectDisabled()
                 .umcTypography(.title3Regular)
                 .foregroundStyle(isDisabled ? UMCColor.Semantic.textDisabled :
                     UMCColor.Semantic.textNeutralDefault)
@@ -166,30 +168,16 @@ struct AuthTextField: View {
                     .accessibilityLabel(AppLocalization.string("\(title) 지우기"))
                 }
             }
-            .padding(.leading, UMCSpacing.value16)
-            .padding(.trailing, UMCSpacing.value12)
-            .frame(minHeight: 50)
-            .background(
-                isDisabled ? UMCColor.Semantic.fillNeutralDisabled :
-                    UMCColor.Custom.backgroundSurfaceWhite,
-                in: .rect(cornerRadius: UMCRadius.value12)
+            .padding(.leading, UMCSpacing.value4)
+            .umcInputField(
+                isFocused: focus.wrappedValue == field, isInvalid: isInvalid, minHeight: 50
             )
-            .overlay {
-                RoundedRectangle(cornerRadius: UMCRadius.value12)
-                    .strokeBorder(borderColor, lineWidth: 1)
-            }
+            .disabled(isDisabled)
         }
     }
 
     private var prompt: Text {
         Text(placeholder).foregroundColor(UMCColor.Semantic.textPlaceholder)
-    }
-
-    private var borderColor: Color {
-        if isDisabled { return UMCColor.Semantic.borderNeutralMedium300 }
-        if isInvalid { return UMCColor.Semantic.borderErrorStrong500 }
-        if focus.wrappedValue == field { return UMCColor.Semantic.borderPrimaryStrong500 }
-        return UMCColor.Semantic.borderNeutralMedium300
     }
 }
 

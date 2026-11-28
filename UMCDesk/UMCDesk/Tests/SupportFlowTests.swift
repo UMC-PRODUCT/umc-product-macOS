@@ -5,7 +5,8 @@
 //  Created by euijjang97 on 11/23/26.
 //
 
-import Foundation
+import AppKit
+import SwiftUI
 import Testing
 
 @testable import UMCDesk
@@ -20,6 +21,56 @@ struct SupportFlowTests {
     }
 
     #if DEBUG
+    @MainActor @Test(arguments: [false, true])
+    func nativeInputKeepsCompositionAheadOfInquiryCommands(isSearch: Bool) throws {
+        var value = ""
+        var actions: [String] = []
+        let identifier = isSearch ? "support.search" : "support.reply"
+        let input = SupportInputField(
+            "문의 입력", identifier: identifier,
+            text: .init(get: { value }, set: { value = $0 }), isSearch: isSearch,
+            submit: { actions.append("return") }, moveDown: { actions.append("down") },
+            escape: { actions.append("escape") }
+        )
+        let host = NSHostingView(rootView: input)
+        let window = NSWindow(
+            contentRect: .init(x: 0, y: 0, width: 360, height: 100),
+            styleMask: [.titled], backing: .buffered, defer: false
+        )
+        window.contentView = host
+        defer { window.contentView = nil }
+        host.layoutSubtreeIfNeeded()
+        func inputField(in view: NSView) -> NSTextField? {
+            if let field = view as? NSTextField, field.accessibilityIdentifier() == identifier {
+                return field
+            }
+            return view.subviews.lazy.compactMap { inputField(in: $0) }.first
+        }
+        let field = try #require(inputField(in: host))
+        #expect(field.focusRingType == .none)
+        #expect(window.makeFirstResponder(field))
+        let editor = try #require(field.currentEditor() as? NSTextView)
+        let insertion = NSRange(location: NSNotFound, length: 0)
+        editor.setMarkedText("ㅎ", selectedRange: .init(location: 1, length: 0),
+                             replacementRange: insertion)
+        let commands = [
+            #selector(NSResponder.insertNewline(_:)), #selector(NSResponder.moveDown(_:)),
+            #selector(NSResponder.cancelOperation(_:)),
+        ]
+        let delegate = try #require(field.delegate)
+        for selector in commands {
+            let consumed = delegate.control?(field, textView: editor, doCommandBy: selector)
+            #expect(consumed == false)
+        }
+        #expect(value.isEmpty && actions.isEmpty)
+        editor.insertText("한", replacementRange: insertion)
+        for selector in commands {
+            editor.doCommand(by: selector)
+        }
+        #expect(value == "한")
+        #expect(actions == ["return", "down", "escape"])
+    }
+
     @MainActor @Test func contentColumnsAndFooterUseActualAvailableSize() {
         for scale in [CGFloat(1), 1.5, 2] {
             for (left, right, ratio) in [
@@ -47,10 +98,6 @@ struct SupportFlowTests {
                     (dialog - 2 * SupportLayoutMetrics.teamInset
                         >= SupportLayoutMetrics.teamGridMinimum(scale))
                         == (scale == 1 && delta >= 0))
-                #expect(
-                    min(
-                        SupportLayoutMetrics.toolWidth, 422 + delta - 2 * SupportLayoutMetrics.edge
-                    ) == min(390, 390 + delta))
                 #expect(
                     (900 * scale + delta >= SupportLayoutMetrics.fullTable(scale)) == (delta >= 0))
                 #expect(

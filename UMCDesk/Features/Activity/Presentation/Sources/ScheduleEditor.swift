@@ -53,6 +53,7 @@ struct ScheduleEditor: View {
             Form {
                 Section("기본 정보") {
                     TextField("일정명", text: $title)
+                        .umcInputField()
                     let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
                     if trimmed.isEmpty || trimmed.count > 100 {
                         Text(AppLocalization.string("일정명은 앞뒤 공백을 제외하고 1~100자로 입력해 주세요."))
@@ -82,6 +83,7 @@ struct ScheduleEditor: View {
                     }.pickerStyle(.segmented)
                     if onsite {
                         TextField("장소명", text: $venue)
+                            .umcInputField()
                         if venue.trimmingCharacters(in: .whitespaces).isEmpty || venue.count > 100
                         {
                             Text(AppLocalization.string("장소명은 공백만 입력할 수 없으며 원문 100자 이하여야 해요."))
@@ -144,7 +146,7 @@ struct ScheduleEditor: View {
                             Button("제외") { selected.removeAll { $0.id == member.id } }
                         }
                     }
-                    TextField("이름으로 검색", text: $keyword)
+                    UMCSearchField(AppLocalization.string("이름으로 검색"), text: $keyword)
                     if isSearching { ProgressView().controlSize(.small) }
                     if let searchError {
                         ActivityLoadMessage(section: "검색 결과", message: searchError)

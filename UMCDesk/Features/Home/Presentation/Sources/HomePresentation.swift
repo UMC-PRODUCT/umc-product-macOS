@@ -5,6 +5,7 @@
 //
 
 import CoreDesignSystem
+import CoreUIComponents
 import HomeDomain
 import SwiftUI
 import UMCFoundation
@@ -72,67 +73,68 @@ final class HomeViewModel {
 
 public struct HomeView: View {
     @State private var model: HomeViewModel
-    @State private var showsArcade = false
-    @State private var selectedGame: MiniGame?
     @State private var reload = UUID()
-    @State private var records = GameRecords()
     @Environment(\.colorScheme) private var scheme
     @Environment(\.colorSchemeContrast) private var contrast
     @State private var wideHero = false
     @State private var narrowPage = false
     private var paper: DeskPaper { DeskPaper(dark: scheme == .dark) }
-    private let defaults: UserDefaults
-    private let memberID: String?
     private let onOpen: ((HomeDestination) -> Void)?
 
     public init(
-        repository: any HomeRepository, memberID: String? = nil,
-        defaults: UserDefaults = .standard,
+        repository: any HomeRepository,
         onOpen: ((HomeDestination) -> Void)? = nil
     ) {
         _model = State(initialValue: HomeViewModel(repository))
-        self.defaults = defaults
-        self.memberID = memberID
         self.onOpen = onOpen
     }
 
-    var recordStore: HomeGameRecordStore {
-        HomeGameRecordStore(defaults: defaults, memberID: memberID ?? model.profile?.id)
-    }
-
     public var body: some View {
-        Group {
-            if let selectedGame {
-                GameSessionView(
-                    game: selectedGame, records: records, record: save,
-                    close: { self.selectedGame = nil })
-            } else {
-                ScrollView {
-                    VStack(alignment: .leading, spacing: UMCSpacing.value24) {
-                        homeHeader
-                        workSummary
-                        arcadeHeader
-                        if showsArcade { arcade }
-                    }
-                    .frame(maxWidth: 1120)
-                    .padding(narrowPage ? UMCSpacing.value20 : UMCSpacing.value32)
-                    .frame(maxWidth: .infinity)
-                    .transformEnvironment(\.umcFontDesign) { design in
-                        if design == nil { design = .default }
-                    }
-                }
-                .onGeometryChange(for: Bool.self) { $0.size.width < 684 } action: {
-                    narrowPage = $0
-                }
+        ScrollView {
+            VStack(alignment: .leading, spacing: UMCSpacing.value24) {
+                homeHeader
+                workSummary
+            }
+            .frame(maxWidth: 1120)
+            .padding(narrowPage ? UMCSpacing.value20 : UMCSpacing.value32)
+            .frame(maxWidth: .infinity)
+            .transformEnvironment(\.umcFontDesign) { design in
+                if design == nil { design = .default }
             }
         }
+        .umcTabTools(AppLocalization.string("홈 도구")) { dismiss in
+            if let onOpen {
+                if schedule != nil {
+                    Button(AppLocalization.string("일정 보기"), systemImage: "calendar") {
+                        dismiss()
+                        onOpen(.activity)
+                    }
+                }
+                if case .loaded(.some) = model.notice {
+                    Button(AppLocalization.string("공지 보기"), systemImage: "megaphone") {
+                        dismiss()
+                        onOpen(.notice)
+                    }
+                }
+                if case .loaded(.some) = model.project {
+                    Button(AppLocalization.string("프로젝트 보기"), systemImage: "folder") {
+                        dismiss()
+                        onOpen(.project)
+                    }
+                }
+            }
+            Button(AppLocalization.string("새로고침"), systemImage: "arrow.clockwise") {
+                dismiss()
+                reload = UUID()
+            }
+        }
+        .onGeometryChange(for: Bool.self) { $0.size.width < 684 } action: {
+            narrowPage = $0
+        }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(selectedGame == nil ? paper.background : UMCColor.Custom.backgroundSurface)
+        .background(paper.background)
         .tint(UMCColor.Semantic.textBrandDefault)
         .task(id: reload) { await model.load() }
-        .onChange(of: recordStore, initial: true) { _, store in
-            records = store.load()
-        }
     }
 
     private var homeHeader: some View {
@@ -297,108 +299,5 @@ public struct HomeView: View {
                     .strokeBorder(.primary.opacity(contrast == .increased ? 0.55 : 0.13))
             }
             .shadow(color: .black.opacity(0.07), radius: 3, y: 2)
-    }
-
-    private var arcadeHeader: some View {
-        HStack(spacing: UMCSpacing.value16) {
-            Image("desk-scene", bundle: .module)
-                .resizable().aspectRatio(contentMode: .fit)
-                .frame(maxWidth: narrowPage ? 110 : 215)
-                .clipShape(.rect(cornerRadius: 9))
-                .accessibilityHidden(true)
-            GameBoard(round: MiniGameRound(game: .jump), preview: true, surface: paper.panel)
-                .aspectRatio(100.0 / 60, contentMode: .fit)
-                .frame(width: 48, height: 48)
-                .accessibilityHidden(true)
-            Text("잠깐, 한 판?").umcTypography(.title2Bold)
-            Spacer(minLength: 0)
-            Button {
-                showsArcade.toggle()
-            } label: {
-                HStack(spacing: UMCSpacing.value4) {
-                    Text(showsArcade ? "게임 접기" : "게임 선택")
-                    Image(systemName: showsArcade ? "chevron.up" : "chevron.down")
-                }
-                .umcTypography(.headlineBold)
-                .foregroundStyle(paper.buttonText)
-                .padding(.horizontal, UMCSpacing.value12)
-                .frame(minHeight: 32)
-                .background(paper.button, in: .rect(cornerRadius: 8))
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel(showsArcade ? "게임 접기" : "게임 선택")
-            .accessibilityValue(showsArcade ? "펼침" : "접힘")
-        }
-        .padding(.horizontal, UMCSpacing.value16)
-        .padding(.vertical, UMCSpacing.value12)
-        .frame(minHeight: 76)
-        .background { panelSurface }
-    }
-
-    private var arcade: some View {
-        VStack(alignment: .leading, spacing: UMCSpacing.value16) {
-            HStack(alignment: .top, spacing: UMCSpacing.value16) {
-                ForEach(MiniGame.allCases) { game in gameCard(game) }
-            }
-            Text("나의 기록").umcTypography(.headlineBold)
-            HStack(alignment: .top, spacing: 20) {
-                ForEach(MiniGame.allCases) { game in
-                    let total = records.totals[game.rawValue, default: 0]
-                    let goal = [500, 1500, 3000].first { $0 > total }
-                    VStack(alignment: .leading) {
-                        Text("\(game.title) · 누적 \(total)점").umcTypography(
-                            .headlineBold)
-                        ProgressView(
-                            value: Double(min(total, goal ?? 3000)),
-                            total: Double(goal ?? 3000))
-                        Text(goal.map { "다음 목표 \($0)점" } ?? "3단계 달성")
-                            .umcTypography(.calloutRegular).foregroundStyle(.secondary)
-                    }.frame(maxWidth: .infinity, alignment: .leading)
-                }
-            }
-            VStack(alignment: .leading, spacing: 8) {
-                Text("최근 플레이").umcTypography(.headlineBold)
-                Text(
-                    records.recent.isEmpty
-                        ? "아직 플레이 기록이 없어요"
-                        : records.recent.joined(separator: "   /   ")
-                )
-                .foregroundStyle(.secondary)
-            }
-        }
-    }
-
-    private func gameCard(_ game: MiniGame) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text(game.title).umcTypography(.headlineBold)
-            Text(game.summary).umcTypography(.calloutRegular).foregroundStyle(.secondary)
-            GameBoard(round: MiniGameRound(game: game), preview: true)
-                .frame(height: 64).clipShape(.rect(cornerRadius: 8))
-            Text("\(game.controls) · 최고 \(records.best[game.rawValue, default: 0])점")
-                .umcTypography(.calloutRegular).foregroundStyle(.secondary)
-            Button {
-                selectedGame = game
-            } label: {
-                Text("한 판 하기").frame(maxWidth: .infinity)
-            }
-            .buttonStyle(.borderedProminent).accessibilityLabel(game.title + " 한 판 하기")
-        }
-        .padding(18)
-        .background(UMCColor.Custom.backgroundSurfaceGreyWeaker, in: .rect(cornerRadius: 12))
-    }
-
-    public static func seedPreviewGameRecords(in defaults: UserDefaults, memberID: String) {
-        var records = GameRecords()
-        let rounds: [(MiniGame, Int)] = [
-            (.jump, 200), (.tower, 350), (.bricks, 450),
-            (.jump, 400), (.bricks, 750), (.tower, 500)
-        ]
-        for (game, score) in rounds { records.record(game, score: score) }
-        HomeGameRecordStore(defaults: defaults, memberID: memberID).save(records)
-    }
-
-    private func save(_ game: MiniGame, score: Int) {
-        records.record(game, score: score)
-        recordStore.save(records)
     }
 }

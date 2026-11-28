@@ -162,9 +162,6 @@ struct SupportTicketDetail: View {
                         identifier: "support.reply", text: $replyDraft.input.text, focusRequest: inputRequest,
                         submit: send, escape: closeInnermost
                     )
-                    .frame(minHeight: 28 * scale).padding(12)
-                    .background(
-                        UMCColor.Custom.backgroundSurfaceWhite, in: .rect(cornerRadius: 12))
                     HStack {
                         Button {
                             replyDraft.input.attachment.toggle()

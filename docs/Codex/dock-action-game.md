@@ -5,16 +5,18 @@
 - 대상: UMC Desk 홈 아케이드 · Mac · 1인칭 3D 웨이브 액션
 - 상태: 첫 구역 설계 원본. 구현 빌드, 플레이 영상, 성능 실측은 후속 구현에서 채운다.
 
+2026-11-28에 기존 홈 게임 **블록 점프·벽돌 깨기·타이밍 탑 쌓기**를 제거하기로 했다. 이 변경을 적용한 홈에서는 게임 선택 영역을 숨기고 이전 회원별 기록은 그대로 둔다. 〈소인이 찍겠습니다!〉의 첫 부두는 별도 PR에서 구현 중이다. 〈바람 접기〉는 3인칭 글라이딩 후보, 〈너울 한 술〉은 3인칭 보트 레이싱 후보다. [첫 부두 구현 PR #154](https://github.com/UMC-PRODUCT/umc-product-macOS/pull/154)
+
 종이배의 마지막 우편물이 부두에 묶였다. 플레이어는 우체부의 커다란 인장으로 접힌 종이 정령을 펴고, 부두 한복판의 소인기를 깨운다. 한 판을 마친 사람이 **어느 길로 피했고, 고른 인장이 다음 파동을 어떻게 바꿨는지** 이야기할 수 있어야 한다.
 
 ## 홈에서 시작하는 한 판
 
-| 현재 코드에서 확인한 동작 | 부두 게임 연결 기준 |
+| 설계 당시 코드(c4c1447)에서 확인한 동작 | 부두 게임 연결 기준 |
 | --- | --- |
-| 앱의 홈 분기가 회원 ID와 저장소를 전달한다. [앱 진입점](../../UMCDesk/UMCDesk/Sources/App/UMCDeskApp.swift) | 홈의 기존 세 카드 중 한 자리에 부두 카드를 배치한다. 어떤 기존 자리를 교체할지는 통합 시 결정한다. |
-| ‘잠깐, 한 판?’에서 ‘한 판 하기’를 누르면 선택한 게임 세션이 열린다. 홈은 최고·누적 점수와 최근 세 판을 보여 준다. [홈과 기록 반영](../../UMCDesk/Features/Home/Presentation/Sources/HomePresentation.swift) | 카드에는 부두 실루엣, 한 줄 목표, 조작, 최고 기록을 싣는다. 세션을 나가면 이 카드로 키보드 포커스를 돌려준다. |
-| 현재 열거형은 jump, bricks, tower이며 고정 논리 좌표로 동작한다. 기존 보드에는 일시 정지·재시작·종료 처리가 있다. [라운드](../../UMCDesk/Features/Home/Domain/Sources/MiniGame.swift) · [세션](../../UMCDesk/Features/Home/Presentation/Sources/GameBoard.swift) | 새 3D 장면은 자체 시계와 입력 상태를 갖고 홈에 종료 결과 한 건을 돌려준다. 기존 게임 명칭은 현행 구현의 근거다. 나머지 두 자리의 최종 장르는 미정이다. |
-| UserDefaults에 회원별 최고·누적·최근 기록을 보관한다. 회원 ID가 없으면 저장을 건너뛴다. [기록 저장소](../../UMCDesk/Features/Home/Presentation/Sources/HomeGameRecordStore.swift) | 새 게임에는 고유 기록 키를 준다. 이전 게임 점수는 원래 키에 보존한다. 오프라인에서도 한 판을 마치며 회원 전환 시 이전 회원의 결과를 새 회원에게 쓰지 않는다. |
+| 앱의 홈 분기가 회원 ID와 저장소를 전달한다. [앱 진입점](https://github.com/UMC-PRODUCT/umc-product-macOS/blob/c4c1447cac0d98c22ca428ff1438bb62b45deaed/UMCDesk/UMCDesk/Sources/App/UMCDeskApp.swift) | 첫 부두를 앱에 통합할 때 홈에 실행 카드를 배치한다. |
+| ‘잠깐, 한 판?’에서 ‘한 판 하기’를 누르면 선택한 게임 세션이 열린다. 홈은 최고·누적 점수와 최근 세 판을 보여 준다. [홈과 기록 반영](https://github.com/UMC-PRODUCT/umc-product-macOS/blob/c4c1447cac0d98c22ca428ff1438bb62b45deaed/UMCDesk/Features/Home/Presentation/Sources/HomePresentation.swift) | 카드에는 부두 실루엣, 한 줄 목표, 조작, 최고 기록을 싣는다. 세션을 나가면 이 카드로 키보드 포커스를 돌려준다. |
+| 당시 열거형은 jump, bricks, tower이며 고정 논리 좌표로 동작한다. 기존 보드에는 일시 정지·재시작·종료 처리가 있다. [라운드](https://github.com/UMC-PRODUCT/umc-product-macOS/blob/c4c1447cac0d98c22ca428ff1438bb62b45deaed/UMCDesk/Features/Home/Domain/Sources/MiniGame.swift) · [세션](https://github.com/UMC-PRODUCT/umc-product-macOS/blob/c4c1447cac0d98c22ca428ff1438bb62b45deaed/UMCDesk/Features/Home/Presentation/Sources/GameBoard.swift) | 새 3D 장면은 자체 시계와 입력 상태를 갖고 홈에 종료 결과 한 건을 돌려준다. |
+| UserDefaults에 회원별 최고·누적·최근 기록을 보관한다. 회원 ID가 없으면 저장을 건너뛴다. [기록 저장소](https://github.com/UMC-PRODUCT/umc-product-macOS/blob/c4c1447cac0d98c22ca428ff1438bb62b45deaed/UMCDesk/Features/Home/Presentation/Sources/HomeGameRecordStore.swift) | 새 게임에는 고유 기록 키를 준다. 이전 게임 점수는 원래 키에 보존한다. 오프라인에서도 한 판을 마치며 회원 전환 시 이전 회원의 결과를 새 회원에게 쓰지 않는다. |
 
 코드 확인 기준은 [develop 커밋 c4c1447](https://github.com/UMC-PRODUCT/umc-product-macOS/commit/c4c1447cac0d98c22ca428ff1438bb62b45deaed)이다. 시각적 출발점은 요청에 명시된 흑백 카툰, 경고색, 웨이브 사이 선택, 보스의 리듬이다. 원 게시물 영상은 직접 확인하지 못했다. 부두의 평면, 인장 도구, 종이 정령, 명칭은 이 구역용 창작 설정이다. [참고 게시물](https://www.threads.com/@juyounginpark/post/DgFnlh1kjFe)
 
@@ -87,7 +89,7 @@
 | 공간·조작 | 회색 상자 부두에서 양방향 순회, Mac 마우스·트랙패드·키보드 단독으로 접수대 시작 | 세 방식 모두 이동·회전·소인·Esc·홈 복귀 가능. 포인터가 창에 갇히거나 재개 직후 시점이 튀는 경우 0건 |
 | 규칙 | 같은 출현 순서로 인장 세 가지를 각각 고르고 보스까지 진행 | 위 표의 효과를 한 판씩 재현. 선택 중 피해 0, 놓친 보스 면 재개방, 마지막 동시 판정·승패·중도 포기 기록 수 확인 |
 | 미술·음향 | 광장과 소인기를 기본/회색조/무음/동작 줄이기로 비교 | 최초 플레이어가 각 문과 안전 통로를 가리키고 보스의 열린 면을 알아본다. 실패한 위치·단서를 기록해 수정하고 같은 장면을 다시 본다. |
-| 통합·회귀 | 오프라인 홈 진입, 회원 전환, 창 최소화·복귀, 결과 재도전 반복 | 중단 전후 위치·봉인·예고 잔여시간 일치. 최근 세 판, 최고·누적, 옛 게임 기록 분리 확인. 기존 두 카드도 열고 닫아 확인 |
+| 통합·회귀 | 오프라인 홈 진입, 회원 전환, 창 최소화·복귀, 결과 재도전 반복 | 중단 전후 위치·봉인·예고 잔여시간 일치. 최근 세 판, 최고·누적, 옛 게임 기록 분리 확인. |
 | 최종 Mac 검수 | 아래 양식에 같은 빌드의 무편집 영상과 별도 프레임타임 원본 첨부 | 승리·패배·재도전, 세 능력, 접근성 설정과 성능 기준을 모두 재현. 미측정 칸이나 재현 가능한 차단 결함이 남으면 구현 완료 판정을 보류한다. |
 
 ## 실행 증빙과 프레임타임 기록표
@@ -97,7 +99,7 @@
 | 실행·시연 항목 | 검수자가 채울 값 |
 | --- | --- |
 | 재현 빌드 | 미실행 · 날짜 / 검수자 / 전체 커밋 SHA(`git rev-parse HEAD`) / 작업 트리 변경 여부 / 앱 버전·빌드 번호 / Xcode·Tuist 버전 / 구성 |
-| 실행 경로 | 미검증 · 저장소 루트에서 최초 `make bootstrap`, 이어 `make install`, `make generate`, `make open`. Xcode에서 UMCDesk 스킴과 My Mac 선택 후 Run. 홈 → 잠깐, 한 판? → 부두 카드 → 한 판 하기. 실제 사용 명령·계정 진입 조건·설정 차이를 기록. [빌드 안내](../../UMCDesk/MAKEFILE_GUIDE.md) |
+| 실행 경로 | 미검증 · 저장소 루트에서 최초 `make bootstrap`, 이어 `make install`, `make generate`, `make open`. Xcode에서 UMCDesk 스킴과 My Mac 선택 후 Run. 첫 부두 통합 후 홈 → 부두 카드 → 한 판 하기. 실제 사용 명령·계정 진입 조건·설정 차이를 기록. [빌드 안내](../../UMCDesk/MAKEFILE_GUIDE.md) |
 | 무편집 플레이 영상 | 미촬영 · 홈에서 시작해 선택 전후, 보스, 결과, 즉시 재도전까지 같은 Mac 화면을 연속 녹화. 원본 링크와 장면별 시각 기입. 별도 패배 판 및 나머지 인장 시연 링크·시각 기입 |
 | 시연 판정 | 미검수 · 입력 장치 / 무음·회색조·동작 줄이기 조합 / 통과·실패한 장면 / 결함 링크 |
 

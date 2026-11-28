@@ -7,6 +7,7 @@
 
 import CoreDesignSystem
 import ProjectWorkspaceDomain
+import CoreUIComponents
 import SwiftUI
 
 struct WorkspaceTodoForm: View {
@@ -20,7 +21,10 @@ struct WorkspaceTodoForm: View {
             Text("할 일 추가").umcTypography(.title1Bold)
             Text("한 줄이면 충분해요. 이 프로젝트에 내 할 일로 저장됩니다.")
                 .foregroundStyle(.secondary)
-            TextField("할 일", text: $title).focused($editing)
+            TextField("할 일", text: $title)
+                .focused($editing)
+                .focusEffectDisabled()
+                .umcInputField(isFocused: editing)
             HStack {
                 Spacer()
                 Button("취소") { dismiss() }.keyboardShortcut(.cancelAction)
@@ -48,6 +52,7 @@ struct WorkspaceConnectionsForm: View {
         VStack(alignment: .leading, spacing: UMCSpacing.value16) {
             Text("연결 관리").umcTypography(.title1Bold)
             ForEach(WorkspaceResource.allCases) { resource in
+                let invalid = submitted && !valid(resource)
                 VStack(alignment: .leading, spacing: UMCSpacing.value4) {
                     Text(resource.rawValue).umcTypography(.headlineBold)
                     TextField(resource == .github ? "GitHub 저장소 링크" : "Figma 파일 링크",
@@ -55,7 +60,8 @@ struct WorkspaceConnectionsForm: View {
                                 get: { links[resource.rawValue] ?? "" },
                                 set: { links[resource.rawValue] = $0 }
                               ))
-                    if submitted && !valid(resource) {
+                    .umcInputField(isInvalid: invalid)
+                    if invalid {
                         Text(resource == .github ? "GitHub 저장소 주소를 확인하세요." :
                                 "Figma 파일 링크를 확인하세요.")
                             .foregroundStyle(UMCColor.Semantic.iconError)

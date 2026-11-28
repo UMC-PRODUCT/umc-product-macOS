@@ -106,6 +106,22 @@ struct NoticeListStateTests {
         #expect(state([entry]) == .none)
     }
 
+    @Test func noticePeriodsIncludeBothEndsAndExcludeTomorrow() throws {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = try #require(TimeZone(secondsFromGMT: 0))
+        let now = try Date.ISO8601FormatStyle().parse("2026-11-30T10:00:00Z")
+        let start = try Date.ISO8601FormatStyle().parse("2026-11-24T18:00:00Z")
+        func includes(_ period: NoticePeriod, _ day: String) -> Bool {
+            period.includes(day + "T00:00:00.123Z", start: start, end: now,
+                            now: now, calendar: calendar)
+        }
+        #expect(includes(.week, "2026-11-24") && !includes(.week, "2026-11-23"))
+        #expect(includes(.month, "2026-11-01") && !includes(.month, "2026-10-31"))
+        #expect(includes(.day, "2026-11-24") && !includes(.day, "2026-11-25"))
+        #expect(includes(.range, "2026-11-24") && includes(.range, "2026-11-30"))
+        #expect(!includes(.week, "2026-12-01"))
+    }
+
     @Test func accessibleStateDoesNotInventUnreadOrVoteDetails() throws {
         let entry = try noticeEntry(pinned: true)
         let value = entry.rowAccessibilityValue(selected: true, confirmed: true)
@@ -115,6 +131,20 @@ struct NoticeListStateTests {
         #expect(entry.vote == nil)
         #expect(!entry.rowAccessibilityValue(selected: false, confirmed: false).contains("읽음"))
         #expect(!value.contains("마감"))
+    }
+
+    @Test func resetAppearsForEachAppliedNoticeFilter() {
+        let model = NoticeBoardModel(repository: ListRepository())
+        #expect(!model.hasFilters(pinnedOnly: false))
+        #expect(model.hasFilters(pinnedOnly: true))
+        model.tab = "CENTRAL_MEMBER"
+        #expect(model.hasFilters(pinnedOnly: false))
+        model.tab = "CHALLENGER"
+        model.part = "DESIGN"
+        #expect(model.hasFilters(pinnedOnly: false))
+        model.part = nil
+        model.keyword = "회의"
+        #expect(model.hasFilters(pinnedOnly: false))
     }
 
     @Test func summaryUsesSubmittedKeywordAndHidesInapplicablePart() {

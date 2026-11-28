@@ -6,6 +6,7 @@
 //
 
 import CoreDesignSystem
+import CoreUIComponents
 import MatchingDomain
 import SwiftUI
 
@@ -14,6 +15,35 @@ struct MatchingProgressPanel: View {
     var onClose: (() -> Void)? = nil
 
     var body: some View {
+        progress
+            .frame(maxWidth: 520, maxHeight: 254)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .umcTabTools("매칭 현황 도구", inlineTrigger: onClose == nil) { dismiss in
+                if controller.isSignedIn, controller.card != nil, let open = controller.openApplications {
+                    Button("내 지원 보기", systemImage: "doc.text") {
+                        dismiss()
+                        controller.closeExpanded()
+                        open()
+                    }
+                }
+                if let open = onClose ?? controller.openExplorer {
+                    Button("프로젝트 매칭으로 이동", systemImage: "person.2") {
+                        dismiss()
+                        controller.closeExpanded()
+                        open()
+                    }
+                }
+                if controller.isSignedIn {
+                    Divider()
+                    Button("새로고침", systemImage: "arrow.clockwise") {
+                        dismiss()
+                        Task { await controller.refreshOnce() }
+                    }
+                }
+            }
+    }
+
+    private var progress: some View {
         TimelineView(.periodic(from: .now, by: 30)) { timeline in
             let stage = MatchingProgressStage(controller: controller, now: timeline.date)
             VStack(alignment: .leading, spacing: 12) {
@@ -52,13 +82,14 @@ struct MatchingProgressPanel: View {
                         }
                     }
                     Spacer()
-                    Button("내 지원 보기") {
-                        controller.closeExpanded()
-                        controller.openApplications?()
+                    if controller.isSignedIn, controller.card != nil, let open = controller.openApplications {
+                        Button("내 지원 보기") {
+                            controller.closeExpanded()
+                            open()
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .controlSize(.large)
                     }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.large)
-                    .disabled(!controller.isSignedIn)
                 }
             }
             .padding(24)

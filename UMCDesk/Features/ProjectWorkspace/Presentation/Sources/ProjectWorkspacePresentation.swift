@@ -27,6 +27,7 @@ public struct ProjectWorkspaceView: View {
     private let entry: Entry
     private let loadProjects: @Sendable () async throws -> [WorkspaceProject]
     private let loadGitHub: WorkspaceGitHubLoader?
+    private let teamContent: ((String) -> AnyView)?
     private let openMatching: (() -> Void)?
 
     public init(
@@ -34,12 +35,14 @@ public struct ProjectWorkspaceView: View {
         initialProjectID: String? = nil,
         loadProjects: @escaping @Sendable () async throws -> [WorkspaceProject],
         loadGitHub: WorkspaceGitHubLoader? = nil,
+        teamContent: ((String) -> AnyView)? = nil,
         openMatching: (() -> Void)? = nil
     ) {
         entry = Entry(accountID: accountID, initialProjectID: initialProjectID)
         self.loadProjects = loadProjects
         self.loadGitHub = loadGitHub
         self.openMatching = openMatching
+        self.teamContent = teamContent
     }
 
     // MARK: - Body
@@ -53,7 +56,7 @@ public struct ProjectWorkspaceView: View {
         }
         return WorkspaceDirectory(
             accountID: entry.accountID, loadProjects: loadProjects,
-            loadGitHub: loadGitHub, openMatching: openMatching,
+            loadGitHub: loadGitHub, openMatching: openMatching, teamContent: teamContent,
             directory: WorkspaceDirectoryModel(initialProjectID: projectID),
             selectProject: windowDetail.map { binding in
                 { id in
@@ -71,9 +74,11 @@ struct WorkspaceDirectory: View {
     let loadProjects: @Sendable () async throws -> [WorkspaceProject]
     let loadGitHub: WorkspaceGitHubLoader?
     let openMatching: (() -> Void)?
+    let teamContent: ((String) -> AnyView)?
 
     private let selectProject: ((String?) -> Void)?
     @AppStorage private var recentProjectID: String
+    @State private var listPosition = ScrollPosition()
     @State private var directory: WorkspaceDirectoryModel
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.appearsActive) private var appearsActive
@@ -81,6 +86,7 @@ struct WorkspaceDirectory: View {
     init(
         accountID: String, loadProjects: @escaping @Sendable () async throws -> [WorkspaceProject],
         loadGitHub: WorkspaceGitHubLoader?, openMatching: (() -> Void)?,
+        teamContent: ((String) -> AnyView)? = nil,
         directory: WorkspaceDirectoryModel, selectProject: ((String?) -> Void)? = nil
     ) {
         self.selectProject = selectProject
@@ -89,6 +95,7 @@ struct WorkspaceDirectory: View {
         self.loadProjects = loadProjects
         self.loadGitHub = loadGitHub
         self.openMatching = openMatching
+        self.teamContent = teamContent
         let key = "umc.project-workspace.recent." + Data(accountID.utf8).base64EncodedString()
         _recentProjectID = AppStorage(wrappedValue: "", key)
     }
@@ -102,7 +109,7 @@ struct WorkspaceDirectory: View {
             if let selected = directory.selected {
                 ProjectWorkspaceDetail(
                     project: selected, accountID: accountID, sheet: $directory.sheet,
-                    loadGitHub: loadGitHub, openMatching: openMatching,
+                    loadGitHub: loadGitHub, teamContent: teamContent,
                     membershipFailed: directory.failed,
                     refreshMembership: directory.requestRefresh, close: {
                         if let selectProject { selectProject(nil) } else { directory.close() }
@@ -173,21 +180,32 @@ struct WorkspaceDirectory: View {
                     .padding(UMCSpacing.value32)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                .umcTabTools("프로젝트 도구", description: "참여 중인 프로젝트와 작업을 빠르게 찾으세요.") { dismiss in
-                    Button("프로젝트 목록", action: dismiss)
+                .scrollPosition($listPosition)
+                .umcTabTools("프로젝트 도구") { dismiss in
                     if let openMatching {
-                        Button("매칭에서 찾기") {
+                        Button("매칭에서 프로젝트 찾기", systemImage: "magnifyingglass") {
                             dismiss()
                             openMatching()
+                        }.buttonStyle(UMCToolPrimaryButtonStyle())
+                        Divider()
+                    }
+                    if !directory.failed, !directory.isOpening,
+                       let projects = directory.projects, !projects.isEmpty {
+                        UMCToolGroupHeading("내 프로젝트")
+                        Button("프로젝트 목록", systemImage: "folder") {
+                            dismiss()
+                            listPosition.scrollTo(edge: .top)
+                        }
+                        if let recent = projects.first(where: { $0.id == recentProjectID }) {
+                            Button("이어서 작업 · \(recent.name)", systemImage: "clock") {
+                                dismiss()
+                                open(recent)
+                            }
                         }
                     }
-                    if let recent = directory.projects?.first(where: {
-                        $0.id == recentProjectID
-                    }) {
-                        Button("이어서 작업 · \(recent.name)") {
-                            dismiss()
-                            open(recent)
-                        }
+                    Button("참여 상태 새로고침", systemImage: "arrow.clockwise") {
+                        dismiss()
+                        directory.requestRefresh()
                     }
                 }
             }

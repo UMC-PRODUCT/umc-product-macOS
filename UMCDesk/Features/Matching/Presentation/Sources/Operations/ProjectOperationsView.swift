@@ -6,6 +6,7 @@
 //
 
 import CoreDesignSystem
+import CoreUIComponents
 import MatchingDomain
 import SwiftUI
 import UniformTypeIdentifiers
@@ -19,11 +20,13 @@ private enum ProjectPage: String, CaseIterable {
     case state = "상태 관리"
 }
 
-struct ProjectOperationsView: View {
+struct ProjectOperationsView<Header: View>: View {
     let service: any MatchingUseCase
     let projectId: String
     var status: String?
+    @ViewBuilder let header: () -> Header
     let close: () -> Void
+    @State private var details = MatchingRequest<(MatchingProject, [ProjectPermission: MatchingCapability])>()
     @State private var page = ProjectPage.posting
     @State private var inspectingDraft = false
     @State private var revision = 0
@@ -33,74 +36,103 @@ struct ProjectOperationsView: View {
     @State private var failure: String?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: UMCSpacing.value16) {
-            Button("관리 프로젝트", systemImage: "chevron.left", action: close)
-            OperationsLoad(key: revision, load: {
-                async let project = service.project(id: projectId)
-                async let capabilities = service.permissions(projectId: projectId)
-                return try await (project, capabilities)
-            }) { project, permissions in
-                let context = ProjectContext(project: project, status: status, permissions: permissions,
-                                             service: service, confirm: { pending = $0 })
-                if status == "PENDING_REVIEW", inspectingDraft || page != .posting {
-                    Button("공개 검토로", systemImage: "chevron.left") {
-                        inspectingDraft = false
-                        page = .posting
+        ScrollView {
+            VStack(alignment: .leading, spacing: UMCSpacing.value16) {
+                Text("내 프로젝트").umcTypography(.largeTitle3Bold)
+                    .accessibilityAddTraits(.isHeader)
+                header()
+                Divider()
+                Button("관리 프로젝트", systemImage: "chevron.left", action: close)
+                MatchingRequestView(request: details, retry: { revision += 1 }) { project, permissions in
+                    let context = ProjectContext(project: project, status: status, permissions: permissions,
+                                                 service: service, confirm: { pending = $0 })
+                    if status == "PENDING_REVIEW", inspectingDraft || page != .posting {
+                        Button("공개 검토로", systemImage: "chevron.left") {
+                            inspectingDraft = false
+                            page = .posting
+                        }
+                    }
+                    Text(project.name).umcTypography(.title1Bold)
+                    Picker("관리 도구", selection: $page) {
+                        ForEach(ProjectPage.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+                    }.pickerStyle(.segmented)
+                    switch page {
+                    case .posting where status == "PENDING_REVIEW" && !inspectingDraft:
+                        ProjectPublicationReview(
+                            context: context,
+                            inspectPosting: { inspectingDraft = true },
+                            inspectForm: { page = .form }
+                        )
+                    case .posting: ProjectPostingEditor(context: context)
+                    case .state: ProjectStatusEditor(context: context)
+                    case .form:
+                        if context.allows(.formRead) || context.allows(.formCreate) {
+                            OperationsLoad(key: project.id, load: {
+                                if project.applicationFormId == nil {
+                                    return EditableMatchingForm(title: nil, description: nil, sections: [])
+                                }
+                                return try await service.editableForm(projectId: projectId)
+                            }) { MatchingFormEditor(context: context, form: $0) }
+                        } else { context.restricted(.formRead) }
+                    case .review:
+                        if context.allows(.applicants) { ProjectReviewView(context: context) }
+                        else { context.restricted(.applicants) }
+                    case .team:
+                        if context.allows(.team) { ProjectTeamView(context: context) }
+                        else { context.restricted(.team) }
+                    case .statistics:
+                        if context.allows(.statistics) {
+                            OperationsLoad(key: project.id, load: {
+                                try await service.applicationStatistics(projectId: projectId)
+                            }) { stats in
+                                VStack(alignment: .leading, spacing: UMCSpacing.value16) {
+                                    if let type = stats.matchingType {
+                                        MatchingBadge(text: type == "PLAN_DESIGN" ? "기획–디자인" :
+                                                    type == "PLAN_DEVELOPER" ? "기획–개발자" : type)
+                                    }
+                                    Text("학교별 지원 현황").umcTypography(.title3Bold)
+                                    ForEach(stats.schoolApplicationStatistics, id: \.schoolId) { school in
+                                        Text(school.schoolName + " · 대상 " + school.totalMemberCount + "명")
+                                        phaseCounts(school.rounds)
+                                    }
+                                    Divider()
+                                    Text("프로젝트별 지원 현황").umcTypography(.title3Bold)
+                                    ForEach(stats.projectRoundStatistics, id: \.projectId) { project in
+                                        Text(project.projectName)
+                                        phaseCounts(project.rounds)
+                                    }
+                                }.matchingPanel()
+                            }
+                        } else { context.restricted(.statistics) }
                     }
                 }
-                Text(project.name).umcTypography(.title1Bold)
-                Picker("관리 도구", selection: $page) {
-                    ForEach(ProjectPage.allCases, id: \.self) { Text($0.rawValue).tag($0) }
-                }.pickerStyle(.segmented)
-                switch page {
-                case .posting where status == "PENDING_REVIEW" && !inspectingDraft:
-                    ProjectPublicationReview(
-                        context: context,
-                        inspectPosting: { inspectingDraft = true },
-                        inspectForm: { page = .form }
-                    )
-                case .posting: ProjectPostingEditor(context: context)
-                case .state: ProjectStatusEditor(context: context)
-                case .form:
-                    if context.allows(.formRead) || context.allows(.formCreate) {
-                        OperationsLoad(key: project.id, load: {
-                            if project.applicationFormId == nil {
-                                return EditableMatchingForm(title: nil, description: nil, sections: [])
-                            }
-                            return try await service.editableForm(projectId: projectId)
-                        }) { MatchingFormEditor(context: context, form: $0) }
-                    } else { context.restricted(.formRead) }
-                case .review:
-                    if context.allows(.applicants) { ProjectReviewView(context: context) }
-                    else { context.restricted(.applicants) }
-                case .team:
-                    if context.allows(.team) { ProjectTeamView(context: context) }
-                    else { context.restricted(.team) }
-                case .statistics:
-                    if context.allows(.statistics) {
-                        OperationsLoad(key: project.id, load: {
-                            try await service.applicationStatistics(projectId: projectId)
-                        }) { stats in
-                            VStack(alignment: .leading, spacing: UMCSpacing.value16) {
-                                if let type = stats.matchingType {
-                                    MatchingBadge(text: type == "PLAN_DESIGN" ? "기획–디자인" :
-                                                type == "PLAN_DEVELOPER" ? "기획–개발자" : type)
-                                }
-                                Text("학교별 지원 현황").umcTypography(.title3Bold)
-                                ForEach(stats.schoolApplicationStatistics, id: \.schoolId) { school in
-                                    Text(school.schoolName + " · 대상 " + school.totalMemberCount + "명")
-                                    phaseCounts(school.rounds)
-                                }
-                                Divider()
-                                Text("프로젝트별 지원 현황").umcTypography(.title3Bold)
-                                ForEach(stats.projectRoundStatistics, id: \.projectId) { project in
-                                    Text(project.projectName)
-                                    phaseCounts(project.rounds)
-                                }
-                            }.matchingPanel()
-                        }
-                    } else { context.restricted(.statistics) }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(UMCSpacing.value24)
+        }
+        .umcTabTools("매칭 도구", width: .wide) { dismiss in
+            if case .loaded(let (project, flags)) = details.phase, project.id == projectId {
+                ownerTools(flags: flags, dismiss: dismiss)
+            }
+            UMCToolGroupHeading("프로젝트 관리")
+            Button("관리 프로젝트 목록", systemImage: "folder") {
+                dismiss()
+                close()
+            }
+            if case .loaded(let (project, flags)) = details.phase, project.id == projectId {
+                if flags[.team]?.allowed == true, flags[.transfer]?.allowed == true {
+                    pageButton("소유권 양도", .team, dismiss)
                 }
+                if [.complete, .abort, .delete].contains(where: { flags[$0]?.allowed == true }) {
+                    pageButton("프로젝트 상태 관리", .state, dismiss)
+                }
+            }
+        }
+        .task(id: revision) {
+            await details.load {
+                async let project = service.project(id: projectId)
+                async let permissions = service.permissions(projectId: projectId)
+                return try await (project, permissions)
             }
         }
         .onDisappear { operationTask?.cancel() }
@@ -114,6 +146,45 @@ struct ProjectOperationsView: View {
         .alert("요청을 처리할 수 없어요", isPresented: .init(
             get: { failure != nil }, set: { if !$0 { failure = nil } }
         )) { Button("확인") { failure = nil } } message: { Text(failure ?? "") }
+    }
+
+    @ViewBuilder private func ownerTools(flags: [ProjectPermission: MatchingCapability],
+                                         dismiss: @escaping () -> Void) -> some View {
+        let canForm = flags[.formRead]?.allowed == true || flags[.formCreate]?.allowed == true
+        let canReview = flags[.publish]?.allowed == true || flags[.quota]?.allowed == true
+        if flags[.edit]?.allowed == true {
+            Button("프로젝트 공고 편집", systemImage: "pencil") {
+                dismiss()
+                inspectingDraft = true
+                page = .posting
+            }.buttonStyle(UMCToolPrimaryButtonStyle())
+            Divider()
+        }
+        if canForm || canReview {
+            UMCToolGroupHeading("모집 준비")
+            if canForm { pageButton("지원 폼", .form, dismiss) }
+            if canReview {
+                pageButton(status == "PENDING_REVIEW" ? "공개 검토 · 파트 정원" : "파트 정원",
+                           .posting, dismiss)
+            }
+            Divider()
+        }
+        if [.applicants, .team, .statistics].contains(where: { flags[$0]?.allowed == true }) {
+            UMCToolGroupHeading("선발과 팀")
+            if flags[.applicants]?.allowed == true { pageButton("지원자 심사", .review, dismiss) }
+            if flags[.team]?.allowed == true { pageButton("팀 구성 · 팀원 관리", .team, dismiss) }
+            if flags[.statistics]?.allowed == true { pageButton("지원 통계", .statistics, dismiss) }
+            Divider()
+        }
+    }
+
+    private func pageButton(_ title: String, _ target: ProjectPage,
+                            _ dismiss: @escaping () -> Void) -> some View {
+        Button(title) {
+            dismiss()
+            inspectingDraft = false
+            page = target
+        }
     }
 
     private func phaseCounts(_ rows: [ApplicationPhaseCount]) -> some View {
@@ -196,8 +267,11 @@ private struct ProjectPostingEditor: View {
             VStack(alignment: .leading, spacing: UMCSpacing.value12) {
                 Text("프로젝트 공고").umcTypography(.title3Bold)
                 TextField("프로젝트 이름", text: $name)
+                    .umcInputField()
                 TextField("소개", text: $summary, axis: .vertical)
+                    .textFieldStyle(.roundedBorder)
                 TextField("외부 소개 링크", text: $link)
+                    .umcInputField()
                 if context.allows(.edit) {
                     HStack {
                         Button("썸네일 변경") { slot = .thumbnail; choosingImage = true }
@@ -223,7 +297,6 @@ private struct ProjectPostingEditor: View {
                 context.request(slot == .thumbnail ? "썸네일을 변경할까요?" : "로고를 변경할까요?",
                                 file.lastPathComponent, .changeImage(file: file, slot: slot))
             }
-            .textFieldStyle(.roundedBorder)
             .matchingPanel()
             ProjectQuotaPanel(context: context, isPublicationReview: false)
         }
@@ -364,6 +437,7 @@ private struct ProjectStatusEditor: View {
             }
             if context.allows(.abort) {
                 TextField("중단 사유 · 최대 255자", text: $reason)
+                    .umcInputField()
                 Button("프로젝트 중단", role: .destructive) {
                     context.request("프로젝트를 중단할까요?", reason, .abort(reason: reason))
                 }.disabled(reason.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || reason.count > 255)
