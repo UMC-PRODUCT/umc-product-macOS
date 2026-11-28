@@ -8,6 +8,46 @@
 import CoreDesignSystem
 import SwiftUI
 
+extension EnvironmentValues {
+    @Entry var supportExitDecision: SupportExitGate? = nil
+}
+
+enum SupportDiscardChoice {
+    case composition, uncertainCreation, faq
+    var title: String {
+        switch self {
+        case .composition: "작성 중인 문의를 버릴까요?"
+        case .uncertainCreation: "보낸 문의의 로컬 초안을 버릴까요?"
+        case .faq: "FAQ 변경사항을 버릴까요?"
+        }
+    }
+    var explanation: String {
+        switch self {
+        case .composition: "입력한 내용과 첨부는 저장되지 않아요."
+        case .uncertainCreation: "초안을 버린 뒤에도 고객센터에서 보낸 문의의 접수 결과를 확인할 수 있어요."
+        case .faq: "마지막 저장 이후의 수정 내용이 사라져요."
+        }
+    }
+    var keep: String { self == .faq ? "계속 편집" : "계속 작성" }
+    var discard: String { self == .faq ? "변경사항 버리기" : "초안 버리기" }
+}
+
+struct SupportDiscardAlert: ViewModifier {
+    let choice: SupportDiscardChoice
+    let presented: Bool
+    let stay: () -> Void
+    let discard: () -> Void
+
+    func body(content: Content) -> some View {
+        content.alert(choice.title, isPresented: Binding(get: { presented }, set: { _ in })) {
+            Button(choice.keep, role: .cancel, action: stay)
+            Button(choice.discard, role: .destructive, action: discard).keyboardShortcut(nil)
+        } message: {
+            Text(choice.explanation)
+        }
+    }
+}
+
 enum SupportLayoutMetrics {
     static let toolWidth: CGFloat = 390
     static let edge: CGFloat = 16
@@ -187,6 +227,28 @@ struct SupportTableWidth: Layout {
     }
 }
 
+/// The trigger is in the workspace toolbar. Keep the panel inside the safe edges when enlarged.
+struct SupportToolsPlacement: Layout {
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        proposal.replacingUnspecifiedDimensions(by: .init(width: 422, height: 480))
+    }
+    func placeSubviews(
+        in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()
+    ) {
+        guard let menu = subviews.first else { return }
+        let edge = SupportLayoutMetrics.edge
+        let width = min(SupportLayoutMetrics.toolWidth, max(0, bounds.width - 2 * edge))
+        let natural = menu.sizeThatFits(.init(width: width, height: nil)).height
+        let safe = bounds.insetBy(dx: edge, dy: edge)
+        let position = SupportFieldMenuPlacement.position(
+            height: max(0, safe.height),
+            prefix: max(0, 4 - edge), field: 26, menu: natural)
+        menu.place(
+            at: .init(x: safe.maxX - width, y: safe.minY + position.menuY), anchor: .topLeading,
+            proposal: .init(width: width, height: position.menuHeight))
+    }
+}
+
 /// Positions a panel against its field in the visible processing viewport.
 /// The menu receives the larger remaining interval if neither side can fit its natural height.
 struct SupportFieldMenuPlacement: Layout {
@@ -245,6 +307,7 @@ struct SupportFieldMenuPlacement: Layout {
     struct Feedback: Identifiable {
         let id: String
         let name: String
+        let request: UUID
         var receipt: SupportPreviewTransport.Receipt
         var retry: (() -> Void)?
     }
@@ -253,22 +316,27 @@ struct SupportFieldMenuPlacement: Layout {
     var isSending: Bool { actions.contains { $0.receipt == .sending } }
     func run(
         _ name: String, scope: String = "", transport: SupportPreviewTransport, isOperator: Bool,
-        attachment: Bool = false, apply: @escaping (Bool) -> Bool,
+        attachment: Bool = false, payload: [String] = [], retrying expected: UUID? = nil,
+        apply: @escaping (Bool) -> Bool,
         success: @escaping (SupportPreviewTransport.Receipt) -> Void = { _ in }
     ) {
         let destination = SupportPreviewTransport.Key(
             scope: scope, action: name, isOperator: isOperator)
         guard !transport.blocked(destination) else { return }
+        if let expected {
+            guard transport.requests[destination] == expected,
+                transport.state(destination) == .failed
+            else { return }
+        }
         let key = scope + name
         guard !actions.contains(where: { $0.id == key && $0.receipt == .sending }) else { return }
         actions.removeAll { $0.id == key }
-        actions.append(Feedback(id: key, name: name, receipt: .sending))
-        let id =
-            transport.state(destination) == .failed
-            ? transport.requests[destination] ?? UUID() : UUID()
+        let id = expected ?? transport.requestID(for: destination, payload: payload)
+        actions.append(Feedback(id: key, name: name, request: id, receipt: .sending))
         Task { @MainActor [self] in
             let result = await transport.send(
-                id: id, key: destination, requiresOperator: isOperator,
+                id: id, key: destination, payload: payload, retrying: expected,
+                requiresOperator: isOperator,
                 hasAttachment: attachment, apply: apply)
             guard let index = actions.firstIndex(where: { $0.id == key }) else { return }
             if result == .sending {
@@ -281,7 +349,8 @@ struct SupportFieldMenuPlacement: Layout {
                 actions[index].retry = { [weak self] in
                     self?.run(
                         name, scope: scope, transport: transport, isOperator: isOperator,
-                        attachment: attachment, apply: apply, success: success)
+                        attachment: attachment, payload: payload, retrying: id, apply: apply,
+                        success: success)
                 }
             }
         }
@@ -303,9 +372,10 @@ struct SupportCommandStatus: View {
             case .failed:
                 VStack(alignment: .leading) {
                     Text(key.action + "이 반영되지 않았어요.")
-                    if let retry = command.actions.first(where: { $0.id == scope + key.action })?
-                        .retry
-                    {
+                    if let retry = command.actions.first(where: {
+                        $0.id == scope + key.action && $0.request == transport.requests[key]
+                    })?
+                    .retry {
                         Button(key.action + " 다시 시도", action: retry)
                     } else {
                         Text("입력을 확인한 뒤 " + key.action + " 동작을 다시 선택해 주세요.")

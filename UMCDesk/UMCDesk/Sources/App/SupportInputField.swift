@@ -9,7 +9,7 @@ import CoreDesignSystem
 import SwiftUI
 
 /// The active field editor consumes composition commands before inquiry navigation or submission.
-struct SupportInputField: NSViewRepresentable {
+struct SupportInputField: View {
     let label: String
     let identifier: String
     @Binding var text: String
@@ -18,8 +18,6 @@ struct SupportInputField: NSViewRepresentable {
     let submit: () -> Void
     var moveDown: (() -> Void)?
     var escape: (() -> Void)?
-    @Environment(\.umcBodyTextScale) private var scale
-    @Environment(\.umcFontFamily) private var family
 
     init(
         _ label: String, identifier: String, text: Binding<String>, focusRequest: Int = 0,
@@ -36,11 +34,35 @@ struct SupportInputField: NSViewRepresentable {
         self.escape = escape
     }
 
+    @State private var composing = false
+
+    var body: some View {
+        SupportNativeInputField(input: self, composing: $composing)
+            .overlay(alignment: .leading) {
+                if text.isEmpty && !composing {
+                    Text(label)
+                        .inquiryFont(14)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .allowsHitTesting(false)
+                        .accessibilityHidden(true)
+                }
+            }
+    }
+}
+
+private struct SupportNativeInputField: NSViewRepresentable {
+    let input: SupportInputField
+    @Binding var composing: Bool
+    @Environment(\.umcBodyTextScale) private var scale
+    @Environment(\.umcFontFamily) private var family
+
     func makeCoordinator() -> Coordinator { Coordinator(self) }
     func makeNSView(context: Context) -> NSTextField {
         let field = SupportTextControl()
         field.didFocus = { [weak coordinator = context.coordinator] in
-            Task { @MainActor in coordinator?.parent.onFocus() }
+            Task { @MainActor in coordinator?.parent.input.onFocus() }
         }
         context.coordinator.observeComposition(in: field)
         field.isBordered = false
@@ -53,22 +75,30 @@ struct SupportInputField: NSViewRepresentable {
     }
     func updateNSView(_ field: NSTextField, context: Context) {
         context.coordinator.parent = self
-        field.placeholderString = label
-        field.setAccessibilityIdentifier(identifier)
-        field.setAccessibilityLabel(label)
+        field.setAccessibilityIdentifier(input.identifier)
+        field.setAccessibilityLabel(input.label)
         field.isEnabled = context.environment.isEnabled
         field.font =
             NSFont(name: family ?? "Pretendard-Regular", size: 14 * scale)
             ?? .systemFont(ofSize: 14 * scale)
-        if context.coordinator.focusRequest != focusRequest {
-            context.coordinator.focusRequest = focusRequest
+        if context.coordinator.focusRequest != input.focusRequest {
+            context.coordinator.focusRequest = input.focusRequest
             Task { @MainActor [weak field] in
                 await Task.yield()
                 if let field, field.isEnabled { field.window?.makeFirstResponder(field) }
             }
         }
         guard (field.currentEditor() as? NSTextView)?.hasMarkedText() != true else { return }
-        if field.stringValue != text { field.stringValue = text }
+        if field.stringValue != input.text { field.stringValue = input.text }
+    }
+
+    func sizeThatFits(_ proposal: ProposedViewSize, nsView field: NSTextField, context: Context)
+        -> CGSize?
+    {
+        let font = field.font ?? .systemFont(ofSize: 14 * scale)
+        let line = ceil(font.ascender - font.descender + font.leading)
+        return .init(
+            width: proposal.width ?? 180, height: max(line + 6, field.cell?.cellSize.height ?? 0))
     }
 
     static func dismantleNSView(_ view: NSTextField, coordinator: Coordinator) {
@@ -76,7 +106,7 @@ struct SupportInputField: NSViewRepresentable {
     }
 
     @MainActor final class Coordinator: NSObject, NSTextFieldDelegate {
-        var parent: SupportInputField
+        var parent: SupportNativeInputField
         var focusRequest = 0
         var monitor: Any?
         private var markedEvent: TimeInterval?
@@ -91,14 +121,16 @@ struct SupportInputField: NSViewRepresentable {
                 return event
             }
         }
-        init(_ parent: SupportInputField) { self.parent = parent }
-        func controlTextDidBeginEditing(_ notification: Notification) { parent.onFocus() }
+        init(_ parent: SupportNativeInputField) { self.parent = parent }
+        func controlTextDidBeginEditing(_ notification: Notification) { parent.input.onFocus() }
         func controlTextDidChange(_ notification: Notification) {
-            guard let field = notification.object as? NSTextField,
-                (field.currentEditor() as? NSTextView)?.hasMarkedText() != true
-            else { return }
-            parent.text = field.stringValue
+            guard let field = notification.object as? NSTextField else { return }
+            let marked = (field.currentEditor() as? NSTextView)?.hasMarkedText() == true
+            parent.composing = marked
+            guard !marked else { return }
+            parent.input.text = field.stringValue
         }
+        func controlTextDidEndEditing(_ notification: Notification) { parent.composing = false }
         func control(_ control: NSControl, textView: NSTextView, doCommandBy selector: Selector)
             -> Bool
         {
@@ -107,13 +139,13 @@ struct SupportInputField: NSViewRepresentable {
             else { return false }
             let action: (() -> Void)?
             switch selector {
-            case #selector(NSResponder.insertNewline(_:)): action = parent.submit
-            case #selector(NSResponder.moveDown(_:)): action = parent.moveDown
-            case #selector(NSResponder.cancelOperation(_:)): action = parent.escape
+            case #selector(NSResponder.insertNewline(_:)): action = parent.input.submit
+            case #selector(NSResponder.moveDown(_:)): action = parent.input.moveDown
+            case #selector(NSResponder.cancelOperation(_:)): action = parent.input.escape
             default: return false
             }
             guard let action else { return false }
-            parent.text = textView.string
+            parent.input.text = textView.string
             action()
             return true
         }

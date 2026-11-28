@@ -12,6 +12,7 @@ import SwiftUI
 struct SupportFAQPreview: View {
     @Bindable var fixture: SupportFixture
     let back: () -> Void
+    @Environment(\.supportExitDecision) private var exitDecision
     let onDirty: (Bool) -> Void
     @State private var filter = "발행"
     @Environment(\.umcBodyTextScale) private var scale
@@ -102,20 +103,20 @@ struct SupportFAQPreview: View {
                     }
                 }
             }
-        }.onChange(of: hasEdits, initial: true) { onDirty(hasEdits) }.onDisappear {
-            onDirty(false)
-        }
-        .alert(
-            "FAQ 편집을 취소할까요?",
-            isPresented: Binding(get: { pending != nil }, set: { if !$0 { pending = nil } })
-        ) {
-            Button("계속 편집", role: .cancel) { pending = nil }
-            Button("편집 취소", role: .destructive) {
-                let action = pending
-                pending = nil
-                action?()
+        }.onChange(of: hasEdits, initial: true) { onDirty(hasEdits) }
+            .onChange(of: command.isSending) { exitDecision?.sending = command.isSending }
+            .onDisappear {
+                exitDecision?.sending = false
+                onDirty(false)
             }
-        }
+            .modifier(
+                SupportDiscardAlert(
+                    choice: .faq, presented: pending != nil, stay: { pending = nil },
+                    discard: {
+                        let action = pending
+                        pending = nil
+                        action?()
+                    }))
     }
 
     private static func savedInput(for draft: SupportDraft, in fixture: SupportFixture)
@@ -181,8 +182,15 @@ struct SupportFAQPreview: View {
                 let key = SupportPreviewTransport.Key(
                     scope: draft.id, action: name, isOperator: true)
                 guard !transport.blocked(key) else { return }
+                exitDecision?.sending = true
                 transport.pendingFAQs[key] = draft
-                command.run(name, scope: draft.id, transport: transport, isOperator: true) { _ in
+                command.run(
+                    name, scope: draft.id, transport: transport, isOperator: true,
+                    payload: [
+                        draft.article.question, draft.article.answer, draft.article.category,
+                        draft.article.audience,
+                    ]
+                ) { _ in
                     guard action == .archive || draft.isValid else { return false }
                     _ = fixture.apply(action, draft: draft)
                     return true
@@ -192,7 +200,12 @@ struct SupportFAQPreview: View {
                         let latest = fixture.drafts.first(where: { $0.id == draft.id })
                     else { return }
                     filter = latest.published != nil ? "발행" : latest.status
-                    if editing?.article == draft.article { select(latest, open: true) }
+                    if action == .archive {
+                        // Archiving changes publication only; the editor may contain an unsaved revision.
+                        verified = false
+                    } else if editing?.article == draft.article {
+                        select(latest, open: true)
+                    }
                     feedback = name + "을 완료했어요."
                 }
             }.id(binding.wrappedValue.id)

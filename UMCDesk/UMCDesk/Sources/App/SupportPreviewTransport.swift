@@ -32,6 +32,19 @@ import Observation
         let isOperator: Bool
     }
 
+    static let createKey = Key(scope: "my-inquiries", action: "문의 보내기", isOperator: false)
+    private var payloads: [Key: [String]] = [:]
+    private(set) var submittedTickets: [UUID: UUID] = [:]
+
+    func rememberTicket(_ ticket: UUID, request: UUID) { submittedTickets[request] = ticket }
+
+    func requestID(for key: Key, payload: [String]) -> UUID {
+        if state(key) == .failed, payloads[key] == payload, let original = requests[key] {
+            return original
+        }
+        return UUID()
+    }
+
     struct ReplyInput: Equatable {
         var text: String
         var attachment: Bool
@@ -64,6 +77,7 @@ import Observation
             if access != .granted {
                 pendingReplies = pendingReplies.filter { !$0.key.isOperator }
                 pendingFAQs.removeAll()
+                payloads = payloads.filter { !$0.key.isOperator }
             }
         }
     }
@@ -107,13 +121,22 @@ import Observation
 
     /// Each user intent has one ID, including retries after a confirmed rejection.
     @MainActor func send(
-        id: UUID, key: Key? = nil, requiresOperator: Bool = false, hasAttachment: Bool = false,
+        id: UUID, key: Key? = nil, payload: [String] = [], retrying expected: UUID? = nil,
+        requiresOperator: Bool = false, hasAttachment: Bool = false,
         apply: (Bool) -> Bool
     ) async -> Receipt {
+        if let expected, let key {
+            guard requests[key] == expected, id == expected, state(key) == .failed,
+                payloads[key] == payload
+            else { return .failed }
+        }
         if let key, blocked(key), let result = state(key) { return result }
         if let existing = receipts[id], existing != .failed { return existing }
         guard !requiresOperator || access == .granted else { return .failed }
-        if let key { requests[key] = id }
+        if let key {
+            requests[key] = id
+            payloads[key] = payload
+        }
         let generation = authorizationGeneration
         let outcome = nextWrite
         nextWrite = .success

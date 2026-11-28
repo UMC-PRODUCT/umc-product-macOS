@@ -189,6 +189,16 @@ struct SupportView: View {
             }.padding(.horizontal, 40).frame(height: 44)
             Divider()
             if let fixture {
+                if fixture.transport.state(SupportPreviewTransport.createKey) == .uncertain
+                    && (!composing
+                        || fixture.transport.requests[SupportPreviewTransport.createKey]
+                            != recipient.id)
+                {
+                    HStack {
+                        Text("이전에 보낸 문의의 접수 결과를 확인해야 해요.")
+                        Button("이전 접수 결과 확인") { verifyPreviousCreation(fixture) }
+                    }
+                }
                 if !receiptMessage.isEmpty { Text(receiptMessage).inquiryFont(14) }
                 if fixture.transport.access != .granted {
                     Text(
@@ -213,6 +223,8 @@ struct SupportView: View {
                     if composing, let fixture {
                         SupportComposePreview(
                             articles: articles, draft: recipient,
+                            priorCreationPending: fixture.transport.blocked(
+                                SupportPreviewTransport.createKey),
                             cancel: { leaveComposition { composing = false } },
                             submit: { submitComposition(fixture) },
                             reload: { verifyComposition(fixture) })
@@ -262,6 +274,7 @@ struct SupportView: View {
         )
         .background(UMCColor.Custom.backgroundSurface)
         .inquiryFont(14)
+        .environment(\.supportExitDecision, exitGate)
         .buttonStyle(SupportActionStyle())
         .tint(UMCColor.Semantic.textBrandDefault)
         .overlay(alignment: .topTrailing) {
@@ -269,32 +282,37 @@ struct SupportView: View {
                 ZStack(alignment: .topTrailing) {
                     Color.clear.contentShape(Rectangle()).onTapGesture { toolsOpen = false }
                         .accessibilityHidden(true)
-                    ViewThatFits(in: .vertical) {
-                        toolsPanel
-                        ScrollView { toolsPanel }
+                    SupportToolsPlacement {
+                        ViewThatFits(in: .vertical) {
+                            toolsPanel
+                            ScrollView { toolsPanel }
+                        }
+                        .background(
+                            UMCColor.Custom.backgroundSurfaceWhite, in: .rect(cornerRadius: 16)
+                        )
+                        .shadow(color: .black.opacity(0.13), radius: 12, y: 8)
                     }
-                    .frame(maxWidth: SupportLayoutMetrics.toolWidth)
-                    .background(
-                        UMCColor.Custom.backgroundSurfaceWhite, in: .rect(cornerRadius: 16)
-                    )
-                    .shadow(color: .black.opacity(0.13), radius: 12, y: 8)
-                    .padding(.horizontal, SupportLayoutMetrics.edge).padding(.top, 48).padding(
-                        .bottom, 16)
                 }
             }
         }
-        .alert(
-            dirtyFAQ ? "FAQ 편집을 취소할까요?" : "작성 중인 문의를 취소할까요?",
-            isPresented: Binding(get: { exitGate.needsConfirmation }, set: { _ in })
-        ) {
-            Button("계속 작성", role: .cancel) { exitGate.stay() }
-            Button("작성 취소", role: .destructive) { exitGate.discard() }
-        }
+        .modifier(
+            SupportDiscardAlert(
+                choice: dirtyFAQ
+                    ? .faq : (recipient.receipt == .uncertain ? .uncertainCreation : .composition),
+                presented: exitGate.needsConfirmation, stay: exitGate.stay,
+                discard: exitGate.discard)
+        )
         .onChange(of: (composing && recipient.edited) || dirtyFAQ, initial: true) {
             exitGate.hasChanges = (composing && recipient.edited) || dirtyFAQ
         }
         .onChange(of: recipient.submitting, initial: true) {
             exitGate.sending = recipient.submitting
+        }
+        .onChange(of: fixture?.transport.receipts[recipient.id]) {
+            guard composing, !recipient.submitting, recipient.receipt == .uncertain,
+                let state = fixture?.transport.receipts[recipient.id]
+            else { return }
+            finish(recipient, state: state)
         }
         .onChange(of: fixture?.transport.access) {
             guard fixture?.transport.access != .granted else { return }
@@ -405,6 +423,11 @@ struct SupportView: View {
     }
 
     private func beginCompose(_ article: SupportArticle?) {
+        if let transport = fixture?.transport, transport.blocked(SupportPreviewTransport.createKey)
+        {
+            toolsOpen = false
+            return
+        }
         if composing {
             toolsOpen = false
             return
@@ -435,11 +458,30 @@ struct SupportView: View {
         }
     }
 
+    private func verifyPreviousCreation(_ fixture: SupportFixture) {
+        let key = SupportPreviewTransport.createKey
+        guard let request = fixture.transport.requests[key] else { return }
+        Task { @MainActor in
+            await fixture.transport.reload(verifying: key)
+            guard fixture.transport.requests[key] == request else { return }
+            switch fixture.transport.state(key) {
+            case .success:
+                receiptMessage = "이전 문의가 접수됐어요. 내 문의에서 확인할 수 있어요."
+                if !composing, let ticket = fixture.transport.submittedTickets[request] {
+                    createdTicket = ticket
+                    page = .inquiries
+                }
+            case .failed: receiptMessage = "이전 문의가 접수되지 않았어요. 새 문의를 작성할 수 있어요."
+            default: break
+            }
+        }
+    }
+
     private func verifyComposition(_ fixture: SupportFixture) {
         let draft = recipient
         Task { @MainActor in
             await fixture.transport.reload(verifying: draft.submitKey)
-            guard let state = fixture.transport.state(draft.submitKey) else { return }
+            guard let state = fixture.transport.receipts[draft.id] else { return }
             finish(draft, state: state)
         }
     }
@@ -463,10 +505,13 @@ struct SupportView: View {
                     subject: subject, content: content, team: team, category: category,
                     reference: reference.flatMap(fixture.publishedArticle(id:)),
                     attachmentName: includeFile ? attachment : nil)
+                if let ticket = draft.resultTicket {
+                    fixture.transport.rememberTicket(ticket, request: draft.id)
+                }
                 return draft.resultTicket != nil
             }
             draft.submitting = false
-            finish(draft, state: result)
+            if fixture.transport.receipts[draft.id] != nil { finish(draft, state: result) }
         }
     }
 

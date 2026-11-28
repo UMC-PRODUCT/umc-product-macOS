@@ -112,7 +112,7 @@ struct SupportTicketDetail: View {
             if isOperator && ticket.status != .closed {
                 Spacer()
                 Button("문의 종료") {
-                    change("상태 변경") { $0.changeStatus(.closed, by: .agent) }
+                    change("상태 변경", payload: ["종료"]) { $0.changeStatus(.closed, by: .agent) }
                 }
             }
         }
@@ -123,7 +123,7 @@ struct SupportTicketDetail: View {
     private func conversation(compact: Bool) -> some View {
         SupportReadingArea {
             VStack(alignment: .leading, spacing: 20) {
-                header
+                if !hasOpenMenu { header }
                 if compact && isOperator {
                     DisclosureGroup("처리 정보", isExpanded: $expanded) { operations }
                 }
@@ -202,9 +202,13 @@ struct SupportTicketDetail: View {
         }
     }
 
-    private func change(_ name: String, apply: @escaping (inout SupportTicket) -> Void) {
+    private func change(
+        _ name: String, payload: [String], apply: @escaping (inout SupportTicket) -> Void
+    ) {
         let id = ticket.id
-        command.run(name, scope: scope, transport: fixture.transport, isOperator: true) { _ in
+        command.run(
+            name, scope: scope, transport: fixture.transport, isOperator: true, payload: payload
+        ) { _ in
             fixture.modifyOpenTicket(id, change: apply)
         }
     }
@@ -281,7 +285,9 @@ struct SupportTicketDetail: View {
         Text("처리 정보").inquiryFont(18, weight: .bold)
         Menu("담당 팀 · " + ticket.visibleTeam) {
             ForEach(SupportTeam.allCases, id: \.self) { team in
-                Button(team.rawValue) { change("담당 팀 변경") { $0.team = team } }
+                Button(team.rawValue) {
+                    change("담당 팀 변경", payload: [team.rawValue]) { $0.team = team }
+                }
             }
         }
         Text("담당자").inquiryFont(13)
@@ -296,7 +302,7 @@ struct SupportTicketDetail: View {
         .focused($operatorFocus, equals: "담당자")
     }
     @ViewBuilder private var processingLabels: some View {
-        Button("내가 맡기") { change("담당자 변경") { $0.assignee = "이지원" } }
+        Button("내가 맡기") { change("담당자 변경", payload: ["이지원"]) { $0.assignee = "이지원" } }
         Text("라벨 · PRODUCT 내부용").inquiryFont(13)
         HStack {
             ForEach(ticket.labels, id: \.self) {
@@ -324,7 +330,7 @@ struct SupportTicketDetail: View {
                 Text("문의 관리 권한이 있는 UMC PRODUCT 구성원").inquiryFont(13)
                 ForEach(["이지원", "김지원", "미배정"], id: \.self) { name in
                     Button(name == "미배정" ? "배정 해제" : name) {
-                        change("담당자 변경") { $0.assignee = name }
+                        change("담당자 변경", payload: [name]) { $0.assignee = name }
                         editingAssignee = false
                     }.focused($operatorFocus, equals: "선택 " + name)
                 }
@@ -360,7 +366,9 @@ struct SupportTicketDetail: View {
                 Button("적용") {
                     let before = initialLabels
                     let after = pendingLabels
-                    change("라벨 적용") { $0.applyLabels(original: before, selected: after) }
+                    change("라벨 적용", payload: before + ["→"] + after) {
+                        $0.applyLabels(original: before, selected: after)
+                    }
                     editingLabel = false
                 }
                 Text("라벨은 UMC PRODUCT 내부에서만 보여요.").inquiryFont(13)
@@ -392,10 +400,10 @@ struct SupportTicketDetail: View {
         Text(articles.first { $0.id == ticket.linkedQuestion }?.question ?? "미분류").inquiryFont(
             14)
         Menu("대표 질문 연결") {
-            Button("미분류") { change("대표 질문 연결") { $0.linkedQuestion = nil } }
+            Button("미분류") { change("대표 질문 연결", payload: []) { $0.linkedQuestion = nil } }
             ForEach(articles) { article in
                 Button(article.question) {
-                    change("대표 질문 연결") { $0.linkedQuestion = article.id }
+                    change("대표 질문 연결", payload: [article.id]) { $0.linkedQuestion = article.id }
                 }
             }
         }.fixedSize()
@@ -417,7 +425,7 @@ struct SupportTicketDetail: View {
         fixture.transport.pendingReplies[replyKey] = .init(text: text, attachment: file)
         command.run(
             "답변 보내기", scope: scope, transport: fixture.transport, isOperator: isOperator,
-            attachment: file
+            attachment: file, payload: [text, file ? "첨부" : ""]
         ) { includeFile in
             guard let index = fixture.tickets.firstIndex(where: { $0.id == id }) else {
                 return false

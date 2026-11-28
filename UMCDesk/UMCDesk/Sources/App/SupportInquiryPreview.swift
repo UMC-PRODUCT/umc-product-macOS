@@ -349,7 +349,7 @@ struct SupportInquiryPreview: View {
     var submitting = false
     var resultTicket: UUID?
     var submitKey: SupportPreviewTransport.Key {
-        .init(scope: id.uuidString, action: "문의 보내기", isOperator: false)
+        SupportPreviewTransport.createKey
     }
     var receipt: SupportPreviewTransport.Receipt?
     var edited: Bool {
@@ -365,6 +365,7 @@ struct SupportInquiryPreview: View {
 struct SupportComposePreview: View {
     let articles: [SupportArticle]
     @Bindable var draft: SupportComposition
+    var priorCreationPending = false
     let cancel: () -> Void
     let submit: () -> Void
     let reload: () -> Void
@@ -417,7 +418,8 @@ struct SupportComposePreview: View {
                                 submit()
                             }.buttonStyle(SupportActionStyle(prominent: true))
                                 .disabled(
-                                    !draft.valid || draft.submitting || draft.receipt == .uncertain
+                                    !draft.valid || priorCreationPending || draft.submitting
+                                        || draft.receipt == .uncertain
                                 )
                         }
                     }

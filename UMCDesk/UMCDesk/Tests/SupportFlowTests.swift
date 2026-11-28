@@ -283,6 +283,79 @@ struct SupportFlowTests {
         }
     }
 
+    @MainActor @Test func discardedDraftKeepsItsReceiptUntilTheSessionVerifiesCreation() async {
+        let fixture = SupportFixture(emptyInquiries: true)
+        let key = SupportPreviewTransport.createKey
+        let original = UUID()
+        let transport = fixture.transport
+        var creates = 0
+        func submit(_ request: UUID) async -> SupportPreviewTransport.Receipt {
+            await transport.send(id: request, key: key) { _ in
+                creates += 1
+                guard let ticket = fixture.create(subject: "제목", content: "본문", team: .platform)
+                else { return false }
+                transport.rememberTicket(ticket, request: request)
+                return true
+            }
+        }
+        transport.nextWrite = .lostAfterApply
+        #expect(await submit(original) == .uncertain)
+        let gate = SupportExitGate()
+        gate.hasChanges = true
+        gate.request {}
+        gate.discard()
+        let newDraft = UUID()
+        #expect(await submit(newDraft) == .uncertain)
+        #expect(transport.requests[key] == original && creates == 1 && fixture.tickets.count == 1)
+        transport.nextReadFails = true
+        await transport.reload(verifying: key)
+        #expect(transport.blocked(key) && transport.requests[key] == original)
+        await transport.reload(verifying: key)
+        #expect(transport.state(key) == .success && fixture.tickets.count == 1 && creates == 1)
+        #expect(transport.submittedTickets[original] == fixture.tickets[0].id)
+        #expect(await submit(newDraft) == .success)
+        #expect(creates == 2 && fixture.tickets.count == 2 && transport.requests[key] == newDraft)
+        #expect(SupportFixture().transport.requests[key] == nil)
+    }
+
+    @MainActor @Test func obsoleteRetryCannotChangeAnotherRequestsPayload() async throws {
+        let transport = SupportPreviewTransport()
+        let key = SupportPreviewTransport.Key(scope: "ticket", action: "답변 보내기", isOperator: true)
+        let a = SupportCommand()
+        let b = SupportCommand()
+        var sent: [String] = []
+        func send(_ command: SupportCommand, _ body: String) {
+            command.run(
+                key.action, scope: key.scope, transport: transport, isOperator: true,
+                payload: [body]
+            ) { _ in
+                sent.append(body)
+                return true
+            }
+        }
+        transport.nextWrite = .rejected
+        send(a, "첫 답변")
+        try await Task.sleep(for: .milliseconds(200))
+        let first = transport.requests[key]
+        let obsolete = try #require(a.actions.first?.retry)
+        send(b, "첫 답변")
+        try await Task.sleep(for: .milliseconds(200))
+        #expect(transport.requests[key] == first && sent == ["첫 답변"])
+        transport.nextWrite = .rejected
+        send(b, "후속 답변")
+        try await Task.sleep(for: .milliseconds(200))
+        let later = transport.requests[key]
+        #expect(first != later)
+        obsolete()
+        try await Task.sleep(for: .milliseconds(200))
+        #expect(
+            transport.state(key) == .failed && transport.requests[key] == later && sent == ["첫 답변"]
+        )
+        b.actions.first?.retry?()
+        try await Task.sleep(for: .milliseconds(200))
+        #expect(sent == ["첫 답변", "후속 답변"] && transport.requests[key] == later)
+    }
+
     @Test func ordinaryPreviewQueueAndSuggestedDraftUseSharedRecords() throws {
         let preview = SupportFixture()
         var selectedQueue = SupportQueue.all
