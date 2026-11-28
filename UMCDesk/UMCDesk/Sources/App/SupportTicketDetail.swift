@@ -25,8 +25,7 @@ struct SupportTicketDetail: View {
     @State private var editingLabel = false
     @State private var initialLabels: [String] = []
     @State private var pendingLabels: [String] = []
-    @State private var message = ""
-    @State private var attachment = false
+    @State private var replyDraft = SupportPreviewTransport.ReplyDraft()
 
     private var scope: String { ticket.id.uuidString }
     private var replyKey: SupportPreviewTransport.Key {
@@ -60,21 +59,19 @@ struct SupportTicketDetail: View {
                     editingLabel = false
                 }
             }
-            .onChange(of: fixture.transport.state(replyKey)) {
-                guard fixture.transport.state(replyKey)?.acknowledged == true,
-                    let input = fixture.transport.pendingReplies[replyKey]
-                else { return }
-                if message == input.text {
-                    message = ""
-                    attachment = false
+            .onChange(of: replyDraft.request.flatMap { fixture.transport.receipts[$0] }) {
+                if let request = replyDraft.request,
+                    replyDraft.acknowledge(request, receipt: fixture.transport.receipts[request])
+                {
+                    inputRequest += 1
                 }
             }
             .onAppear {
-                if let input = fixture.transport.pendingReplies[replyKey],
-                    fixture.transport.state(replyKey)?.acknowledged != true
+                if let request = fixture.transport.requests[replyKey],
+                    let input = fixture.transport.pendingReplies[replyKey],
+                    fixture.transport.receipts[request]?.acknowledged == false
                 {
-                    message = input.text
-                    attachment = input.attachment
+                    replyDraft = .init(input: input, request: request)
                 }
                 expanded = [.assignee, .labels, .labelsChanged].contains(scene)
                 inputRequest = ticket.status == .closed ? 0 : 1
@@ -162,7 +159,7 @@ struct SupportTicketDetail: View {
                 VStack(alignment: .leading, spacing: 8) {
                     SupportInputField(
                         isOperator ? "문의자에게 답변" : "UMC PRODUCT 담당자에게 메시지 보내기",
-                        identifier: "support.reply", text: $message, focusRequest: inputRequest,
+                        identifier: "support.reply", text: $replyDraft.input.text, focusRequest: inputRequest,
                         submit: send, escape: closeInnermost
                     )
                     .frame(minHeight: 28 * scale).padding(12)
@@ -170,15 +167,15 @@ struct SupportTicketDetail: View {
                         UMCColor.Custom.backgroundSurfaceWhite, in: .rect(cornerRadius: 12))
                     HStack {
                         Button {
-                            attachment.toggle()
+                            replyDraft.input.attachment.toggle()
                         } label: {
                             Label(
-                                attachment ? "오류 화면.png 제거" : "예시 파일 첨부", systemImage: "paperclip")
+                                replyDraft.input.attachment ? "오류 화면.png 제거" : "예시 파일 첨부", systemImage: "paperclip")
                         }
                         Spacer()
                         Button("보내기", action: send).accessibilityIdentifier("support.send")
                             .disabled(
-                                message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                                replyDraft.input.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                                     || fixture.transport.blocked(replyKey))
                     }
                     if ticket.status == .closed {
@@ -418,14 +415,14 @@ struct SupportTicketDetail: View {
 
     private func send() {
         let id = ticket.id
-        let text = message
-        let file = attachment
+        let input = replyDraft.input
+        let text = input.text
+        let file = input.attachment
         guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
         guard !fixture.transport.blocked(replyKey) else { return }
-        fixture.transport.pendingReplies[replyKey] = .init(text: text, attachment: file)
-        command.run(
+        let request = command.run(
             "답변 보내기", scope: scope, transport: fixture.transport, isOperator: isOperator,
-            attachment: file, payload: [text, file ? "첨부" : ""]
+            attachment: file, payload: [text, file ? "첨부" : ""], reply: input
         ) { includeFile in
             guard let index = fixture.tickets.firstIndex(where: { $0.id == id }) else {
                 return false
@@ -433,10 +430,7 @@ struct SupportTicketDetail: View {
             return fixture.tickets[index].reply(
                 text, from: isOperator ? .agent : .requester,
                 attachment: file && includeFile ? "오류 화면.png" : nil)
-        } success: { _ in
-            if message == text { message = "" }
-            if attachment == file { attachment = false }
-            inputRequest += 1
         }
+        if let request { replyDraft.request = request }
     }
 }

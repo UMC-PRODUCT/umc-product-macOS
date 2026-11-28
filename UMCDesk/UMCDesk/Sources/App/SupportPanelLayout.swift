@@ -314,28 +314,29 @@ struct SupportFieldMenuPlacement: Layout {
     private(set) var actions: [Feedback] = []
 
     var isSending: Bool { actions.contains { $0.receipt == .sending } }
-    func run(
+    @discardableResult func run(
         _ name: String, scope: String = "", transport: SupportPreviewTransport, isOperator: Bool,
-        attachment: Bool = false, payload: [String] = [], retrying expected: UUID? = nil,
+        attachment: Bool = false, payload: [String] = [],
+        reply: SupportPreviewTransport.ReplyInput? = nil, retrying expected: UUID? = nil,
         apply: @escaping (Bool) -> Bool,
         success: @escaping (SupportPreviewTransport.Receipt) -> Void = { _ in }
-    ) {
+    ) -> UUID? {
         let destination = SupportPreviewTransport.Key(
             scope: scope, action: name, isOperator: isOperator)
-        guard !transport.blocked(destination) else { return }
+        guard !transport.blocked(destination) else { return nil }
         if let expected {
             guard transport.requests[destination] == expected,
                 transport.state(destination) == .failed
-            else { return }
+            else { return nil }
         }
         let key = scope + name
-        guard !actions.contains(where: { $0.id == key && $0.receipt == .sending }) else { return }
+        guard !actions.contains(where: { $0.id == key && $0.receipt == .sending }) else { return nil }
         actions.removeAll { $0.id == key }
         let id = expected ?? transport.requestID(for: destination, payload: payload)
         actions.append(Feedback(id: key, name: name, request: id, receipt: .sending))
         Task { @MainActor [self] in
             let result = await transport.send(
-                id: id, key: destination, payload: payload, retrying: expected,
+                id: id, key: destination, payload: payload, reply: reply, retrying: expected,
                 requiresOperator: isOperator,
                 hasAttachment: attachment, apply: apply)
             guard let index = actions.firstIndex(where: { $0.id == key }) else { return }
@@ -349,11 +350,12 @@ struct SupportFieldMenuPlacement: Layout {
                 actions[index].retry = { [weak self] in
                     self?.run(
                         name, scope: scope, transport: transport, isOperator: isOperator,
-                        attachment: attachment, payload: payload, retrying: id, apply: apply,
+                        attachment: attachment, payload: payload, reply: reply, retrying: id, apply: apply,
                         success: success)
                 }
             }
         }
+        return id
     }
 }
 

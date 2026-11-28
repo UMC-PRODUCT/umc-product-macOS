@@ -46,13 +46,27 @@ import Observation
     }
 
     struct ReplyInput: Equatable {
-        var text: String
-        var attachment: Bool
+        var text = ""
+        var attachment = false
+    }
+
+    /// Editing either field starts a new local draft, even when its values later match again.
+    struct ReplyDraft {
+        var input = ReplyInput() {
+            didSet { if input != oldValue { request = nil } }
+        }
+        var request: UUID?
+
+        mutating func acknowledge(_ id: UUID, receipt: Receipt?) -> Bool {
+            guard request == id, receipt?.acknowledged == true else { return false }
+            self = ReplyDraft()
+            return true
+        }
     }
 
     private(set) var requests: [Key: UUID] = [:]
     private var authoritative: [UUID: Receipt] = [:]
-    var pendingReplies: [Key: ReplyInput] = [:]
+    private(set) var pendingReplies: [Key: ReplyInput] = [:]
     var pendingFAQs: [Key: SupportDraft] = [:]
 
     func state(_ key: Key) -> Receipt? {
@@ -121,7 +135,8 @@ import Observation
 
     /// Each user intent has one ID, including retries after a confirmed rejection.
     @MainActor func send(
-        id: UUID, key: Key? = nil, payload: [String] = [], retrying expected: UUID? = nil,
+        id: UUID, key: Key? = nil, payload: [String] = [], reply: ReplyInput? = nil,
+        retrying expected: UUID? = nil,
         requiresOperator: Bool = false, hasAttachment: Bool = false,
         apply: (Bool) -> Bool
     ) async -> Receipt {
@@ -134,6 +149,7 @@ import Observation
         if let existing = receipts[id], existing != .failed { return existing }
         guard !requiresOperator || access == .granted else { return .failed }
         if let key {
+            if let reply { pendingReplies[key] = reply }
             requests[key] = id
             payloads[key] = payload
         }

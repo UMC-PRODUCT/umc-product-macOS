@@ -318,6 +318,34 @@ struct SupportFlowTests {
         #expect(SupportFixture().transport.requests[key] == nil)
     }
 
+    @Test func replyAcknowledgementClearsOnlyTheSubmittedEditorRevision() {
+        let id = UUID()
+        let sent = SupportPreviewTransport.ReplyInput(text: "원문", attachment: true)
+        var author = SupportPreviewTransport.ReplyDraft(input: sent, request: id)
+        var other = SupportPreviewTransport.ReplyDraft(input: sent)
+        let clearedOther = other.acknowledge(id, receipt: .success)
+        #expect(!clearedOther)
+        #expect(other.input == sent)
+        let clearedUnrelated = author.acknowledge(UUID(), receipt: .success)
+        #expect(!clearedUnrelated)
+        let clearedSubmitted = author.acknowledge(id, receipt: .success)
+        #expect(clearedSubmitted)
+        #expect(author.input == .init())
+
+        for changeAttachment in [true, false] {
+            var editor = SupportPreviewTransport.ReplyDraft(input: sent, request: id)
+            if changeAttachment { editor.input.attachment.toggle() } else { editor.input.text = "다음 답변" }
+            let revised = editor.input
+            let clearedRevised = editor.acknowledge(id, receipt: .success)
+            #expect(!clearedRevised)
+            #expect(editor.input == revised)
+            editor.input = sent
+            let clearedReverted = editor.acknowledge(id, receipt: .success)
+            #expect(!clearedReverted)
+            #expect(editor.input == sent)
+        }
+    }
+
     @MainActor @Test func obsoleteRetryCannotChangeAnotherRequestsPayload() async throws {
         let transport = SupportPreviewTransport()
         let key = SupportPreviewTransport.Key(scope: "ticket", action: "답변 보내기", isOperator: true)

@@ -237,7 +237,9 @@ struct SupportView: View {
                                 SupportFAQPreview(
                                     fixture: fixture, scene: scene, onDirty: { dirtyFAQ = $0 }
                                 ) {
-                                    navigate(.operations)
+                                    // The editor already confirmed leaving its unsaved changes.
+                                    dirtyFAQ = false
+                                    page = .operations
                                 }
                             }
                         case .answers:
