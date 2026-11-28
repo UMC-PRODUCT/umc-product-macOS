@@ -104,6 +104,10 @@ View ←→ ViewModel(@Observable) → UseCase(Protocol) → Repository → Data
     `State`·`Binding`·`PreferenceKey` 등으로 전달한 뒤 다시 프레임에 반영하는 우회도 금지한다.
     지원 컨테이너와 예시는 [디자인 시스템 가이드](docs/Codex/design-system.md#창-크기에-맞춘-레이아웃)를 따른다.
 
+13. **공지 탭을 개선할 때는 같은 PR에서 [공지 탭 구현 명세](docs/specs/공지_공지%20탭_구현명세.md)도 갱신한다.**
+    화면·문구·조작 흐름·목록 필터·권한·API 계약 중 바뀐 내용을 해당 절에 반영한다.
+    공통 모듈을 수정해 공지 탭 동작이 달라지는 경우에도 적용한다.
+
 ## 코딩 스타일 (요약)
 
 - 들여쓰기 4 spaces(탭 금지) · 줄 길이 최대 99자 · 외부 불필요 상태는 `private`
