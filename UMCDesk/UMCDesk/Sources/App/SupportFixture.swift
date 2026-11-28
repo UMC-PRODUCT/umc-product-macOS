@@ -40,7 +40,7 @@ enum SupportInquiryStatus: String, CaseIterable {
 
 struct SupportTicket: Identifiable {
     let id = UUID()
-    let createdAt = Date()
+    var createdAt = Date()
     var belongsToCurrentUser = true
     var subject: String
     var content: String
@@ -61,27 +61,35 @@ struct SupportTicket: Identifiable {
     }
     var history: [Event] = []
 
-    private mutating func record(_ message: String) {
-        history.append(.init(time: .now, actor: "예시 담당자", message: message))
+    private mutating func record(_ message: String, actor: String = "이지원") {
+        history.append(.init(time: .now, actor: actor, message: message))
     }
 
     mutating func applyLabels(original: [String], selected: [String]) {
         let removed = Set(original).subtracting(selected)
-        labels = labels.filter { !removed.contains($0) }
+        labels =
+            labels.filter { !removed.contains($0) }
             + selected.filter { !original.contains($0) && !labels.contains($0) }
     }
 
     var label: String { labels.isEmpty ? "미분류" : labels.joined(separator: " · ") }
-    var status = SupportInquiryStatus.received {
-        didSet { if oldValue != status { record(status.rawValue) } }
+    var status = SupportInquiryStatus.received
+
+    mutating func changeStatus(_ next: SupportInquiryStatus, by author: Author) {
+        guard next != status else { return }
+        status = next
+        record(next.rawValue, actor: author == .agent ? "이지원" : "문의자")
     }
     var replies: [Reply] = []
 
-    enum Author: String { case requester = "문의자", agent = "예시 담당자" }
+    enum Author: String {
+        case requester = "문의자"
+        case agent = "예시 담당자"
+    }
 
     struct Reply: Identifiable {
         let id = UUID()
-        let sentAt = Date()
+        var sentAt = Date()
         let author: Author
         let text: String
     }
@@ -92,7 +100,7 @@ struct SupportTicket: Identifiable {
         guard !text.isEmpty, status != .closed || author == .requester else { return false }
         guard author == .agent || belongsToCurrentUser else { return false }
         replies.append(Reply(author: author, text: text))
-        if author == .agent || status == .closed { status = .active }
+        if author == .agent || status == .closed { changeStatus(.active, by: author) }
         return true
     }
 }
@@ -130,50 +138,72 @@ struct SupportDraft: Identifiable {
 @Observable
 final class SupportFixture {
     var tickets = [
-        SupportTicket(subject: "출석 기록이 실제와 다르게 보여요", content: "앱에서 출석 기록이 실제와 다르게 표시돼요.\n새로고침해도 같아서 앱 버전과 오류 화면을 보내드립니다.",
-                      team: .learning, category: "출석·과제", assignee: "예시 담당자", labels: ["출석 오류", "정보 확인"], attachmentName: "오류 화면.png", status: .active,
-                      replies: [.init(author: .agent, text: "확인해 볼게요. 사용 중인 앱 버전과 오류가 나타난 화면을 보내주실 수 있나요?")]),
-        SupportTicket(subject: "앱에 로그인이 안 돼요", content: "앱 언어 설정을 확인했어요.",
-                      team: .operations, category: "앱 설정", status: .closed,
-                      replies: [.init(author: .agent, text: "언어 설정 확인이 끝나 문의를 종료했어요.")]),
-        SupportTicket(belongsToCurrentUser: false, subject: "과제 파일이 업로드되지 않아요",
-                      content: "과제 제출을 확인하고 싶어요.", team: .learning, category: "출석·과제"),
-        SupportTicket(subject: "프로젝트 지원이 저장되지 않아요", content: "지원서를 확인해 주세요.",
-                      team: .learning, category: "프로젝트·매칭", labels: ["기능 요청"]),
-        SupportTicket(belongsToCurrentUser: false, subject: "활동 증명서가 열리지 않아요",
-                      content: "증명서를 확인하고 싶어요.", team: .learning, category: "활동 증명")
+        SupportTicket(
+            subject: "출석 기록이 실제와 다르게 보여요",
+            content: "앱에서 출석 기록이 실제와 다르게 표시돼요.\n새로고침해도 같아서 앱 버전과 오류 화면을 보내드립니다.",
+            team: .learning, category: "출석·과제", assignee: "예시 담당자", labels: ["출석 오류", "정보 확인"],
+            attachmentName: "오류 화면.png", status: .active,
+            replies: [.init(author: .agent, text: "확인해 볼게요. 사용 중인 앱 버전과 오류가 나타난 화면을 보내주실 수 있나요?")]),
+        SupportTicket(
+            subject: "앱에 로그인이 안 돼요", content: "앱 언어 설정을 확인했어요.",
+            team: .operations, category: "앱 설정", status: .closed,
+            replies: [.init(author: .agent, text: "언어 설정 확인이 끝나 문의를 종료했어요.")]),
+        SupportTicket(
+            belongsToCurrentUser: false, subject: "과제 파일이 업로드되지 않아요",
+            content: "과제 제출을 확인하고 싶어요.", team: .learning, category: "출석·과제"),
+        SupportTicket(
+            subject: "프로젝트 지원이 저장되지 않아요", content: "지원서를 확인해 주세요.",
+            team: .learning, category: "프로젝트·매칭", labels: ["기능 요청"]),
+        SupportTicket(
+            belongsToCurrentUser: false, subject: "활동 증명서가 열리지 않아요",
+            content: "증명서를 확인하고 싶어요.", team: .learning, category: "활동 증명"),
     ]
     var drafts: [SupportDraft]
 
     init(emptyInquiries: Bool = false) {
         let examples = [
-            SupportArticle(id: "attendance", question: "출석 기록이 실제와 다르게 보여요",
-                           answer: """
-                           활동 메뉴의 기록이 실제와 다르다면 새로고침 후 다시 확인해 주세요. 문제가 계속되면 UMC PRODUCT에 알려주세요.
+            SupportArticle(
+                id: "attendance", question: "출석 기록이 실제와 다르게 보여요",
+                answer: """
+                    활동 메뉴의 기록이 실제와 다르다면 새로고침 후 다시 확인해 주세요. 문제가 계속되면 UMC PRODUCT에 알려주세요.
 
-                           1. 활동 메뉴를 새로고침하고 해당 일정의 출석 상태를 확인해 주세요.
+                    1. 활동 메뉴를 새로고침하고 해당 일정의 출석 상태를 확인해 주세요.
 
-                           2. 문제가 계속되면 앱 버전, 발생 시각과 화면을 준비해 주세요.
+                    2. 문제가 계속되면 앱 버전, 발생 시각과 화면을 준비해 주세요.
 
-                           3. 아래 문의하기에서 UMC PRODUCT에 표시 오류를 알려주세요.
+                    3. 아래 문의하기에서 UMC PRODUCT에 표시 오류를 알려주세요.
 
-                           UMC PRODUCT가 앱의 표시·동기화 오류를 확인해 드려요. 출석 인정이나 학사 판단은 이 문의에서 처리하지 않아요.
-                           """,
-                           category: "출석·과제", dayReaders: 28, weekReaders: 126),
-            SupportArticle(id: "login", question: "앱에 로그인이 안 돼요",
-                           answer: "가입할 때 사용한 로그인 방식을 선택해 주세요.",
-                           category: "계정·로그인", dayReaders: 21, weekReaders: 93),
-            SupportArticle(id: "assignment", question: "과제 파일이 업로드되지 않아요",
-                           answer: "스터디의 해당 주차와 제출 기한을 확인해 주세요.",
-                           category: "출석·과제", dayReaders: 16, weekReaders: 74),
-            SupportArticle(id: "application", question: "프로젝트 지원이 저장되지 않아요",
-                           answer: "매칭에서 내 지원과 임시 저장한 지원서를 확인해 주세요.",
-                           category: "프로젝트·매칭", dayReaders: 11, weekReaders: 42),
-            SupportArticle(id: "activity", question: "활동 증명서가 열리지 않아요",
-                           answer: "활동 기수와 등록 정보를 확인한 뒤 문의를 남겨 주세요.",
-                           category: "활동 증명", dayReaders: 7, weekReaders: 29)
+                    UMC PRODUCT가 앱의 표시·동기화 오류를 확인해 드려요. 출석 인정이나 학사 판단은 이 문의에서 처리하지 않아요.
+                    """,
+                category: "출석·과제", dayReaders: 28, weekReaders: 126),
+            SupportArticle(
+                id: "login", question: "앱에 로그인이 안 돼요",
+                answer: "가입할 때 사용한 로그인 방식을 선택해 주세요.",
+                category: "계정·로그인", dayReaders: 21, weekReaders: 93),
+            SupportArticle(
+                id: "assignment", question: "과제 파일이 업로드되지 않아요",
+                answer: "스터디의 해당 주차와 제출 기한을 확인해 주세요.",
+                category: "출석·과제", dayReaders: 16, weekReaders: 74),
+            SupportArticle(
+                id: "application", question: "프로젝트 지원이 저장되지 않아요",
+                answer: "매칭에서 내 지원과 임시 저장한 지원서를 확인해 주세요.",
+                category: "프로젝트·매칭", dayReaders: 11, weekReaders: 42),
+            SupportArticle(
+                id: "activity", question: "활동 증명서가 열리지 않아요",
+                answer: "활동 기수와 등록 정보를 확인한 뒤 문의를 남겨 주세요.",
+                category: "활동 증명", dayReaders: 7, weekReaders: 29),
         ]
         drafts = examples.map { SupportDraft(article: $0, published: $0) }
+        // The Figma fixture uses local wall-clock labels, independently of the day the app runs.
+        let day = Calendar.current.date(from: DateComponents(year: 2026, month: 9, day: 30))!
+        let minutes = [860, 822, 731, -180, -260]
+        for index in tickets.indices {
+            let time = day.addingTimeInterval(TimeInterval(minutes[index] * 60))
+            tickets[index].createdAt = time
+            for reply in tickets[index].replies.indices {
+                tickets[index].replies[reply].sentAt = time.addingTimeInterval(240)
+            }
+        }
         if emptyInquiries { tickets.removeAll() }
     }
 
@@ -199,13 +229,16 @@ final class SupportFixture {
     var publishedArticles: [SupportArticle] { drafts.compactMap(\.published) }
 
     @discardableResult
-    func create(subject: String, content: String, team: SupportTeam, category: String = "기타",
-                reference: SupportArticle? = nil, attachmentName: String? = nil) -> UUID? {
+    func create(
+        subject: String, content: String, team: SupportTeam, category: String = "기타",
+        reference: SupportArticle? = nil, attachmentName: String? = nil
+    ) -> UUID? {
         let title = subject.trimmingCharacters(in: .whitespacesAndNewlines)
         let body = content.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !title.isEmpty, !body.isEmpty else { return nil }
-        let ticket = SupportTicket(subject: title, content: body, team: team, category: category,
-                                   attachmentName: attachmentName, reference: reference)
+        let ticket = SupportTicket(
+            subject: title, content: body, team: team, category: category,
+            attachmentName: attachmentName, reference: reference)
         tickets.insert(ticket, at: 0)
         return ticket.id
     }

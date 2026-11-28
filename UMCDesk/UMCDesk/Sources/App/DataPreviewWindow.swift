@@ -153,7 +153,7 @@ struct DataPreviewWindow: View {
         let preferences = session.settings.preferences
         SettingsView(
             viewModel: session.settings, section: section, featureContent: content,
-            matchingSelected: session.destination == .matching,
+            matchingSelected: session.destination == .matching, supportSelected: session.destination == .support,
             onOpenMatching: { session.select(.matching) },
             onSelectSection: { session.select($0.map(DataPreviewDestination.feature) ?? .profile) }
         )

@@ -22,6 +22,7 @@ public struct SettingsView: View {
     @State private var history = WindowHistory()
     @Environment(\.windowFeatureRouter) private var featureRouter
     private let section: DeskSection?
+    private let supportSelected: Bool
     private let matchingSelected: Bool
     private let onOpenMatching: (() -> Void)?
     private let featureContent: AnyView?
@@ -84,9 +85,10 @@ public struct SettingsView: View {
     }
 
     public init(viewModel: SettingsViewModel, section: DeskSection? = nil,
-                featureContent: AnyView? = nil, matchingSelected: Bool = false,
+                featureContent: AnyView? = nil, matchingSelected: Bool = false, supportSelected: Bool = false,
                 onOpenMatching: (() -> Void)? = nil,
                 onSelectSection: ((DeskSection?) -> Void)? = nil) {
+        self.supportSelected = supportSelected
         self.matchingSelected = matchingSelected
         self.onOpenMatching = onOpenMatching
         self.section = section
@@ -274,7 +276,8 @@ public struct SettingsView: View {
                     searchFocus = backwards ? searchFocusRows.last ?? .field : .field
                     return .handled
                 }
-                .modifier(railHover(.help, title: AppLocalization.string("도움말")))
+                .accessibilityAddTraits(supportSelected ? .isSelected : [])
+                .modifier(railHover(.help, title: AppLocalization.string("도움말"), selected: supportSelected))
             }
             Spacer(minLength: UMCSpacing.value24)
             Button { showsProfileMenu.toggle() } label: {

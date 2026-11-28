@@ -86,6 +86,7 @@ struct SupportFlowTests {
         let reopened = try #require(fixture.myTickets.first { $0.id == closed.id })
         #expect(fixture.tickets.count == count)
         #expect(reopened.status == .active)
+        #expect(reopened.history.last?.actor == "문의자")
         #expect(reopened.replies.dropLast().map(\.id) == closed.replies.map(\.id))
         #expect(reopened.replies.last?.author == .requester)
         #expect(reopened.replies.last?.text == "다시 확인해 주세요")
